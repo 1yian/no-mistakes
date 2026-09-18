@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.78.0](https://github.com/kunchenguid/no-mistakes/compare/v1.77.1...v1.78.0) (2026-09-17)
+
+
+### Features
+
+* **daemon:** pin Pi model and reasoning effort per run ([#1072](https://github.com/kunchenguid/no-mistakes/issues/1072)) ([71cd911](https://github.com/kunchenguid/no-mistakes/commit/71cd9110543eeac67fd76180f2bdabd355395ec2))
+
 ## [1.77.1](https://github.com/kunchenguid/no-mistakes/compare/v1.77.0...v1.77.1) (2026-09-17)
 
 
