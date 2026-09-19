@@ -546,8 +546,17 @@ Raise it for repositories whose reviews legitimately run long; it bounds only th
 
 Maximum wall-clock time for one Test-step agent invocation.
 The budget covers the post-test evidence-gathering turn, and a Test-repair turn gets its own budget of the same length.
-When the deadline expires, the test agent is cancelled and the run fails with a diagnostic naming the timeout instead of remaining active indefinitely.
-That diagnostic carries the same measured evidence and adapter report described under [`agent_timeout`](#agent_timeout).
+When the deadline expires, the test agent is cancelled and the Test step parks for a decision with an ask-user finding rather than failing the run as a code defect.
+That finding carries the same measured evidence and adapter report described under [`agent_timeout`](#agent_timeout).
+A late structured result from the expired turn is still not used as a successful Test pass.
+The park keeps the configured `commands.test` result from the same execution, so approving over a failing command is still recorded as a configured-command override.
+A cut fix round also keeps the findings of the gate it was answering, selected or not, and the last completed evidence turn's verdict, so approving it is recorded against that verdict.
+A commit the timed-out agent already made is recorded locally for custody and is not pushed, unless an unfinished rebase or merge leaves only a partial HEAD.
+While the run worktree holds uncommitted changes or commits past the head the last completed evidence turn saw (before one completes, past the head the first cut measured from, which each later park carries forward and measures again), the park names them with the commands to inspect them and approval is refused, because the steps after Test would commit and publish them.
+Otherwise approving the park is a Test exception (`passed-with-override`), not a silent green pass.
+A fix response spends another budget: a repair turn runs only for selected findings other than the budget cut itself, then validation re-runs over whatever the cut left.
+Guidance you attach to the budget-cut finding itself (`axi respond --instructions`, or `e` in the TUI) is given to that re-run validation.
+You can also abort, raise this value, and retry.
 
 |         |                        |
 | ------- | ---------------------- |
@@ -556,7 +565,9 @@ That diagnostic carries the same measured evidence and adapter report described 
 
 Accepts any positive Go `time.ParseDuration` string: `5m`, `30m`, `1h`, etc.
 Non-positive values are rejected when loading the global config.
-Raise it for repositories whose targeted tests or evidence gathering legitimately run long; it bounds only the Test step, and no other step or environment variable overrides it.
+Raise it for repositories whose targeted tests or evidence gathering legitimately run long; a suite that itself takes close to 30 minutes leaves almost no slack against provider slowness under the default.
+The shipped default stays a stall bound and is not raised automatically.
+It bounds only the Test step, and no other step or environment variable overrides it.
 
 ### daemon_connect_timeout
 
