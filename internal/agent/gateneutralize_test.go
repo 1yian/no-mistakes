@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -234,6 +235,15 @@ func TestOMPGateNeutralization_AppliesSuppressionOverlayAndFlags(t *testing.T) {
 	if overlayPath == "" {
 		t.Fatal("neutralized omp launch must write a suppression overlay")
 	}
+	// The overlay path MUST be absolute: acpx composes it into the --agent
+	// command while omp resolves --config relative to the gate's CWD (the target
+	// checkout). A relative path (from a relative TMPDIR) would resolve against
+	// the wrong directory and miss - and since omp fails closed on a missing
+	// overlay, that miss would abort every gate run. An absolute path is what
+	// makes the intended overlay load regardless of the launch cwd.
+	if !filepath.IsAbs(overlayPath) {
+		t.Fatalf("overlay path must be absolute, got %q", overlayPath)
+	}
 
 	// The launch is `omp acp --config <overlay>` plus the suppression flags, and
 	// deliberately does NOT fall through to acpx's built-in omp target.
@@ -278,5 +288,34 @@ func TestOMPGateNeutralization_AppliesSuppressionOverlayAndFlags(t *testing.T) {
 	}
 	if _, err := os.Stat(overlayPath); !os.IsNotExist(err) {
 		t.Errorf("Close must remove the overlay file, stat err = %v", err)
+	}
+}
+
+// TestOverlayPathShellSafe pins the cross-platform path rule that keeps
+// windows-core green: a Windows temp path (backslashes, drive colon) composes
+// safely into acpx's --agent command, while whitespace and quotes are unsafe on
+// every OS and a backslash is anomalous - and refused - off Windows. goos is a
+// parameter so both branches are proven from any host.
+func TestOverlayPathShellSafe(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		goos string
+		want bool
+	}{
+		{"windows temp path is safe", `C:\Users\runneradmin\AppData\Local\Temp\nm-omp-gate-1.yml`, "windows", true},
+		{"windows path with space is unsafe", `C:\Users\John Doe\Temp\nm-omp-gate-1.yml`, "windows", false},
+		{"posix temp path is safe", "/tmp/nm-omp-gate-1.yml", "linux", true},
+		{"posix relative-resolved path is safe", "/var/folders/xy/T/nm-omp-gate-1.yml", "darwin", true},
+		{"backslash is unsafe off windows", `/tmp/a\b/nm-omp-gate-1.yml`, "linux", false},
+		{"posix path with space is unsafe", "/tmp/a b/nm-omp-gate-1.yml", "linux", false},
+		{"quote is unsafe on windows too", `C:\Temp\a"b\nm-omp-gate-1.yml`, "windows", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := overlayPathShellSafe(tc.path, tc.goos); got != tc.want {
+				t.Errorf("overlayPathShellSafe(%q, %q) = %v, want %v", tc.path, tc.goos, got, tc.want)
+			}
+		})
 	}
 }

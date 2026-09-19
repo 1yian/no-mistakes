@@ -3,6 +3,8 @@ package agent
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -113,9 +115,23 @@ func ompNeutralizedACPCommand(overlayPath string) string {
 }
 
 // writeOMPGateOverlay writes the neutralization overlay to a temp file and
-// returns its path. The path lands in the OS temp directory with no spaces or
-// shell metacharacters so it composes safely into the acpx --agent command
-// string, which acpx splits on whitespace.
+// returns its ABSOLUTE path. The path must be absolute because acpx composes it
+// into the `--agent` command string while omp resolves `--config` relative to
+// the gate's working directory (the target checkout), not acpx's - so a relative
+// overlay path (from a relative TMPDIR) would resolve against the wrong
+// directory and miss. omp fails closed on a missing/unreadable overlay (it exits
+// with "Config overlay not found" before the ACP session initializes, verified
+// against omp 18.2.0), so a miss aborts the run rather than silently launching
+// omp with project instructions loaded; the absolute path is what makes the
+// intended overlay actually load in the first place.
+//
+// The path must also compose safely into acpx's whitespace-split `--agent`
+// command: whitespace and quotes are genuinely unsafe on every OS. A backslash
+// is the normal Windows path separator (every Windows temp path contains one),
+// not a shell metacharacter, so it is rejected only off Windows, where a
+// backslash in a path is anomalous. os.CreateTemp names add only
+// [A-Za-z0-9_]-class characters, so a remaining unsafe character would be a
+// platform anomaly; fail closed if one appears.
 func writeOMPGateOverlay() (string, error) {
 	f, err := os.CreateTemp("", "nm-omp-gate-*.yml")
 	if err != nil {
@@ -131,13 +147,28 @@ func writeOMPGateOverlay() (string, error) {
 		_ = os.Remove(path)
 		return "", fmt.Errorf("close omp gate overlay: %w", err)
 	}
-	// os.CreateTemp names contain only [A-Za-z0-9_] plus the pattern literals,
-	// and the OS temp dir is not user-named on the daemon (TMPDIR unset -> /tmp,
-	// /var/folders on macOS), so a space or metacharacter here would be a
-	// platform anomaly rather than normal input. Fail closed if one appears.
-	if strings.ContainsAny(path, " \t\r\n\"'\\") {
+	abs, err := filepath.Abs(path)
+	if err != nil {
 		_ = os.Remove(path)
-		return "", fmt.Errorf("omp gate overlay path is not shell-safe: %q", path)
+		return "", fmt.Errorf("resolve omp gate overlay path: %w", err)
 	}
-	return path, nil
+	if !overlayPathShellSafe(abs, runtime.GOOS) {
+		_ = os.Remove(abs)
+		return "", fmt.Errorf("omp gate overlay path is not shell-safe: %q", abs)
+	}
+	return abs, nil
+}
+
+// overlayPathShellSafe reports whether path composes safely into acpx's
+// whitespace-split `--agent` command. Whitespace and quotes are unsafe on every
+// OS. A backslash is the normal Windows path separator (every Windows temp path
+// has one), not a metacharacter, so it is unsafe only off Windows, where a
+// backslash in a path is anomalous. goos is passed explicitly so both branches
+// are testable without the target platform.
+func overlayPathShellSafe(path, goos string) bool {
+	unsafe := " \t\r\n\"'"
+	if goos != "windows" {
+		unsafe += "\\"
+	}
+	return !strings.ContainsAny(path, unsafe)
 }
