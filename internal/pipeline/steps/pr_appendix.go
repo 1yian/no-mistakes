@@ -199,11 +199,7 @@ func fitCollapsed(prefix, risk, testing, pipeline string, limit int, units func(
 	}
 	folded := foldedWithin(risk, "", pipeline, innerBudget)
 	if folded == "" {
-		fitted := joinBlocks(prefix, joinAppendixSections(risk, "", pipeline))
-		if units(fitted) <= limit {
-			return fitted
-		}
-		return clamp(fitted, limit)
+		return shrinkMeasuredKeepingTail(joinBlocks(prefix, carriedAttestation(pipeline)), carriedAttestation(pipeline), limit, units, clamp)
 	}
 	sep := 0
 	if strings.TrimSpace(prefix) != "" {
@@ -223,28 +219,33 @@ func fitCollapsed(prefix, risk, testing, pipeline string, limit int, units func(
 	if units(folded) <= limit {
 		return folded
 	}
-	return clamp(folded, limit)
+	return shrinkMeasuredKeepingTail(folded, carriedAttestation(pipeline), limit, units, clamp)
 }
 
 func foldedWithin(risk, testing, pipeline string, innerBudget int) string {
 	if innerBudget <= 0 {
 		return ""
 	}
-	inner := strings.Trim(appendGeneratedSectionsToCleanBodyWithinLimit("", risk, testing, pipeline, innerBudget), "\n")
-	folded := wrapValidation(inner)
-	if folded == "" {
+	minimum := pipelineSectionHeader(pipeline)
+	if minimum == "" {
+		minimum = carriedAttestation(pipeline)
+	}
+	budget := innerBudget - len(validationDetailsOpen) - len(validationDetailsClose)
+	if budget < len(minimum) {
 		return ""
 	}
-	// The wrapper sits outside the inner budget. Shrink the inner content
-	// until the closed block itself fits, so the caller can reserve it.
-	overhead := len(validationDetailsOpen) + len(validationDetailsClose)
-	if len(folded) <= innerBudget || innerBudget <= overhead {
-		if len(folded) <= innerBudget {
-			return folded
+	if risk != "" {
+		riskBudget := budget - len(minimum) - len("## Risk Assessment\n\n") - len("\n\n")
+		if riskBudget <= 0 {
+			risk = ""
+		} else if len(risk) > riskBudget {
+			risk = truncateTextAtLineBoundary(risk, riskBudget, essentialPRBodyTruncationMarker())
 		}
-		return ""
 	}
-	inner = strings.Trim(appendGeneratedSectionsToCleanBodyWithinLimit("", risk, testing, pipeline, innerBudget-overhead), "\n")
+	inner := strings.Trim(appendGeneratedSectionsToCleanBodyWithinLimit("", risk, testing, pipeline, budget), "\n")
+	if !strings.Contains(inner, carriedAttestation(pipeline)) {
+		inner = minimum
+	}
 	return wrapValidation(inner)
 }
 
