@@ -65,7 +65,7 @@ func wrapValidation(inner string) string {
 // carries that comment inside a text fence, and the fence is kept so the
 // marker stays visible there.
 func minimalTail(risk, pipelineMD string) string {
-	return joinBlocks(oneLineRisk(neutralizeAttestationMarkers(risk)), carriedAttestation(pipelineMD))
+	return joinBlocks(oneLineRisk(neutralizeAttestationMarkers(risk)), noMistakesPRSignature, carriedAttestation(pipelineMD))
 }
 
 func oneLineRisk(risk string) string {
@@ -230,7 +230,7 @@ func foldedWithin(risk, testing, pipeline string, innerBudget int) string {
 		return ""
 	}
 	if risk != "" {
-		riskBudget := budget - len(minimum) - len("## Risk Assessment\n\n") - len("\n\n")
+		riskBudget := budget - len(minimum) - len("## Risk Assessment\n\n") - len("\n\n") - len("\n\n")
 		if riskBudget <= 0 {
 			risk = ""
 		} else if len(risk) > riskBudget {

@@ -425,6 +425,10 @@ func (s *PRStep) draftPRContent(sctx *pipeline.StepContext, branch, baseBranch, 
 		return prContent{}, fmt.Errorf("read final branch diff: %w", err)
 	}
 	pipelineMD, riskLine, testingMD := s.buildPipelineSection(sctx, provider)
+	if marker := extractPipelineAttestationMarker(pipelineMD); marker != "" &&
+		((bodyLimit > 0 && scm.PRBodyLen(marker) > bodyLimit) || len(marker) > maxPullRequestBodyBytes) {
+		return prContent{}, fmt.Errorf("pipeline attestation exceeds PR body limit")
+	}
 
 	titleRules := prTitlePromptRules(sctx)
 	scopeRules := prTitleScopeRules(sctx)
