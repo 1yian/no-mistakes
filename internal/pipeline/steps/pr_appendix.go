@@ -192,12 +192,7 @@ func fitCollapsed(prefix, risk, testing, pipeline string, limit int, units func(
 			return dropped
 		}
 	}
-	overhead := units(validationDetailsOpen) + units(validationDetailsClose)
-	innerBudget := limit - overhead
-	if innerBudget < 1 {
-		innerBudget = 1
-	}
-	folded := foldedWithin(risk, "", pipeline, innerBudget)
+	folded := foldedWithin(risk, "", pipeline, limit)
 	if folded == "" {
 		return shrinkMeasuredKeepingTail(joinBlocks(prefix, carriedAttestation(pipeline)), carriedAttestation(pipeline), limit, units, clamp)
 	}
