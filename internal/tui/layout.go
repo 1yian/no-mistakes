@@ -13,10 +13,6 @@ const (
 	responsiveLeftMaxWidth   = 48
 	responsiveRightMinWidth  = 48
 
-	// cappedPipelineHeight is the height passed to renderPipelineView when
-	// an overlay (help) is active in non-responsive (stacked) layout.
-	// Kept below 30 to suppress connector lines and save vertical space
-	// for the overlay that stacks below.
 	cappedPipelineHeight = 29
 )
 

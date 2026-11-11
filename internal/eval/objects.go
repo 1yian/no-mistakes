@@ -14,8 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// Every case pins the same four commits. They are named rather than positional
-// so a pool ref reads as evidence of what it keeps alive.
 const (
 	refHead          = "head"
 	refSourceHead    = "source-head"
@@ -30,23 +28,6 @@ func caseRefNames() []string {
 
 func caseRefPrefix(caseID string) string { return caseRefNamespace + caseID + "/" }
 
-// poolDir is the shared object store for every case captured from one source
-// repository.
-//
-// Cases used to each carry a self-contained Git bundle, which is a full copy of
-// the repository's history per review pass: ~8 MB per case for a small repo, so
-// a machine reviewing a few dozen changes a day accumulated hundreds of
-// megabytes a day of near-identical objects. A bundle cannot be trimmed to only
-// the interesting commits, because a bundle built with negative refs records
-// prerequisites and Git refuses to unbundle it into a repository that lacks
-// them - and the whole point of a case is that it restores into an empty
-// throwaway gate.
-//
-// Sharing one pool per repository fixes that at the source instead: the first
-// case pays for the history once, and every later case transfers only the
-// objects its own commits introduced (measured at ~8 KB). The case keeps its
-// records; the pool keeps its objects; the case's refs are what tie them
-// together and what keeps those objects alive against Git's own maintenance.
 func (s *Store) poolDir(repoFingerprint string) string {
 	name := strings.TrimSpace(repoFingerprint)
 	if name == "" {
@@ -55,17 +36,6 @@ func (s *Store) poolDir(repoFingerprint string) string {
 	return filepath.Join(s.root, "pools", name+".git")
 }
 
-// storeCaseObjects copies the commits one case replays from the source gate
-// into that repository's pool and pins them under the case's ref prefix.
-//
-// It never writes to the gate: capture is read-only against live pipeline
-// state. The reviewed commit is frequently not the tip of any gate ref by the
-// time a case is captured (fix rounds advance the branch, and branches get
-// deleted after a merge), and asking a remote for a bare object id depends on
-// upload-pack's want policy, which is off by default and version-dependent. So
-// the commits are named in a throwaway bare clone of the gate - local clones
-// hardlink their objects, so this costs no meaningful disk or time - and the
-// pool fetches them from there by refspec, which is ordinary supported Git.
 func initializeObjectPool(ctx context.Context, pool string) error {
 	if err := git.InitBare(ctx, pool); err != nil {
 		return fmt.Errorf("create eval object pool: %w", err)
@@ -125,9 +95,6 @@ func (s *Store) storeCaseObjects(ctx context.Context, gateDir, repoFingerprint, 
 	return nil
 }
 
-// restoreCaseObjects fetches one case's pinned commits out of the pool into a
-// throwaway gate. The pool is a plain local repository, so this is the same
-// ordinary fetch the bundle path used, minus the duplicated history.
 func restoreCaseObjects(ctx context.Context, poolPath, gateDir, caseID string) error {
 	if err := git.ValidateBareRepository(ctx, poolPath); err != nil {
 		return fmt.Errorf("case objects are unavailable: %w", err)
@@ -139,10 +106,6 @@ func restoreCaseObjects(ctx context.Context, poolPath, gateDir, caseID string) e
 	return nil
 }
 
-// dropCaseObjects releases one case's claim on the pool. Deleting the refs
-// makes its objects unreachable while any object another case still pins stays
-// alive. It is best effort by design - a pool that is already gone means the
-// case's objects are gone too, which is exactly the requested state.
 func dropCaseObjects(ctx context.Context, poolPath, caseID string) error {
 	if _, err := os.Stat(poolPath); errors.Is(err, os.ErrNotExist) {
 		return nil

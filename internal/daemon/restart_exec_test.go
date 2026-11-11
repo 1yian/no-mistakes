@@ -11,11 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// Issue #1691, and the captain's ruling on #1697 that restart when idle must
-// work on Windows too: a real daemon process started through RunRestartable
-// stops for a scheduled restart and a daemon from its executable file serves
-// the same root again. On macOS and Linux that is the same process, replaced
-// in place; on Windows the stopping daemon launches its replacement and exits.
 func TestRunRestartableServesAgainAfterAScheduledRestart(t *testing.T) {
 	root, err := os.MkdirTemp("", "drst")
 	if err != nil {

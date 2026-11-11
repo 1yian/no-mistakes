@@ -72,8 +72,6 @@ func loadRequireAction(t *testing.T, actionDir string) compositeAction {
 	return action
 }
 
-// pythonInterpreter mirrors the interpreter resolution the action performs on a
-// runner. Windows images ship `python` rather than `python3`.
 func pythonInterpreter(t *testing.T) string {
 	t.Helper()
 	for _, candidate := range []string{"python3", "python"} {
@@ -100,10 +98,6 @@ type actionRun struct {
 	githubRepo  string // GITHUB_REPOSITORY, e.g. "owner/name"
 }
 
-// filterEnv returns env with any entry whose key is in drop removed, so a
-// caller can then append its own deterministic values for those keys without
-// depending on whichever match exec.Cmd's environment lookup happens to use
-// when a key appears twice.
 func filterEnv(env []string, drop ...string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -190,9 +184,6 @@ func runRequireAction(t *testing.T, run actionRun) actionResult {
 	return result
 }
 
-// TestRequireActionIsAComposite pins the shape callers depend on: a composite
-// action (not a workflow) whose per-repo configuration surface is exemptions
-// only, so a caller can never weaken which steps the gate certifies.
 func TestRequireActionIsAComposite(t *testing.T) {
 	action := loadRequireAction(t, requireActionDir)
 	if action.Runs.Using != "composite" {
@@ -231,8 +222,6 @@ func TestRequireActionIsAComposite(t *testing.T) {
 	}
 }
 
-// TestRequireActionEnforcesTheGate is the behavioral contract: it runs the real
-// entrypoint over PR bodies the pipeline itself generates.
 func TestRequireActionEnforcesTheGate(t *testing.T) {
 	signature := "Updates from [git push no-mistakes](https://github.com/kunchenguid/no-mistakes)"
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
@@ -357,9 +346,6 @@ func TestRequireActionEnforcesTheGate(t *testing.T) {
 	}
 }
 
-// TestRequireActionExemptions covers the per-repo configuration surface: an
-// exempt PR bypasses the gate even with a body that would otherwise fail, and a
-// non-matching configuration never softens the verdict.
 func TestRequireActionExemptions(t *testing.T) {
 	nonCompliant := "a release-please pull request with no pipeline section"
 
@@ -438,9 +424,6 @@ func TestRequireActionExemptions(t *testing.T) {
 	}
 }
 
-// TestRequireActionReadsTheEventPayloadWhenInputsAreOmitted is what keeps a
-// caller thin: a pull_request-triggered workflow forwards nothing and the
-// action still binds the attestation to the real PR head.
 func TestRequireActionReadsTheEventPayloadWhenInputsAreOmitted(t *testing.T) {
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	eventPath := filepath.Join(t.TempDir(), "event.json")
@@ -471,12 +454,6 @@ func TestRequireActionReadsTheEventPayloadWhenInputsAreOmitted(t *testing.T) {
 	}
 }
 
-// TestRequireActionLiveLookupHeadBindStillApplies covers the head-bind check
-// on the live-lookup path specifically: the live PR body is otherwise
-// compliant, but its live head SHA has moved past what the attestation
-// covers (a push landed after the attestation was written, before this job
-// polled). The gate must still fail exactly as it does on the explicit-input
-// and payload-fallback paths - the live source does not get a weaker check.
 func TestRequireActionLiveLookupHeadBindStillApplies(t *testing.T) {
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	eventPath := writeEventPayload(t, 812, compliant, requiredWorkflowTestHeadSHA)
@@ -497,9 +474,6 @@ func TestRequireActionLiveLookupHeadBindStillApplies(t *testing.T) {
 	}
 }
 
-// stubPullsAPI serves exactly one GET /repos/{repo}/pulls/{number} response,
-// standing in for the real GitHub API in the live-lookup tests below. It
-// fails the test if called for any other path or method, or more than once.
 func stubPullsAPI(t *testing.T, repo, number string, status int, body string, headSHA string) *httptest.Server {
 	t.Helper()
 	wantPath := "/repos/" + repo + "/pulls/" + number
@@ -532,9 +506,6 @@ func stubPullsAPI(t *testing.T, repo, number string, status int, body string, he
 	return server
 }
 
-// writeEventPayload writes a pull_request event payload fixture matching the
-// shape GitHub actually delivers, so the archived-payload tests below exercise
-// the exact fields Facts.__init__ reads.
 func writeEventPayload(t *testing.T, number int, body, headSHA string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "event.json")
@@ -548,12 +519,6 @@ func writeEventPayload(t *testing.T, number int, body, headSHA string) string {
 	return path
 }
 
-// TestRequireActionLiveLookupOverridesStaleArchivedEvent reproduces the exact
-// incident this fix exists for: a GitHub Actions job RERUN replays the event
-// payload archived at its ORIGINAL trigger, which can carry an attestation
-// bound to an already-superseded head. Without a live lookup this reruns a
-// stale FAILURE with a fresh timestamp on top of an otherwise-green commit
-// (see verify.py's module docstring). The live PR body/head SHA must win.
 func TestRequireActionLiveLookupOverridesStaleArchivedEvent(t *testing.T) {
 	staleHead := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	currentHead := requiredWorkflowTestHeadSHA
@@ -581,12 +546,6 @@ func TestRequireActionLiveLookupOverridesStaleArchivedEvent(t *testing.T) {
 	}
 }
 
-// TestRequireActionLiveLookupGovernsFailureToo proves the live PR state
-// governs the verdict in the failing direction as well, not merely when it
-// happens to agree with a compliant archived payload: the archived event
-// shows a fully compliant PR, but the PR's live body no longer carries the
-// no-mistakes signature at all (e.g. edited between the original event and a
-// later rerun). The live state must win and the check must fail.
 func TestRequireActionLiveLookupGovernsFailureToo(t *testing.T) {
 	currentHead := requiredWorkflowTestHeadSHA
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
@@ -607,15 +566,6 @@ func TestRequireActionLiveLookupGovernsFailureToo(t *testing.T) {
 	}
 }
 
-// TestRequireActionFailsClosedWhenLiveLookupUnavailable is the P1 regression
-// for the upstream review of PR 923 ("lookup failure restores stale
-// verdicts"): before this fix, no token (or an unreachable API) fell back to
-// evaluating the workflow's own cached event payload and still emitted a
-// compliance verdict from it - exactly the staleness hole a rerun of an old
-// job could exploit (see the module docstring). It must instead fail the
-// whole gate closed, with no compliance verdict at all, and a clear error
-// naming both remediations (grant pull-requests: read, or forward explicit
-// pr-body/pr-head-sha).
 func TestRequireActionFailsClosedWhenLiveLookupUnavailable(t *testing.T) {
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	eventPath := writeEventPayload(t, 812, compliant, requiredWorkflowTestHeadSHA)
@@ -654,10 +604,6 @@ func TestRequireActionFailsClosedWhenLiveLookupUnavailable(t *testing.T) {
 	}
 }
 
-// TestRequireActionFailsClosedWhenLiveAPICallFails is the same P1 regression
-// as TestRequireActionFailsClosedWhenLiveLookupUnavailable, for a token and
-// repo both present but the API call itself failing (non-200): infrastructure
-// noise must fail the gate closed, not fall back to the event payload.
 func TestRequireActionFailsClosedWhenLiveAPICallFails(t *testing.T) {
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	eventPath := writeEventPayload(t, 812, compliant, requiredWorkflowTestHeadSHA)
@@ -680,10 +626,6 @@ func TestRequireActionFailsClosedWhenLiveAPICallFails(t *testing.T) {
 	}
 }
 
-// TestRequireActionExplicitInputsSkipLiveLookup pins the documented
-// precedence: pr-body/pr-head-sha explicit inputs (a caller driving this from
-// a non-pull_request event) are never second-guessed against a live lookup,
-// even when one is configured and available.
 func TestRequireActionExplicitInputsSkipLiveLookup(t *testing.T) {
 	explicitBody := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

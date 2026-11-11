@@ -33,10 +33,6 @@ func sameDirForTest(a, b string) bool {
 	return err == nil && os.SameFile(infoA, infoB)
 }
 
-// Issue #1465 acceptance: a checkout registered under another spelling of its
-// path is still one repository when looked up from the physical main checkout
-// and from a linked worktree, and a second init from the real path refreshes it
-// instead of registering another.
 func TestFindRepoResolvesOneRepositoryFromMainCheckoutAndLinkedWorktree(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

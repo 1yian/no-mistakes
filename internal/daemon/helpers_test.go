@@ -132,7 +132,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// startTestDaemon starts a daemon with a temp root and registers shutdown cleanup.
 func startTestDaemon(t *testing.T) (*paths.Paths, *db.DB) {
 	t.Helper()
 
@@ -158,8 +157,6 @@ func startTestDaemon(t *testing.T) (*paths.Paths, *db.DB) {
 	return p, d
 }
 
-// TestRunTestDaemonStartupError exercises the helper through a failed daemon
-// startup in a child test process, so its fatal diagnostic can be asserted.
 func TestRunTestDaemonStartupError(t *testing.T) {
 	const childEnv = "NM_TEST_DAEMON_STARTUP_ERROR"
 	if os.Getenv(childEnv) == "1" {
@@ -195,15 +192,6 @@ func TestRunTestDaemonStartupError(t *testing.T) {
 	}
 }
 
-// runTestDaemon runs RunWithOptions for the rest of the test and returns only
-// once the daemon answers a health probe. Startup recovery (stale runs, orphan
-// processes, orphan worktrees) completes before the IPC socket is bound, so a
-// returned call is a barrier after which recovery results can be asserted, and
-// the registered cleanup can reach a daemon that is still serving. The
-// cleanup asks the daemon to shut down when reachable and waits for
-// RunWithOptions to return. stopWithin only bounds how long a daemon that
-// never exits can stall the test. Register cleanup for resources that must
-// outlive the daemon (d and its root) before calling this.
 func runTestDaemon(t *testing.T, p *paths.Paths, d *db.DB, sf StepFactory, stopWithin time.Duration) {
 	t.Helper()
 
@@ -231,7 +219,6 @@ func runTestDaemon(t *testing.T, p *paths.Paths, d *db.DB, sf StepFactory, stopW
 
 // --- Mock steps and helpers for RunManager tests ---
 
-// mockPassStep is a step that completes immediately without needing approval.
 type mockPassStep struct {
 	name    types.StepName
 	execCnt atomic.Int32
@@ -243,7 +230,6 @@ func (s *mockPassStep) Execute(_ *pipeline.StepContext) (*pipeline.StepOutcome, 
 	return &pipeline.StepOutcome{}, nil
 }
 
-// mockApprovalStep pauses for approval every time.
 type mockApprovalStep struct {
 	name types.StepName
 }
@@ -253,7 +239,6 @@ func (s *mockApprovalStep) Execute(_ *pipeline.StepContext) (*pipeline.StepOutco
 	return &pipeline.StepOutcome{NeedsApproval: true, Findings: `{"findings":[],"summary":"needs review"}`}, nil
 }
 
-// mockSlowStep blocks until context is cancelled.
 type mockSlowStep struct {
 	name    types.StepName
 	started chan struct{}
@@ -277,7 +262,6 @@ func (s *mockPanicStep) Execute(_ *pipeline.StepContext) (*pipeline.StepOutcome,
 	panic("boom")
 }
 
-// startTestDaemonWithSteps starts a daemon with a custom step factory.
 func startTestDaemonWithSteps(t *testing.T, sf StepFactory) (*paths.Paths, *db.DB) {
 	t.Helper()
 
@@ -312,9 +296,6 @@ func startTestDaemonWithSteps(t *testing.T, sf StepFactory) (*paths.Paths, *db.D
 	return p, d
 }
 
-// setupTestGitRepo creates a git repo with one commit, pushes to a bare repo
-// under p.RepoDir(repoID), and registers the repo in the DB.
-// Returns the repo record and the head SHA.
 func setupTestGitRepo(t *testing.T, p *paths.Paths, d *db.DB, repoID string) (*db.Repo, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -397,8 +378,6 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 	return string(out[:len(out)-1]) // trim trailing newline
 }
 
-// testJSONString quotes s as a JSON string for embedding into transcript
-// fixtures.
 func testJSONString(t *testing.T, s string) string {
 	t.Helper()
 	b, err := json.Marshal(s)
@@ -408,8 +387,6 @@ func testJSONString(t *testing.T, s string) string {
 	return string(b)
 }
 
-// testClaudeProjectDirName mirrors the Claude transcript layout's path
-// encoding: every '/', '\\', and ':' becomes '-'.
 func testClaudeProjectDirName(cwd string) string {
 	replacer := strings.NewReplacer("/", "-", `\`, "-", ":", "-")
 	return replacer.Replace(cwd)
@@ -462,16 +439,6 @@ exit 1
 	return dir, logPath
 }
 
-// writeMockGHNoPR puts a gh on PATH that authenticates and reports that the
-// branch has no open pull request.
-//
-// Every push now writes a pipeline attestation for the head it is about to
-// publish, which asks the forge whether a PR exists (see the Pre-Push Pipeline
-// Attestation contract). Without a stub, that lookup leaves the test process:
-// on a developer machine with an authenticated gh it reaches github.com and
-// fails against the placeholder test/repo slug, so a push-behaviour test would
-// pass or fail depending on whose machine ran it. An empty PR list is the
-// honest answer for a repository this test never opened a PR on.
 func writeMockGHNoPR(t *testing.T, dir string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -547,14 +514,6 @@ func waitForRunTerminalState(t *testing.T, d *db.DB, runID string) *db.Run {
 	return nil
 }
 
-// waitForDaemonReady blocks until the daemon started by RunWithOptions answers a
-// health probe. The singleton lock orders stale-run recovery (which performs
-// startup PR reconciliation) strictly before the socket bind and the first
-// health response, so a healthy daemon has already finished reconciling. Tests
-// that launch RunWithOptions in a goroutine and then wait for a recovered run to
-// go terminal must gate on this first: otherwise their terminal-state deadline
-// has to absorb the entire cold daemon startup, which is far slower on the
-// process-spawn-bound Windows runner and made the wait flaky.
 func waitForDaemonReady(t *testing.T, p *paths.Paths) {
 	t.Helper()
 	waitForDaemonReadyOrExit(t, p, nil)
@@ -586,10 +545,6 @@ func waitForDaemonReadyOrExit(t *testing.T, p *paths.Paths, exited <-chan error)
 	t.Fatalf("daemon at %s never became ready", p.Socket())
 }
 
-// shutdownTestDaemonAndWaitForCleanup turns daemon shutdown into a lifecycle
-// barrier for tests that inspect its filesystem. A run's terminal DB status is
-// persisted before its owner goroutine removes the worktree, while shutdown
-// waits for every run goroutine before removing the socket.
 func shutdownTestDaemonAndWaitForCleanup(t *testing.T, p *paths.Paths) {
 	t.Helper()
 

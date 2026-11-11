@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// writeCopilotFixture builds a Copilot-style session-state directory inside a
-// fake $HOME and returns the home path. The session id is fixed so tests can
-// assert on it.
 func writeCopilotFixture(t *testing.T, sessionID string, lines []string) string {
 	t.Helper()
 	home := t.TempDir()

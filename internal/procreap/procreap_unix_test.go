@@ -16,14 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// TestSweepReapsSetsidEscapeeThatProcessGroupTeardownCannotReach is the
-// end-to-end reproduction of the leak this package exists for, with real
-// processes. A pipeline child calls setsid(2), leaving the process group
-// no-mistakes isolated it in; the group teardown that runs on every exit path
-// then cannot reach it, and once its parent exits it can reparent to init or a
-// process subreaper and run forever. The test asserts both halves: the escapee
-// genuinely survives the group teardown, and the worktree-scoped sweep - the
-// one the daemon runs when a run's goroutine finishes - terminates it.
 func TestSweepReapsSetsidEscapeeThatProcessGroupTeardownCannotReach(t *testing.T) {
 	requireCWDLookup(t)
 	root, wt := newFakeWorktree(t)
@@ -44,9 +36,6 @@ func TestSweepReapsSetsidEscapeeThatProcessGroupTeardownCannotReach(t *testing.T
 	}
 }
 
-// TestSweepReapsStaleOrphanFromDaemonStartupShape exercises the unscoped call
-// the daemon makes on startup - the path that has to clean up after a
-// predecessor daemon that died without ever running its own teardown.
 func TestSweepReapsStaleOrphanFromDaemonStartupShape(t *testing.T) {
 	requireCWDLookup(t)
 	root, wt := newFakeWorktree(t)
@@ -73,9 +62,6 @@ func TestSweepReapsStaleOrphanFromDaemonStartupShape(t *testing.T) {
 	}
 }
 
-// TestProcReapHelper is not a test: it is the re-executed helper the process
-// tests above drive through NM_PROCREAP_HELPER. It exits before the testing
-// framework can report anything.
 func TestProcReapHelper(t *testing.T) {
 	switch os.Getenv("NM_PROCREAP_HELPER") {
 	case "leader":
@@ -177,9 +163,6 @@ func newFakeWorktree(t *testing.T) (root, worktree string) {
 	return root, worktree
 }
 
-// startEscapeeUnderLeader runs a leader in its own process group, has it spawn
-// a setsid child standing in the worktree, then tears the leader's group down
-// exactly the way the pipeline does. The returned pid is what survived.
 func startEscapeeUnderLeader(t *testing.T, worktree string) int {
 	t.Helper()
 	ready := filepath.Join(t.TempDir(), "escaped.ready")
@@ -214,9 +197,6 @@ func parseEscapedPID(t *testing.T, output string) int {
 	return 0
 }
 
-// requireCWDLookup skips when this platform cannot resolve a process working
-// directory (no lsof, or a sandbox that hides it). The sweep degrades to a
-// no-op there, which is correct but not what these tests assert.
 func requireCWDLookup(t *testing.T) {
 	t.Helper()
 	self := os.Getpid()

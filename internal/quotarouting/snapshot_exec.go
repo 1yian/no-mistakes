@@ -10,16 +10,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// maxSnapshotBytes bounds the snapshot read. A quota-axi --json document is a
-// few kilobytes; the bound exists so a wedged or broken executable cannot turn
-// one run setup into a memory event, not to constrain real output.
 const maxSnapshotBytes = 4 << 20
 
-// ReadSnapshot runs the quota-axi executable once (--json) and parses its
-// output. It is the one place no-mistakes invokes quota-axi, called once per
-// run at run setup. Every failure mode - missing executable, timeout, non-zero
-// exit, unparseable output - is an error the caller resolves to today's
-// configured order with a recorded reason; it never blocks a run.
 func ReadSnapshot(ctx context.Context, exe string, timeout time.Duration) (*Snapshot, error) {
 	if exe == "" {
 		exe = "quota-axi"
@@ -51,8 +43,6 @@ func ReadSnapshot(ctx context.Context, exe string, timeout time.Duration) (*Snap
 	return snapshot, nil
 }
 
-// boundedBuffer caps how much of a child's stdout is kept, so a runaway
-// executable cannot exhaust memory before its timeout lands.
 type boundedBuffer struct {
 	inner *bytes.Buffer
 	limit int
@@ -80,8 +70,4 @@ func fallbackReason(text string) string {
 	return string(runes[:max]) + "..."
 }
 
-// DefaultReadTimeout bounds one quota-axi read. quota-axi may delegate an
-// expired session's renewal to the vendor CLI that owns it, so the default is
-// generous but still bounded: a slow read must never delay a run's start by
-// more than this.
 const DefaultReadTimeout = 15 * time.Second

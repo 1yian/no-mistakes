@@ -12,12 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/wizard"
 )
 
-// TestRootInteractiveWizardFailsLoudlyWhenRunRegistrationIsSlow covers
-// issue #122 defect 3. Prior behavior: if the daemon didn't register a
-// run after push (e.g. gate hook disabled by husky), the wizard's wait
-// silently returned nil, the wizard declared success, and the command
-// printed "No active run" with exit code 0. That masked the real failure.
-// After the fix, an error surfaces all the way to the CLI.
 func TestRootInteractiveWizardFailsLoudlyWhenRunRegistrationIsSlow(t *testing.T) {
 	setupTestRepo(t)
 	nmHome := makeSocketSafeTempDir(t)

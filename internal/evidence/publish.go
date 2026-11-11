@@ -18,88 +18,36 @@ import (
 )
 
 const (
-	// maxFiles and maxTotalBytes bound one run's publication. Evidence is
-	// agent-produced, so a runaway recording or a stray model download must
-	// fail the publish closed rather than push gigabytes into the repository.
 	maxFiles      = 500
 	maxTotalBytes = int64(256 << 20)
 	maxFileBytes  = int64(64 << 20)
 
-	// fetchRef is a scratch ref used to bring the remote evidence tip into the
-	// local object store. Only the resolved sha is used afterwards, so a
-	// concurrent run overwriting the ref cannot redirect this publish.
 	fetchRef = "refs/no-mistakes/evidence-fetch"
 
 	scratchIndexName = "no-mistakes-evidence-index"
 )
 
-// Request describes one publication of a run's evidence directory.
 type Request struct {
-	// RepoDir is any non-bare worktree (or bare gate dir) of the repository.
-	// Objects are written into its store and pushed from there; nothing is
-	// checked out, so a detached HEAD or a shallow clone is fine - the orphan
-	// branch shares no history with the shallow code branches.
-	RepoDir string
-	// PushURL is the remote the evidence branch is pushed to. It is the same
-	// target the pipeline pushes the code branch to, so fork contributions
-	// keep their evidence in the fork the PR head lives in.
-	PushURL string
-	// Branch is the evidence branch name (already normalized).
-	Branch string
-	// Dir is an optional directory prefix inside the evidence branch.
-	Dir string
-	// Segments are further in-branch directory segments below Dir, typically
-	// the slugged code-branch name.
-	Segments []string
-	// SourceDir is the local directory holding the run's evidence files.
-	SourceDir string
-	// ExcludeDirs names directories directly under SourceDir that must never
-	// be published, as slash-separated paths relative to it. The run's evidence
-	// directory is shared with content that is deliberately NOT publishable -
-	// the review conversation lives there - and this package must not have to
-	// know which name that is, so the caller supplies it.
-	ExcludeDirs []string
-	// RunWorktree is the run's worktree. Its absolute path names the local
-	// checkout (the repo id is a hash of it), so published text never keeps it.
-	RunWorktree string
-	// WorktreesRoot is the NM_HOME worktrees directory, the fallback for paths
-	// into any run worktree. NM_HOME may sit outside the home directory, where
-	// home redaction never reaches.
-	WorktreesRoot string
-	// Message is the evidence commit message.
-	Message string
-	// ForbiddenBranches names branches that must never receive evidence (the
-	// run's own branch and the repository default branch). The marker check
-	// already refuses them; this turns the refusal into a message that names
-	// the misconfiguration.
+	RepoDir           string
+	PushURL           string
+	Branch            string
+	Dir               string
+	Segments          []string
+	SourceDir         string
+	ExcludeDirs       []string
+	RunWorktree       string
+	WorktreesRoot     string
+	Message           string
 	ForbiddenBranches []string
 }
 
-// Result describes what a publication landed on the evidence branch.
 type Result struct {
-	// Branch is the evidence branch that now holds the files.
-	Branch string
-	// CommitSHA is the evidence commit to build stable links against.
+	Branch    string
 	CommitSHA string
-	// Dir is the in-branch directory the run's files live under, "" at root.
-	Dir string
-	// Files are the published paths relative to Dir, slash separated.
-	Files []string
+	Dir       string
+	Files     []string
 }
 
-// Publish copies every regular file under req.SourceDir onto the evidence
-// branch and pushes it.
-//
-// The commit is built with plumbing against a scratch index, so the caller's
-// worktree, index, and HEAD are never touched. The new commit's parent is the
-// tip that was just fetched from the remote, which makes the push a plain
-// fast-forward: evidence is only ever appended, and this never force-pushes.
-//
-// It fails closed rather than guessing: an unreadable remote, a branch that
-// exists without the marker file, a lost push race, or a refused push (no
-// permission, protected ref) all return an error and publish nothing. The
-// caller then leaves the PR body pointing at local paths instead of links that
-// would not resolve.
 func Publish(ctx context.Context, req Request) (*Result, error) {
 	branch, err := NormalizeBranch(req.Branch)
 	if err != nil {
@@ -123,9 +71,6 @@ func Publish(ctx context.Context, req Request) (*Result, error) {
 		return nil, nil
 	}
 
-	// One retry covers a concurrent run that advanced the evidence branch
-	// between the fetch and the push. A second loss is a real conflict, and
-	// resolving it by force would be the one thing this branch must never do.
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		result, err := publishOnce(ctx, req, branch, dir, files)
@@ -205,12 +150,6 @@ func publishOnce(ctx context.Context, req Request, branch, dir string, files []c
 	return &Result{Branch: branch, CommitSHA: commit, Dir: dir, Files: published}, nil
 }
 
-// hashEvidenceFile writes one evidence file into the object store and returns
-// its blob id. A readable UTF-8 text file first gets the same home-directory
-// redaction the PR title and body get, because captured command output carries
-// absolute paths under the operator's home, after the run worktree paths are
-// rewritten. Binary and visual artifacts, and the local file itself, are left
-// untouched.
 func hashEvidenceFile(ctx context.Context, req Request, env []string, abs string) (string, error) {
 	content, err := os.ReadFile(abs)
 	if err != nil {
@@ -225,10 +164,6 @@ func hashEvidenceFile(ctx context.Context, req Request, env []string, abs string
 	return git.RunWithEnv(ctx, req.RepoDir, env, "hash-object", "-w", "--", abs)
 }
 
-// remoteTip returns the remote evidence branch head, fetched into the local
-// object store, or "" when the branch does not exist yet. A failure to read
-// the remote is an error: publishing onto a branch whose current state is
-// unknown is exactly the case that must not proceed.
 func remoteTip(ctx context.Context, repoDir, pushURL, branch string) (string, error) {
 	out, err := git.Run(ctx, repoDir, "ls-remote", "--heads", pushURL, "refs/heads/"+branch)
 	if err != nil {
@@ -247,9 +182,6 @@ func remoteTip(ctx context.Context, repoDir, pushURL, branch string) (string, er
 	return sha, nil
 }
 
-// assertEvidenceBranch refuses a branch that exists but is not a no-mistakes
-// evidence branch. This is the guard that makes a wrong configured name
-// harmless: "main" has no marker file, so evidence is never appended to it.
 func assertEvidenceBranch(ctx context.Context, repoDir, tip, branch string) error {
 	content, err := git.RunRaw(ctx, repoDir, "cat-file", "blob", tip+":"+MarkerPath)
 	if err != nil || string(content) != MarkerContent {
@@ -277,7 +209,6 @@ func addToIndex(ctx context.Context, repoDir string, env []string, mode, blob, i
 	return nil
 }
 
-// commitTree builds the evidence commit.
 func commitTree(ctx context.Context, repoDir, tree, parent, message string) (string, error) {
 	var env []string
 	if identity, bound := git.CommitIdentityFromContext(ctx); bound {
@@ -317,9 +248,6 @@ func configuredIdentity(ctx context.Context, repoDir, key, fallback string) stri
 	return strings.TrimSpace(value)
 }
 
-// isPushRace reports whether the failure looks like another writer advancing
-// the evidence branch, which is worth exactly one rebuild-and-retry. A
-// permission or protected-branch refusal is not, and must surface immediately.
 func isPushRace(err error) bool {
 	if err == nil {
 		return false
@@ -336,16 +264,6 @@ type collectedFile struct {
 	Mode string
 }
 
-// collectFiles lists the regular files under root in a deterministic order,
-// skipping any directory named in exclude (slash-separated, relative to root).
-// Symlinks are skipped: an evidence symlink would publish a pointer to a path
-// that only exists on the daemon host.
-//
-// This is the single boundary every publication routes through, which is why
-// the exclusion belongs here rather than at a caller: an excluded directory is
-// skipped WHOLE, so its contents are never published and never counted against
-// the size and file-count budgets either - otherwise unpublishable content
-// could still fail the publication and drop real evidence back to local links.
 func collectFiles(root string, exclude []string) ([]collectedFile, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, nil
@@ -410,8 +328,6 @@ func collectFiles(root string, exclude []string) ([]collectedFile, error) {
 	return files, nil
 }
 
-// safeInBranchPath rejects paths Git cannot carry verbatim or that would
-// escape the run's directory once joined into the branch.
 func safeInBranchPath(p string) bool {
 	if p == "" || strings.HasPrefix(p, "/") {
 		return false
@@ -432,9 +348,6 @@ func safeInBranchPath(p string) bool {
 	return true
 }
 
-// normalizeInBranchDir builds the in-branch directory from the configured
-// prefix and the extra segments, dropping anything that would escape the
-// branch root.
 func normalizeInBranchDir(dir string, segments []string) string {
 	var parts []string
 	for _, raw := range append(strings.Split(filepath.ToSlash(strings.TrimSpace(dir)), "/"), segments...) {

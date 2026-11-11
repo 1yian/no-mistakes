@@ -14,13 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestGiteaProviderJourney exercises the Gitea provider end to end through
-// the real pipeline: self-hosted-host detection via tea's own config.yml
-// (Gitea carries no distinguishing hostname substring the way gitlab.com or
-// github.com do), buildHost wiring the gitea.Host, PR creation, and the CI
-// step. It mirrors TestForkRouting's shape (a git URL rewrite standing in for
-// the real provider, a stubbed CLI shadowing the real one), using the tea stub added
-// to cmd/fakeagent alongside the existing gh stub.
 func TestGiteaProviderJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 

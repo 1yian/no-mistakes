@@ -268,10 +268,6 @@ func TestReplayRestoresCaseIntoAnIsolatedWorktree(t *testing.T) {
 	}
 }
 
-// TestReplayPinsCandidateModelAndEffortOnTheHarness is the end-to-end half of
-// the unified abstraction on the eval side: a candidate's model and effort reach
-// the harness through the same agentcfg mapping the pipeline uses, so an
-// effort-aware comparison actually runs at the effort it reports.
 func TestReplayPinsCandidateModelAndEffortOnTheHarness(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, _ := setupCapturedRun(t, ctx)
@@ -329,9 +325,6 @@ func TestReplayPinsCandidateModelAndEffortOnTheHarness(t *testing.T) {
 	}
 }
 
-// TestCaptureStripsEveryHarnessPinFromThePinnedConfig keeps a replay from
-// inheriting the capturing machine's own model or effort: the candidate is the
-// only thing that may decide what the harness runs as.
 func TestCaptureStripsEveryHarnessPinFromThePinnedConfig(t *testing.T) {
 	pinned := []byte("agent: codex\nagent_args_override:\n  codex:\n    - -m\n    - gpt-5.4\nagent_config:\n  codex:\n    model: gpt-5.4\n    effort: high\nlog_level: warn\n")
 	pinned = append(pinned, []byte("review_agents:\n  reviewer: {agent: pi, model: review-model, effort: max}\n  fixer: {agent: pi, model: fix-model, effort: high}\n")...)
@@ -848,9 +841,6 @@ func TestParseCandidateRequiresAgentAndModel(t *testing.T) {
 	}
 }
 
-// TestParseCandidateRejectsTheReplacedSpelling keeps the removed agent+model
-// syntax from failing with a generic parse error: the message has to name the
-// replacement, because every older invocation and doc snippet uses it.
 func TestParseCandidateRejectsTheReplacedSpelling(t *testing.T) {
 	_, err := ParseCandidate("codex+gpt-5.4")
 	if err == nil {
@@ -870,10 +860,6 @@ func TestParseCandidateRejectsTheReplacedSpelling(t *testing.T) {
 	}
 }
 
-// TestParseCandidateCarriesTheEffortAxis is the eval half of the unified
-// abstraction: effort is expressible for a candidate exactly as it is in
-// agent_config, and it stays part of the candidate identity so two efforts of
-// one model never collapse into a single reported candidate.
 func TestParseCandidateCarriesTheEffortAxis(t *testing.T) {
 	candidate, err := ParseCandidate("codex,model=gpt-5.4,effort=low")
 	if err != nil {
@@ -897,9 +883,6 @@ func TestParseCandidateCarriesTheEffortAxis(t *testing.T) {
 	}
 }
 
-// TestParseCandidatePinsACPModelThroughAcpx records the closed gap: an ACP
-// target used to be refused outright because no-mistakes had no way to enforce
-// its model.
 func TestParseCandidatePinsACPModelThroughAcpx(t *testing.T) {
 	for _, input := range []string{"cursor,model=gpt-5", "acp:custom,model=gpt-5"} {
 		candidate, err := ParseCandidate(input)
@@ -922,10 +905,6 @@ func setupCapturedRunWithFindings(t *testing.T, ctx context.Context, findings st
 	return setupCapturedRunWithHistoryAndFindings(t, ctx, 0, findings)
 }
 
-// setupCapturedRunWithHistory builds the fixture run. padCommits adds that many
-// commits of incompressible content to the default branch BEFORE the reviewed
-// branch is cut, so the padding is real ancestry of every commit a case pins -
-// which is what makes duplicated history measurable.
 func setupCapturedRunWithHistory(t *testing.T, ctx context.Context, padCommits int) (*paths.Paths, *db.DB, *db.Run, *db.Repo, *db.StepRound) {
 	t.Helper()
 	return setupCapturedRunWithHistoryAndFindings(t, ctx, padCommits, `{"findings":[{"id":"real-bug","severity":"error","file":"main.go","line":3,"description":"bug","action":"ask-user","review_scope":"source"}],"risk_level":"high","risk_rationale":"bug","risk_scope":"source-or-external"}`)

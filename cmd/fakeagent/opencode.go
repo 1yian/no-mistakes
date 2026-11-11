@@ -16,10 +16,6 @@ import (
 	"time"
 )
 
-// runOpencode boots a long-running HTTP server that mimics OpenCode's
-// REST + SSE surface. It blocks until the parent (no-mistakes' agent
-// package) signals shutdown. The OpenCode wire format is documented in
-// internal/agent/opencode_types.go.
 func runOpencode(args []string, scenario *Scenario) int {
 	if len(args) == 1 && args[0] == "--version" {
 		if os.Getenv("FAKEAGENT_OPENCODE_V2") == "1" {
@@ -87,9 +83,6 @@ type fakeOpencodeServer struct {
 	msgSeq      int
 }
 
-// opencodeFixture holds the bytes captured by recordfixture for one
-// flavour. session/sse/message mirror the file layout under the
-// fixture directory.
 type opencodeFixture struct {
 	flavour   string
 	sessionID string
@@ -162,14 +155,6 @@ func (s *fakeOpencodeServer) handleHealth(w http.ResponseWriter, _ *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-// handleEvents holds the SSE connection open and forwards anything sent
-// on the per-subscriber channel. The test only opens one stream per run,
-// but the broadcast model keeps us honest if that ever changes.
-//
-// In fixture mode the bytes are already SSE-formatted (the recording
-// captured raw SSE from the real opencode), so we forward them verbatim.
-// In synthetic mode the broadcaster sends just the data payload and we
-// wrap it in `data: ...\n\n` framing here.
 func (s *fakeOpencodeServer) handleEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -218,9 +203,6 @@ func (s *fakeOpencodeServer) unsubscribe(ch chan []byte) {
 	}
 }
 
-// broadcast sends a synthetic SSE event payload (just the JSON body) to
-// every subscriber wrapped in proper SSE framing. Fixture-mode replay
-// uses broadcastRaw instead.
 func (s *fakeOpencodeServer) broadcast(event map[string]any) {
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -230,8 +212,6 @@ func (s *fakeOpencodeServer) broadcast(event map[string]any) {
 	s.broadcastRaw(framed)
 }
 
-// broadcastRaw forwards already-SSE-framed bytes to every subscriber.
-// Used for replaying the recorded SSE stream byte-for-byte.
 func (s *fakeOpencodeServer) broadcastRaw(framed []byte) {
 	s.mu.Lock()
 	subs := append([]chan []byte(nil), s.subscribers...)
@@ -292,9 +272,6 @@ func (s *fakeOpencodeServer) nextSessionID() string {
 	return fmt.Sprintf("ses_%d", s.sessionSeq)
 }
 
-// handleSessionPath dispatches /session/{id}, /session/{id}/message, and
-// /session/{id}/abort. The DELETE variant just responds 200; abort and
-// delete don't need scenario interaction.
 func (s *fakeOpencodeServer) handleSessionPath(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/session/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
@@ -333,10 +310,6 @@ func (s *fakeOpencodeServer) forgetSessionDir(sessionID string) {
 	delete(s.sessionDirs, sessionID)
 }
 
-// handleMessage is the heart of the fake. It pulls the prompt out of the
-// request, runs the scenario, broadcasts the streaming events the real
-// OpenCode would emit, and then returns the synchronous message response
-// with the structured payload.
 func (s *fakeOpencodeServer) handleMessage(w http.ResponseWriter, r *http.Request, sessionID string) {
 	var body struct {
 		Role  string `json:"role"`
@@ -500,10 +473,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// patchOpencodeMessage rewrites info.structured on the recorded message
-// response so the scenario controls the structured payload while the
-// rest of the response (info.id, role, tokens, parts shape) stays
-// faithful to what real opencode emitted.
 func patchOpencodeMessage(raw []byte, action Action) ([]byte, error) {
 	var resp map[string]any
 	if err := json.Unmarshal(raw, &resp); err != nil {

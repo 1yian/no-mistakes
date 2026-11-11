@@ -1,8 +1,5 @@
 package intent
 
-// AllReaders returns the default set of agent transcript readers, minus any
-// the caller has disabled by name. Disabled names are matched
-// case-insensitively against each reader's Name().
 func AllReaders(disabled map[string]bool) []Reader {
 	all := []Reader{
 		NewClaudeReader(),

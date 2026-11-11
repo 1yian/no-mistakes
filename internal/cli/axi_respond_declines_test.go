@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/ipc"
 )
 
-// A refused fix response leaves the gate parked, so the caller gets the
-// daemon's own wording plus the unaccounted IDs and the next action, not a
-// generic transport failure.
 func TestAxiRespond_RendersARefusalWithTheUnaccountedIDs(t *testing.T) {
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
 		respond: func(context.Context, json.RawMessage) (interface{}, error) {
@@ -48,8 +45,6 @@ func TestAxiRespond_RendersARefusalWithTheUnaccountedIDs(t *testing.T) {
 	}
 }
 
-// The successful response echoes what it recorded and forwards the explicit
-// declines, including the findings it kept by omission.
 func TestAxiRespond_EchoesRecordedDispositionsAndForwardsIgnores(t *testing.T) {
 	var gotParams ipc.RespondParams
 	var responded atomic.Bool
@@ -92,10 +87,6 @@ func TestAxiRespond_EchoesRecordedDispositionsAndForwardsIgnores(t *testing.T) {
 	}
 }
 
-// A --ignore naming a finding an earlier round of the same step already chose
-// to fix is refused too: the CLI shows the daemon's out-of-scope help instead
-// of a generic failure, and names the findings so the caller can correct the
-// response.
 func TestAxiRespond_RendersTheRefusalOfAnAlreadyFixedDecline(t *testing.T) {
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
 		respond: func(context.Context, json.RawMessage) (interface{}, error) {
@@ -129,7 +120,6 @@ func TestAxiRespond_RendersTheRefusalOfAnAlreadyFixedDecline(t *testing.T) {
 	}
 }
 
-// --ignore is part of the fix contract, never a silent no-op on another action.
 func TestAxiRespond_IgnoreIsRejectedForOtherActions(t *testing.T) {
 	responded := atomic.Bool{}
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
@@ -155,10 +145,6 @@ func TestAxiRespond_IgnoreIsRejectedForOtherActions(t *testing.T) {
 	}
 }
 
-// An ignore-only fix response is valid: the operator may be keeping earlier
-// decisions and declining only what this gate added, which is not the same as
-// approving the gate. The CLI must forward it rather than failing its own
-// precondition before the daemon ever sees it.
 func TestAxiRespond_ForwardsAnIgnoreOnlyFixResponse(t *testing.T) {
 	var gotParams ipc.RespondParams
 	var responded atomic.Bool

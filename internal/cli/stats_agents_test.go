@@ -9,10 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestStatsAgentsReportsLocalPerformanceTelemetry proves the read-only
-// report surface exposes the locally persisted invocation evidence: per-
-// purpose aggregates via --agents and per-run detail (including accumulated
-// parked time) via --run.
 func TestStatsAgentsReportsLocalPerformanceTelemetry(t *testing.T) {
 	nmHome := t.TempDir()
 	t.Setenv("NM_HOME", nmHome)
@@ -75,9 +71,6 @@ func TestStatsAgentsReportsLocalPerformanceTelemetry(t *testing.T) {
 func statsIntPtr(v int) *int       { return &v }
 func statsInt64Ptr(v int64) *int64 { return &v }
 
-// TestStatsRendersPopulatedFidelityMetrics proves the report surfaces the new
-// activity histogram, subprocess/model time split, and per-round token deltas
-// when they are recorded.
 func TestStatsRendersPopulatedFidelityMetrics(t *testing.T) {
 	nmHome := t.TempDir()
 	t.Setenv("NM_HOME", nmHome)
@@ -136,11 +129,6 @@ func TestStatsRendersPopulatedFidelityMetrics(t *testing.T) {
 	}
 }
 
-// TestStatsDistinguishesUnreportedTokensFromReportedZero proves the rendered
-// report tells a round whose usage was never recorded apart from a round that
-// genuinely used no tokens: the first shows "-" in the token cells, the second
-// shows "0". Both rows are seeded in one run so a renderer that collapses the
-// two cases fails whichever way it collapses them.
 func TestStatsDistinguishesUnreportedTokensFromReportedZero(t *testing.T) {
 	nmHome := t.TempDir()
 	t.Setenv("NM_HOME", nmHome)
@@ -200,10 +188,6 @@ func TestStatsDistinguishesUnreportedTokensFromReportedZero(t *testing.T) {
 	})
 }
 
-// statsTableRows parses one rendered table keyed by column title. The table is
-// the one whose header carries headerCell; the tabwriter pads every cell by at
-// least two spaces, so a run of two or more spaces separates cells while the
-// single spaces inside a title like "IN (raw)" survive.
 func statsTableRows(t *testing.T, out, headerCell string) []map[string]string {
 	t.Helper()
 	gap := regexp.MustCompile(`\s{2,}`)

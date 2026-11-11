@@ -13,11 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Bounds on the review-bot comment findings one observation may carry. The
-// findings payload rides the IPC event stream, and one oversized frame kills
-// the whole subscription (see the executor's approval-park comment), so a bot
-// that left hundreds of comments is summarized past this point rather than
-// rendered in full.
 const (
 	maxReviewBotCommentFindings  = 50
 	maxReviewBotCommentBytes     = 2 * 1024
@@ -27,73 +22,22 @@ const (
 type reviewBotCheck struct {
 	check scm.Check
 	bot   scm.ReviewBot
-	// green marks a bot check that completed without failing, or a
-	// registered bot with no check on the head yet. It is only
-	// observed under ci.review_bot_comments: always, and unlike a red check
-	// it produces nothing when the bot left no unresolved comment.
 	green bool
 }
 
-// ciIssues is one settled observation of the pull request: what the monitor
-// concluded is wrong with the head once every check finished and every
-// authorized transient rerun was spent. It is the input to the classifier
-// that turns each issue into a finding carrying its action.
 type ciIssues struct {
-	provider scm.Provider
-	// requiredReviews is the trusted ci.required_reviews list; it alone
-	// enables an opt-in review bot.
-	requiredReviews []string
-	checks          []scm.Check
-	// failing is the sorted list of fail-bucket check names. It may carry a
-	// name more than once when same-named checks fail together.
-	failing []string
-	// unresolvedCancelled is the sorted list of provider-attributed checks
-	// that no rerun is going to replace (see cancelledAfterRerun and
-	// cancelledWithoutRerun).
+	provider            scm.Provider
+	requiredReviews     []string
+	checks              []scm.Check
+	failing             []string
 	unresolvedCancelled []string
 	mergeConflict       bool
-	// behindBase is a green PR the forge refuses to merge until it is
-	// brought up to date with its base.
-	behindBase bool
-	// reruns reports how many transient reruns this run spent on a check.
-	reruns func(string) int
-	// botComments are the unresolved review-thread comments left by
-	// registered review bots, fetched only when such a bot's check is red,
-	// or, under ci.review_bot_comments: always, when it completed green or
-	// has not registered on the head yet.
-	botComments []scm.ReviewComment
-	// greenBots asks the classifier to also read the registered review bots
-	// whose check completed green or has not registered on the head yet
-	// (ci.review_bot_comments: always).
-	greenBots bool
+	behindBase          bool
+	reruns              func(string) int
+	botComments         []scm.ReviewComment
+	greenBots           bool
 }
 
-// ciObservationFindings converts one settled observation into findings, one
-// per issue, each carrying the action the executor's shared findings
-// machinery acts on:
-//
-//   - a failing check the provider attributes to the job itself is an
-//     auto-fix error: the repair half fetches its logs by provider identity and the fix
-//     agent, not this classifier, decides whether the code caused it (its
-//     no-code-change conclusion parks for a decision);
-//   - a merge conflict is an auto-fix error whose repair always revalidates;
-//   - a green PR behind a base that requires up-to-date branches takes the
-//     same rebase repair;
-//   - a failing check published by a recognized review bot (scm.ReviewBotsFor)
-//     is the bot's opinion about the change, not a verdict on it, so it
-//     becomes one ask-user warning per unresolved bot comment, anchored to
-//     the file and line the comment is about; under
-//     ci.review_bot_comments: always the same rule covers a bot check that
-//     completed green or has not registered yet, whose unresolved comments
-//     are findings too;
-//   - a provider-attributed outcome no rerun will replace is an ask-user
-//     warning, exactly as before findings existed: nothing a fix agent does
-//     can clear it.
-//
-// The classification reads provider structure only - bucket, state, the
-// check suite's app identity - never check names or log text, so it is as
-// trustworthy as the status API behind it. An empty app identity is never a
-// review bot.
 func ciObservationFindings(issues ciIssues) Findings {
 	var items []Finding
 	codeChecks := 0
@@ -175,11 +119,6 @@ func ciObservationFindings(issues ciIssues) Findings {
 	return Findings{Summary: strings.Join(parts, "; "), Items: items}
 }
 
-// ciObservationOutcome is the step outcome for a settled observation. A
-// blocking severity parks the step unless the executor auto-fixes first;
-// AutoFixable is what lets the executor's auto_fix.ci loop pick up the
-// auto-fix findings, and it is false when nothing here is one, so a poll
-// with only ask-user findings never starts a round.
 func ciObservationOutcome(findings Findings) *pipeline.StepOutcome {
 	encoded, _ := json.Marshal(findings)
 	return &pipeline.StepOutcome{
@@ -219,9 +158,6 @@ func selectedFailingChecks(checks []scm.Check, names []string) []scm.Check {
 	return selected
 }
 
-// ciCheckDescription keeps the "CI check failing: <name>" prefix every earlier
-// CI gate used, then adds the provider's own state and details link so a human
-// reading the gate can open the check without leaving the finding.
 func ciCheckDescription(check scm.Check) string {
 	description := fmt.Sprintf("CI check failing: %s", check.Name)
 	if state := strings.ToLower(strings.TrimSpace(check.State)); state != "" {
@@ -233,10 +169,6 @@ func ciCheckDescription(check scm.Check) string {
 	return description
 }
 
-// reviewBotFindings renders red review-bot checks as ask-user findings for
-// their unresolved comments, bounded once across the complete observation.
-// A red check with no unresolved comment still needs a decision, so it becomes
-// one finding of its own rather than disappearing.
 func reviewBotFindings(provider scm.Provider, checks []reviewBotCheck, comments []scm.ReviewComment) []Finding {
 	var candidates []Finding
 	seenComments := map[string]bool{}
@@ -370,19 +302,10 @@ func reviewBotSummary(items []Finding) string {
 	return strings.Join(parts, "; ")
 }
 
-// reviewBotCommentsAlways reports whether ci.review_bot_comments asks the
-// CI step to read a review bot's comments when its check completed green or has
-// not registered on the head yet, not only when it failed.
 func reviewBotCommentsAlways(sctx *pipeline.StepContext) bool {
 	return sctx.Config != nil && sctx.Config.CI.ReviewBotComments == config.CIReviewBotCommentsAlways
 }
 
-// greenReviewBotChecks returns the registered review-bot checks that
-// completed without failing, plus a nameless entry for every registered bot
-// with no check on this head at all: a bot that has not registered its check
-// on a new head yet can still have unresolved comments from an earlier one. A
-// pending or cancelled bot check is excluded: its review may still be
-// posting, and reading comments before the check completes would race it.
 func greenReviewBotChecks(bots []scm.ReviewBot, checks []scm.Check) []reviewBotCheck {
 	var green []reviewBotCheck
 	present := map[string]bool{}
@@ -404,8 +327,6 @@ func greenReviewBotChecks(bots []scm.ReviewBot, checks []scm.Check) []reviewBotC
 	return green
 }
 
-// readReviewBotComments returns the PR's unresolved review-bot comments, or
-// nil when the host cannot supply them.
 func readReviewBotComments(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR) ([]scm.ReviewComment, error) {
 	if !host.Capabilities().ReviewComments {
 		return nil, nil
@@ -421,12 +342,6 @@ func readReviewBotComments(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR
 	return comments, err
 }
 
-// reviewBotComments fetches the unresolved review-bot comments when a
-// registered review bot's check is red, or under ci.review_bot_comments:
-// always when one completed green or has not registered yet, and the host
-// can supply them. It is best effort: an unreadable comment list leaves the
-// bot's check finding without its comments rather than failing the
-// observation.
 func reviewBotComments(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, checks []scm.Check) []scm.ReviewComment {
 	bots := scm.ReviewBotsFor(requiredReviews(sctx))
 	wanted := reviewBotCommentsAlways(sctx) && len(greenReviewBotChecks(bots, checks)) > 0
@@ -447,13 +362,6 @@ func reviewBotComments(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, ch
 	return comments
 }
 
-// greenReviewBotFindings is the observation for an all-green head under
-// ci.review_bot_comments: always: the unresolved comments of every registered
-// review bot whose check completed green or has not registered on this head
-// yet, through the same classifier a red bot check uses. Empty when the policy
-// is on_failure or the bots left nothing unresolved. Unlike reviewBotComments it
-// returns the read error, because the caller would otherwise report
-// checks-passed over comments it never read.
 func (s *CIStep) greenReviewBotFindings(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, checks []scm.Check) (Findings, error) {
 	if !reviewBotCommentsAlways(sctx) || len(greenReviewBotChecks(scm.ReviewBotsFor(requiredReviews(sctx)), checks)) == 0 {
 		return Findings{}, nil
@@ -472,11 +380,6 @@ func (s *CIStep) greenReviewBotFindings(sctx *pipeline.StepContext, host scm.Hos
 	}), nil
 }
 
-// reviewBotCommentsReadFailureOutcome parks the step when, under
-// ci.review_bot_comments: always, the unresolved comments of a green or
-// not-yet-registered review bot could not be read on several consecutive polls. Reporting
-// checks-passed without reading them is what the policy exists to prevent,
-// and waiting silently would spin until ci_timeout.
 func reviewBotCommentsReadFailureOutcome(err error) *pipeline.StepOutcome {
 	findings := Findings{
 		Summary: "review bot comments could not be read from the provider",
@@ -491,21 +394,13 @@ func reviewBotCommentsReadFailureOutcome(err error) *pipeline.StepOutcome {
 	return &pipeline.StepOutcome{NeedsApproval: true, Findings: string(encoded)}
 }
 
-// ciBehindBaseDescription names a green PR the forge refuses to merge until it
-// is up to date with its base.
 const ciBehindBaseDescription = "PR is behind a base branch that requires branches to be up to date before merging"
 
-// ciFixTargets is what a CI fix round repairs: the findings the executor
-// selected for it (the auto-fix subset of the last observation, or whatever
-// the human selected at the gate), reduced to the exact checks whose logs the
-// repair fetches and whether a merge conflict is among them.
 type ciFixTargets struct {
 	Findings      Findings
 	Checks        []scm.CheckTarget
 	MergeConflict bool
-	// BehindBase asks for the merge-conflict repair's rebase on a PR that
-	// has no conflicts but is behind its base.
-	BehindBase bool
+	BehindBase    bool
 }
 
 func parseCIFixTargets(raw string) (ciFixTargets, error) {
@@ -550,7 +445,6 @@ func ciFixTargetsFromFindings(findings Findings) ciFixTargets {
 
 func (t ciFixTargets) empty() bool { return len(t.Findings.Items) == 0 }
 
-// description names the round's targets the way the CI step log always has.
 func (t ciFixTargets) checkNames() []string {
 	names := make([]string, 0, len(t.Checks))
 	for _, check := range t.Checks {
@@ -580,12 +474,6 @@ func (t ciFixTargets) description() string {
 	return desc
 }
 
-// ciRepairParkOutcome parks the step over the findings a repair round could
-// not clear, re-labelled ask-user: the fix agent has already concluded that
-// no code change is warranted, or the repair could not be settled, so
-// letting the auto_fix.ci loop pick the same findings up again would spend a
-// round on a question only a human can answer. summary carries the agent's
-// conclusion or the settlement error.
 func ciRepairParkOutcome(findings Findings, deferredRaw, summary string) *pipeline.StepOutcome {
 	parked := types.FindingsMetadata(findings)
 	parked.Summary = summary

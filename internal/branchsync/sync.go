@@ -41,11 +41,7 @@ const (
 	StateAmbiguousContext     = "ambiguous_context"
 	StateLegacyUnbound        = "legacy_unbound"
 	StateCustodyReturned      = "custody_returned"
-	// StateUserOwned reports a branch released by its terminal outcome: the
-	// run ended before the pipeline changed the submitted head, so no
-	// pipeline-created content exists to recover and the exact branch and head
-	// are the operator's, immediately usable with no sync action.
-	StateUserOwned = "user_owned"
+	StateUserOwned            = "user_owned"
 )
 
 const (
@@ -61,23 +57,16 @@ const (
 	SafetySafeEquivalentAdvance = "safe_equivalent_advance"
 )
 
-// State is the shared branch synchronization contract rendered by CLI, AXI,
-// and TUI presenters. Cached inspection never contacts a remote.
 type State struct {
-	State    string
-	Changed  bool
-	Local    LocalState
-	Pipeline PipelineState
-	Target   TargetState
-	Remote   RemoteState
-	Relation string
-	Safety   string
-	PRState  string
-	// Recovered is set only by Recover and reports that the operator owns the
-	// branch when the call returns: custody of a stranded terminal run was
-	// returned (by this call or an earlier, idempotent one), or the terminal
-	// outcome had already released the branch (user_owned), making recovery an
-	// idempotent no-op.
+	State      string
+	Changed    bool
+	Local      LocalState
+	Pipeline   PipelineState
+	Target     TargetState
+	Remote     RemoteState
+	Relation   string
+	Safety     string
+	PRState    string
 	Recovered  bool
 	Recovery   *RecoveryEvidence
 	NextAction *NextAction
@@ -120,9 +109,6 @@ type NextAction struct {
 	Command string
 }
 
-// RecoveryEvidence describes the exact preservation proof behind a recovery
-// action. Bound archive recovery is deliberately keep-local-only: the archive
-// preserves the divergent later head while custody returns at RequiredHead.
 type RecoveryEvidence struct {
 	Source        string
 	RepositoryID  string
@@ -135,18 +121,10 @@ type RecoveryEvidence struct {
 	Proof         string
 }
 
-// CanApply reports whether Apply may advance the clean checked-out branch for
-// a freshly verified plan. It includes strict fast-forwards and the narrower
-// equivalent-diverged advance that first anchors the pre-sync head.
 func CanApply(state State) bool {
 	return state.Safety == SafetySafeFastForward || state.Safety == SafetySafeEquivalentAdvance
 }
 
-// Service synchronizes only the invoking worktree. Repo is the registered
-// repository record, while WorkDir may be its main or a linked worktree.
-// GateDir is the repo's local bare gate; selection may read its exact branch
-// head and ancestry as provenance evidence, while Recover is the only method
-// that mutates it.
 type Service struct {
 	DB      *db.DB
 	Repo    *db.Repo
@@ -154,20 +132,8 @@ type Service struct {
 	GateDir string
 	Paths   *paths.Paths
 
-	// RemoteTimeout bounds each individual remote Git operation (ls-remote,
-	// fetch) performed by Refresh/Apply. Production callers set it from the
-	// operator's global config (config.GlobalConfig.BranchSyncRemoteTimeout,
-	// key branch_sync_remote_timeout); it is never sourced from a repo's
-	// .no-mistakes.yaml - RepoConfig has no matching field, so a pushed
-	// branch cannot widen or narrow how long this service waits before
-	// failing closed. Zero (the common case for a Service built without
-	// explicitly setting it, including every test) falls back to
-	// config.DefaultBranchSyncRemoteTimeout.
 	RemoteTimeout time.Duration
 
-	// Remote operation seams are service-local so tests can substitute
-	// controlled fakes without changing process-wide state observed by
-	// parallel tests. Nil uses the production git helpers.
 	lsRemote    func(context.Context, string, string, string) (string, error)
 	fetchRemote func(context.Context, string, string, string, string) error
 
@@ -180,9 +146,6 @@ type Service struct {
 	beforeRecoverRebind               func()
 }
 
-// remoteTimeout returns the bounded deadline budget for one remote
-// operation: the configured RemoteTimeout when set, otherwise the package
-// default.
 func (s *Service) remoteTimeout() time.Duration {
 	if s.RemoteTimeout > 0 {
 		return s.RemoteTimeout
@@ -204,8 +167,6 @@ func (s *Service) runFetchRemote(ctx context.Context, dir, remote, branch, local
 	return git.FetchRemoteBranchToPrivateRef(ctx, dir, remote, branch, localRef)
 }
 
-// OpenCurrent opens a service for the invoking registered worktree. The caller
-// owns the returned close function.
 func OpenCurrent() (*Service, func(), error) {
 	p, err := paths.New()
 	if err != nil {
@@ -243,8 +204,6 @@ func OpenCurrent() (*Service, func(), error) {
 	return &Service{DB: database, Repo: repo, WorkDir: root, GateDir: p.RepoDir(repo.ID), Paths: p, RemoteTimeout: globalCfg.BranchSyncRemoteTimeout}, func() { _ = database.Close() }, nil
 }
 
-// TargetFingerprint returns a stable one-way identity for a credential-free,
-// canonical target. No URL is persisted by callers.
 func TargetFingerprint(raw string) string {
 	sum := sha256.Sum256([]byte(canonicalTarget(raw)))
 	return hex.EncodeToString(sum[:])
@@ -274,16 +233,11 @@ func displayTarget(raw string) string {
 	return safeurl.Redact(raw)
 }
 
-// InspectCached reads local Git, persisted provenance, and read-only gate
-// ancestry evidence without fetching or mutating refs, the index, or the
-// worktree.
 func (s *Service) InspectCached(ctx context.Context) State {
 	state, _, _ := s.inspect(ctx)
 	return state
 }
 
-// Refresh explicitly verifies the exact configured push ref into a private
-// no-mistakes ref. It never updates an ordinary remote-tracking ref.
 func (s *Service) Refresh(ctx context.Context) State {
 	state, run, ok := s.inspect(ctx)
 	if !ok || !refreshable(state) {
@@ -304,9 +258,9 @@ func (s *Service) Refresh(ctx context.Context) State {
 	// Each remote operation below gets its own bounded deadline derived from
 	// ctx, rather than sharing one context across both calls: a slow-but-
 	// successful ls-remote must not consume the fetch's budget, since that
-	// would falsely classify a reachable target as offline (see the doc
-	// comment on remoteTimeout). Parent cancellation still short-circuits
-	// both, because context.WithTimeout always derives from its parent.
+	// would falsely classify a reachable target as offline. Parent
+	// cancellation still short-circuits both, because context.WithTimeout
+	// always derives from its parent.
 	lsRemoteCtx, lsRemoteCancel := context.WithTimeout(ctx, s.remoteTimeout())
 	defer lsRemoteCancel()
 	live, err := s.runLsRemote(lsRemoteCtx, s.workDir(), pushURL, state.Target.Ref)
@@ -425,10 +379,6 @@ func (s *Service) gateContextRefusal(ctx context.Context) (State, bool) {
 	return State{State: StateAmbiguousContext, Safety: gatecontext.ErrorCode, Error: gatecontext.RefusalMessage(result)}, true
 }
 
-// Apply repeats remote and mutable-precondition checks, then advances the clean
-// checked-out branch to the exact pipeline-bound SHA. Ordinary behind branches
-// use a strict fast-forward. Equivalent-diverged branches first anchor the
-// pre-sync head, then move to the verified equivalent pipeline head.
 func (s *Service) Apply(ctx context.Context) State {
 	if refusal, blocked := s.gateContextRefusal(ctx); blocked {
 		return refusal
@@ -523,11 +473,6 @@ func (s *Service) Apply(ctx context.Context) State {
 	return plan
 }
 
-// BindRecoveryArchive records one exact existing archive ref as recovery
-// evidence for the currently selected terminal run. It never creates, moves,
-// or deletes a Git ref. The record is useful only for the narrow keep-local
-// recovery where the clean worktree remains at an exact submitted, reviewed,
-// or successfully pushed head and the archived later head is divergent.
 func (s *Service) BindRecoveryArchive(ctx context.Context, archiveRef string) State {
 	if refusal, blocked := s.gateContextRefusal(ctx); blocked {
 		return refusal
@@ -579,115 +524,6 @@ func (s *Service) BindRecoveryArchive(ctx context.Context, archiveRef string) St
 	return verified
 }
 
-// Recover returns custody of a branch stranded by a TERMINAL run whose MOVED
-// pipeline head was never published: cancelled or failed before the push with
-// pipeline commits in the gate, or terminal after a push with additional
-// unpublished commits. While such a run was active the pipeline_owned block
-// was correct; once it is terminal nothing will ever publish the head, so an
-// explicit guarded exit must exist. A terminal run whose verified worktree
-// head never changed from the submitted head needs no recovery at all, so
-// Recover treats that user_owned state as an idempotent no-op success.
-//
-// The decision matrix, by worktree relation to the preserved pipeline head P
-// (the terminally verified run head, pinned by its private recovery ref):
-//
-//	relation   worktree  default                        --keep-local
-//	equal      any       anchor locally; return custody same
-//	ahead      any       anchor locally; return custody same
-//	behind     clean     strict fast-forward to P,      custody at local head;
-//	                     then return custody            gate reset to it (CAS)
-//	behind     dirty     refuse (commit/stash first)    custody at local head;
-//	                                                    gate reset to it (CAS)
-//	diverged,  clean     anchor the pre-recovery local  custody at local head;
-//	P contains           head, then move to P with      gate reset to it (CAS)
-//	all local            fail-closed ops; return custody
-//	work
-//	diverged,  dirty     refuse (commit/stash first)    custody at local head;
-//	P contains                                          gate reset to it (CAS)
-//	all local
-//	work
-//	diverged,  clean     anchor P; return custody at    custody at local head;
-//	local      (P is anchored, nothing moves)   the local head;
-//	carries                                     gate reset to it (CAS)
-//	all P work
-//	diverged   any       refuse (anchor named, manual   custody at local head;
-//	                     reconcile / guarded rerun)     gate reset to it (CAS)
-//	P missing  any       refuse                         custody at local head;
-//	                                                    gate reset to it (CAS)
-//
-// The containment row exists because a cancelled validation routinely leaves P
-// as a REBASE of the local branch onto a newer base: the same logical commits
-// with new SHAs, so equality and ancestry alone see only divergence and
-// escalated a case where nothing could be lost. The row applies only where
-// preservedContainsLocalWork proves, by executable three-way merge, that P
-// already carries every local change. That proof is deliberately narrow, and
-// everything it cannot decide - including a rebase whose fix rounds also
-// rewrote the operator's lines - falls through to the plain diverged refusal.
-// Status then offers --recover --keep-local when that verified head is already
-// pinned at the run recovery ref in the gate. The branch stays put. An
-// unverified terminal head is not offered that keep-local command.
-// No-data-loss outranks convenience here: when nothing can distinguish a
-// deliberate pipeline fix from a dropped change, the operator decides.
-//
-// The "local carries all P work" row is the same proof with the roles swapped
-// (localCarriesPreservedWork): a repair committed only in the worktree can
-// already hold everything the preserved head changed. Nothing moves, so the
-// preserved commits are not what the branch ends at, but they stay anchored and
-// their net change is proven present. It applies after P is anchored in the
-// worktree, so the relationship is decided where both objects exist. Inspection
-// reaches the same verdict without importing anything
-// (crossRepositoryRelationProven) when neither repository holds both heads.
-//
-// Fail-safe rules, in the same spirit as Refresh/Apply:
-//   - An active run always refuses: only terminal runs are recoverable.
-//   - The preserved commits must be provably safe before custody moves: when
-//     already reachable from the local branch (equal/ahead), recovery pins the
-//     private anchor ref refs/no-mistakes/recover/<runID> locally without
-//     requiring gate access, but rejects a conflicting recovery ref when the
-//     gate is available; otherwise the preserved head is verified through the
-//     gate's run-specific recovery ref and fetched into that anchor. Legacy terminal
-//     heads that still exist as unreferenced gate objects are anchored before
-//     recovery continues. A recorded head the terminal run never verified is
-//     accepted in exactly two shapes. Either the live gate branch is a
-//     non-descendant equal-tree rewrite of it: the recorded head is the exact
-//     reviewed result, that reviewed result preserves the local work, and both
-//     commits have the same final tree (the live rewrite is not merged with
-//     local again because its content has already been proven identical to the
-//     reviewed result). Or the recorded head EXTENDS the live gate branch
-//     (recordedHeadExtendsLiveGateBranch, issue #1421): the clean worktree sits
-//     exactly at it, the gate holds the object, and the live gate branch, the
-//     submitted head, and the review authority are all its ancestors - the
-//     reviewed result plus the pipeline's own later commits, stranded by a
-//     later step's non-code failure. The branch ref may independently lag or
-//     advance.
-//   - The only possible worktree mutation is a guarded move of a clean checked-out
-//     branch: a strict fast-forward, or an anchored move to a proven-containing
-//     head performed by Git operations that refuse on their own rather than by a
-//     preceding observation (see recoverAdoptPreserved). When the operator explicitly keeps a behind or diverged local
-//     head instead of taking P, --keep-local never touches the worktree and moves
-//     the gate branch to the kept head with an atomic compare-and-swap, so a
-//     concurrent gate push wins and recovery refuses. An independently moved
-//     gate head is pinned first so that CAS never discards it.
-//   - A bound archive can make that keep-local choice discoverable for a
-//     divergent later P without authorizing P as the working result. Exactly one
-//     append-only record must revalidate its repository, run, branch, exact
-//     required and preserved heads, raw non-symbolic archive ref, and the gate's
-//     run-specific recovery ref. Plain --recover refuses this source before any
-//     ref write; only the reported --recover --keep-local action can use it.
-//   - Anything unverifiable (an unverified recorded head, missing gate where
-//     required, conflicting evidence, failed anchor write or fetch, or changed
-//     assumptions) refuses with a reason. The sole exception is a verified head
-//     proven absent from both the worktree and an accessible gate when
-//     --keep-local explicitly discards those unavailable pipeline commits.
-//     When any run in a stranded stack has such a missing head, the same preflight
-//     validates every non-superseded run, anchors each available head, and stamps
-//     the whole stack atomically. Plain --recover still refuses rather than
-//     moving a branch that cannot anchor a real preserved head.
-//
-// Recovery ends with persisted custody-return stamps on the recovered run or
-// stranded stack; inspection then reports custody_returned (never-pushed runs)
-// or the ordinary classification against the last push binding (pushed runs),
-// both pointing at run_pipeline as the next step.
 func (s *Service) Recover(ctx context.Context, keepLocal bool) State {
 	if refusal, blocked := s.gateContextRefusal(ctx); blocked {
 		return refusal
@@ -917,36 +753,6 @@ func (s *Service) Recover(ctx context.Context, keepLocal bool) State {
 	}
 }
 
-// recordedHeadExtendsLiveGateBranch is the fail-closed proof for the custody
-// deadlock in issue #1421: a run whose Review fix was approved, whose Test fix
-// then moved the head again, and which failed in a later non-code step
-// (Document's base fetch timed out) before Push. Its recorded head was never
-// terminally verified, the gate branch never moved off the submitted head
-// because pipeline commits land on a detached worktree, and the equal-tree
-// rewrite proof cannot apply because the recorded head is a descendant, not a
-// rewrite. Every documented next action then looped back to a refusal.
-//
-// The recorded head is accepted as the preserved head only when fresh gate
-// state proves both halves of "nothing is lost, and this is the gate's own
-// work", read from the gate's object store rather than from the database:
-//
-//   - the operator's worktree is clean and sits EXACTLY at the recorded head,
-//     so returning custody there moves nothing and can drop nothing local;
-//   - the recorded head is an object the gate holds (the run's worktree shared
-//     the gate's object store; a head typed into the database never is);
-//   - the live gate branch is an ancestor of the recorded head, and the
-//     submitted head, the recorded review authority, and the recorded head
-//     form one chain (submitted <= reviewed <= recorded), so nothing the gate
-//     branch holds, nothing the operator submitted, and nothing Review
-//     certified is absent from it - the head is the reviewed result plus the
-//     pipeline's own later commits, never a rewrite of either.
-//
-// Anything else - a behind or diverged worktree, a rebased preserved head (the
-// submitted head is no longer an ancestor), a run with no review authority, a
-// gate branch moved elsewhere, a pruned object - falls through to the existing
-// rewrite proof and its refusal. Moving a worktree ONTO an unverified head is
-// deliberately outside this proof; the operator checks the exact head out
-// first, which is what the issue's reporter had already done.
 func recordedHeadExtendsLiveGateBranch(ctx context.Context, gateDir string, state State, run *db.Run, gateHead string) bool {
 	recorded := strings.TrimSpace(run.HeadSHA)
 	if recorded == "" || gateHead == "" || gateHead == recorded {
@@ -971,13 +777,6 @@ func recordedHeadExtendsLiveGateBranch(ctx context.Context, gateDir string, stat
 		isAncestor(ctx, gateDir, reviewed, recorded)
 }
 
-// verifyEqualTreeRewriteOfRecordedHead verifies the first accepted shape of an
-// unverified terminal head: the live gate branch is a non-descendant rewrite
-// of the exact reviewed result with an identical final tree, and that reviewed
-// result preserves the local work. The live gate head is anchored and becomes
-// the run's verified head; the live rewrite is not merged with local again
-// because its content has already been proven identical to the reviewed
-// result. It returns the refusal to report when any premise fails.
 func (s *Service) verifyEqualTreeRewriteOfRecordedHead(ctx context.Context, state State, run *db.Run, gateHead string) (State, bool) {
 	recordedTree, recordedTreeErr := git.Run(ctx, s.GateDir, "rev-parse", run.HeadSHA+"^{tree}")
 	gateTree, gateTreeErr := git.Run(ctx, s.GateDir, "rev-parse", gateHead+"^{tree}")
@@ -996,11 +795,6 @@ func (s *Service) verifyEqualTreeRewriteOfRecordedHead(ctx context.Context, stat
 	return State{}, true
 }
 
-// verifyRecordedHeadExtendingGateBranch records the proof from
-// recordedHeadExtendsLiveGateBranch: it anchors the recorded head itself and
-// stamps it as the run's verified terminal head with a compare-and-swap on
-// everything the proof read. It returns the refusal to report when any of
-// that fails.
 func (s *Service) verifyRecordedHeadExtendingGateBranch(ctx context.Context, state State, run *db.Run, gateHead string) (State, bool) {
 	if blocked, ok := s.anchorUnverifiedTerminalHead(ctx, state, run, gateHead, run.HeadSHA, run.HeadSHA); !ok {
 		return blocked, false
@@ -1012,14 +806,6 @@ func (s *Service) verifyRecordedHeadExtendingGateBranch(ctx context.Context, sta
 	return State{}, true
 }
 
-// anchorUnverifiedTerminalHead is the one owner of the ref writes both
-// unverified-head proofs end in. It refuses a symbolic live gate branch and a
-// symbolic or conflicting run recovery ref, re-reads the invoking worktree so
-// its branch, head (expectedLocalHead) and cleanliness still match what the
-// proof read, and then anchors anchorTarget at the run's create-only recovery
-// ref in one update-ref transaction that also verifies the live gate branch is
-// still at gateHead. Nothing is written when any of that fails. Callers stamp
-// the database afterwards with their own compare-and-swap.
 func (s *Service) anchorUnverifiedTerminalHead(ctx context.Context, state State, run *db.Run, gateHead, anchorTarget, expectedLocalHead string) (State, bool) {
 	branch := state.Local.Branch
 	if symbolic, err := git.Run(ctx, s.GateDir, "symbolic-ref", "-q", "refs/heads/"+branch); err == nil && symbolic != "" {
@@ -1053,14 +839,6 @@ func (s *Service) anchorUnverifiedTerminalHead(ctx context.Context, state State,
 	return State{}, true
 }
 
-// recoverKeepLocal performs the explicit keep-local custody return: the
-// worktree is never touched; the gate branch moves to the kept local head with
-// an atomic compare-and-swap so a concurrent gate push refuses instead of
-// being clobbered. The kept head's objects reach the gate through a gate-side
-// fetch - never a push, which would fire the gate's receive hooks and start a
-// pipeline run. The preserved head stays reachable through the ordinary
-// recovery anchor. The archive-backed keep-local path lives in
-// recoverKeepLocalFromArchive so each signature's callers stay intact.
 func (s *Service) recoverKeepLocal(ctx context.Context, run *db.Run, state State, gateHead string, runIDs, candidateHeads []string) State {
 	if s.beforeGateReset != nil {
 		s.beforeGateReset()
@@ -1148,10 +926,6 @@ func (s *Service) recoverKeepLocal(ctx context.Context, run *db.Run, state State
 	return s.finishKeepLocalRecover(ctx, state, runIDs)
 }
 
-// recoverKeepLocalAtCurrentHead returns custody at the current local head
-// without requiring a preserved pipeline object. --keep-local is the
-// operator's explicit discard of unpublished pipeline commits, so an absent
-// gate branch does not block it.
 func (s *Service) recoverKeepLocalAtCurrentHead(ctx context.Context, run *db.Run, state State, runIDs, candidateHeads []string) State {
 	gateDir := strings.TrimSpace(s.GateDir)
 	if gateDir == "" {
@@ -1170,10 +944,6 @@ func (s *Service) recoverKeepLocalAtCurrentHead(ctx context.Context, run *db.Run
 	return s.recoverKeepLocal(ctx, run, state, gateHead, runIDs, candidateHeads)
 }
 
-// recoverKeepLocalFromArchive is the keep-local-only archive path: it
-// revalidates the bound archive at the recovery boundary, never selects or
-// replays the archived head, and rolls the gate branch back if custody
-// stamping fails after the gate already moved.
 func (s *Service) recoverKeepLocalFromArchive(ctx context.Context, run *db.Run, state State, gateHead string, archive *db.RecoveryArchive) State {
 	if s.beforeGateReset != nil {
 		s.beforeGateReset()
@@ -1250,8 +1020,6 @@ func (s *Service) recoverKeepLocalFromArchive(ctx context.Context, run *db.Run, 
 	return result
 }
 
-// recoverFastForward advances the clean checked-out branch to the preserved
-// pipeline head with the same strict fast-forward and honesty rules as Apply.
 func (s *Service) recoverFastForward(ctx context.Context, run *db.Run, state State, preserved string) State {
 	if s.beforeRecoverWorktreeMove != nil {
 		s.beforeRecoverWorktreeMove()
@@ -1284,32 +1052,6 @@ func (s *Service) recoverFastForward(ctx context.Context, run *db.Run, state Sta
 	return s.finishRecover(ctx, run, true)
 }
 
-// preservedContainsLocalWork proves the preserved pipeline head already carries
-// every change the local branch has, so adopting it discards no work.
-//
-// The proof is an executable three-way merge, never a patch-identity hash.
-// Patch IDs discard hunk locations and whitespace, so they cannot tell a
-// genuine replay from a same-shaped edit to a different identical block; a
-// containment claim built on them is not a proof, and this path exists only to
-// protect people's unlanded code. Merging the local branch into the preserved
-// head and requiring the result to be exactly the preserved head's tree is
-// decidable and content-exact: if the local branch had anything the preserved
-// head lacks, the merged tree differs and the answer is no.
-//
-// The merge base is the only sound anchor. Only a commit provably reachable
-// from BOTH heads makes the diff base..local mean exactly "the local branch's
-// own work"; runs.base_sha cannot be used, because it is the previous gate head
-// and for a re-pushed branch carries pipeline commits the local branch never
-// had.
-//
-// The predicate is one-directional: it answers only "would adopting the
-// preserved head lose local work", never "are the two heads interchangeable".
-// It is deliberately narrow, and every unreadable, conflicting, or ambiguous
-// case returns false so the plain diverged refusal escalates. That is the
-// intended trade: an ordinary rebase whose content is carried forward intact
-// recovers automatically, while a rebase that also rewrote the operator's lines
-// - where nothing can distinguish a deliberate pipeline fix from a dropped
-// change - stays a decision for the operator.
 func preservedContainsLocalWork(ctx context.Context, dir, local, preserved string) bool {
 	if local == "" || preserved == "" || local == preserved {
 		return false
@@ -1321,13 +1063,6 @@ func preservedContainsLocalWork(ctx context.Context, dir, local, preserved strin
 	return mergeTreePreservesFinalHead(ctx, dir, base, local, preserved)
 }
 
-// localCarriesPreservedWork is the mirror of preservedContainsLocalWork: it
-// proves the local head already holds every change the preserved head made, so
-// returning custody at the local head loses no pipeline work. It is the same
-// executable three-way merge on the merge-base, with the roles swapped, and the
-// same narrow contract: every unreadable, unrelated, conflicting, or ambiguous
-// case returns false. The preserved commits stay anchored; only their content
-// is claimed to be represented.
 func localCarriesPreservedWork(ctx context.Context, dir, local, preserved string) bool {
 	if local == "" || preserved == "" || local == preserved {
 		return false
@@ -1339,13 +1074,6 @@ func localCarriesPreservedWork(ctx context.Context, dir, local, preserved string
 	return mergeTreePreservesFinalHead(ctx, dir, base, preserved, local)
 }
 
-// crossRepositoryRelationProven answers, without writing to the worktree, the
-// gate, or any ref, whether explicit recovery of this pair can succeed: the
-// preserved head is already in the local head's history, or one of the two
-// content-containment proofs holds. Objects are read through a union of the
-// worktree's and the gate's object stores, and the merge proofs' scratch tree
-// objects land in a quarantine directory that is removed afterwards. A failure
-// to build the union is "not proven", never a guess.
 func (s *Service) crossRepositoryRelationProven(ctx context.Context, gateDir, local, preserved string) bool {
 	wd := s.workDir()
 	worktreeObjects, err := git.Run(ctx, wd, "rev-parse", "--path-format=absolute", "--git-path", "objects")
@@ -1385,9 +1113,6 @@ func (s *Service) crossRepositoryRelationProven(ctx context.Context, gateDir, lo
 		mergeTreeMatchesWithEnv(ctx, wd, env, base, preserved, local, local)
 }
 
-// mergeTreeMatchesWithEnv is mergeTreePreservesFinalHead evaluated under an
-// object-store overlay: merging ours into theirs on base must yield wantTip's
-// tree exactly.
 func mergeTreeMatchesWithEnv(ctx context.Context, dir string, env []string, base, ours, theirs, wantTip string) bool {
 	merged, err := git.RunWithEnv(ctx, dir, env, "merge-tree", "--write-tree", "--merge-base", base, theirs, ours)
 	if err != nil {
@@ -1404,32 +1129,6 @@ func reviewedHeadProvesEquivalentTarget(ctx context.Context, dir, local, reviewe
 		(isAncestor(ctx, dir, local, reviewed) || preservedContainsLocalWork(ctx, dir, local, reviewed))
 }
 
-// recoverAdoptPreserved returns custody for a preserved pipeline head that
-// already carries every local change. The local commits are represented in the
-// preserved head, but their exact SHAs are not reachable from it, so the move is
-// not a fast-forward and the pre-recovery local head is anchored first.
-//
-// The move itself must fail closed. An observation of branch, HEAD, and
-// cleanliness followed by an unconditional `reset --hard` is check-then-act:
-// anything landing in the gap is destroyed, and no amount of re-observation
-// closes it, because the check and the mutation are separate commands. So the
-// two Git operations that perform the move carry the guard in themselves, in
-// the spirit of `merge --ff-only`:
-//
-//   - `update-ref <branch> <preserved> <observed>` is an atomic compare-and-swap.
-//     A concurrent commit moved the branch, so the swap refuses and nothing at
-//     all has been touched.
-//   - `read-tree -m -u <observed> <preserved>` refuses to overwrite a modified
-//     or untracked working-tree file. A concurrent edit to a file this move
-//     would rewrite aborts it before any file changes; an edit to a file the
-//     move does not touch is simply carried across. When it refuses, the branch
-//     swap is rolled back by the same compare-and-swap in reverse.
-//
-// A crash between the two leaves the branch at the preserved head with the
-// working tree still holding the pre-recovery content, which reads as ordinary
-// uncommitted changes and loses nothing: containment was proven before the move
-// and the pre-recovery head stays anchored. Custody is stamped only after the
-// whole move is verified.
 func (s *Service) recoverAdoptPreserved(ctx context.Context, run *db.Run, state State, preserved string, containmentProven bool) State {
 	if s.beforeRecoverWorktreeMove != nil {
 		s.beforeRecoverWorktreeMove()
@@ -1529,21 +1228,6 @@ func (s *Service) recoverAdoptPreserved(ctx context.Context, run *db.Run, state 
 	return s.finishRecover(ctx, run, true)
 }
 
-// recoverRemoteRewritten owns Recover's outcome for a terminal run whose push
-// binding is the recorded truth: a published run or a custody-returned one.
-// Its success decision is an allowlist. Recovered is true only when (a) the
-// explicit recover_remote_rewritten rebind committed, or (b) a fresh live
-// check proved the binding already equals the live head, in which case the
-// caller's ordinary idempotent path decides (handled=false). Every other fresh
-// outcome refuses with Recovered=false and never reaches a cached no-op.
-// Runs whose head moved past an unpublished binding keep the ordinary custody
-// recovery (handled=false without a live check).
-//
-// The rebind re-verifies the live remote with a fresh Refresh, anchors the
-// superseded pipeline push head before changing anything, confirms the live
-// head did not move again, then compare-and-swaps the persisted push binding
-// to the verified live head. It never touches the worktree, a branch ref, the
-// gate branch, or the remote, and stamps no custody.
 func (s *Service) recoverRemoteRewritten(ctx context.Context, run *db.Run, keepLocal bool) (State, bool) {
 	if run == nil || !terminalRunStatus(run.Status) || run.LastPushedSHA == nil || unpublishedPipelineHead(run) {
 		return State{}, false
@@ -1621,12 +1305,6 @@ func (s *Service) recoverRemoteRewritten(ctx context.Context, run *db.Run, keepL
 	return state, true
 }
 
-// reboundStateUsable reports whether post-rebind inspection classifies the
-// branch against the new binding as the operator's ordinary relation to it.
-// Pipeline ownership, an in-progress push, or any context/target refusal means
-// the rebind did not leave a usable binding, so recovery is not reported.
-// Divergence from a foreign rewrite is an ordinary relation with its own
-// next action, not a recovery failure.
 func reboundStateUsable(state State) bool {
 	switch state.State {
 	case StateSynchronized, StateBehind, StateLocalAhead, StateDiverged:
@@ -1636,9 +1314,6 @@ func reboundStateUsable(state State) bool {
 	}
 }
 
-// refuseUnverifiedPushBinding turns a fresh state that neither proves the push
-// binding nor offers the rewrite rebind into a recovery refusal. It keeps the
-// fresh reason and guidance so the operator sees why nothing was recovered.
 func refuseUnverifiedPushBinding(fresh State) State {
 	blocked := fresh
 	blocked.Recovered = false
@@ -1654,10 +1329,6 @@ func refuseUnverifiedPushBinding(fresh State) State {
 	return blocked
 }
 
-// anchorSupersededPushHead keeps the pipeline head a rewritten remote replaced
-// reachable before the binding stops recording it. It anchors in the worktree
-// when the object is there, else in the local gate, and never replaces an
-// existing conflicting anchor.
 func (s *Service) anchorSupersededPushHead(ctx context.Context, runID string, generation int64, superseded string) (string, string, bool) {
 	ref := rewrittenAnchorRef(runID, generation)
 	if superseded == "" {
@@ -1680,9 +1351,6 @@ func (s *Service) anchorSupersededPushHead(ctx context.Context, runID string, ge
 	return ref, "", false
 }
 
-// rewrittenAnchorRef names the anchor for the pipeline push head superseded by
-// a remote rewrite. The binding generation keeps each superseded head distinct
-// if the same run's remote is rewritten again after a rebind.
 func rewrittenAnchorRef(runID string, generation int64) string {
 	return "refs/no-mistakes/recover-rewritten/" + runID + "/" + strconv.FormatInt(generation, 10)
 }
@@ -1698,8 +1366,6 @@ func (s *Service) anchorReachablePreserved(ctx context.Context, state State, run
 	return State{}, true
 }
 
-// finishRecover stamps custody returned and reports the fresh post-recovery
-// truth. changed reports whether this call moved the worktree HEAD.
 func (s *Service) finishRecover(ctx context.Context, run *db.Run, changed bool) State {
 	if err := s.DB.SetRunCustodyReturned(run.ID); err != nil {
 		state, _, _ := s.inspect(ctx)
@@ -1715,7 +1381,6 @@ func (s *Service) finishRecover(ctx context.Context, run *db.Run, changed bool) 
 	return state
 }
 
-// finishKeepLocalRecover stamps custody returned on the preflighted runs.
 func (s *Service) preserveKeepLocalCandidates(ctx context.Context, runIDs, candidateHeads []string) error {
 	if len(runIDs) != len(candidateHeads) {
 		return fmt.Errorf("invalid keep-local candidate set")
@@ -1760,11 +1425,6 @@ func (s *Service) finishKeepLocalRecover(ctx context.Context, state State, runID
 	return fresh
 }
 
-// AdoptPublished moves one stale custody-returned gate lane to a rewritten
-// branch only after the configured push target proves that the exact local
-// head is already published there. It never pushes to that target or changes
-// the worktree. The gate update is a compare-and-swap, so a concurrent lane
-// update wins rather than being overwritten.
 func (s *Service) AdoptPublished(ctx context.Context) State {
 	if refusal, blocked := s.gateContextRefusal(ctx); blocked {
 		return refusal
@@ -1853,16 +1513,6 @@ func (s *Service) AdoptPublished(ctx context.Context) State {
 	return adopted
 }
 
-// resolvedPushURL answers with the same authoritative push target the rest of
-// this service verifies against: Repo.PushURL(), the configured fork or the
-// registered upstream. Adoption's whole safety argument is that the head it
-// admits is already published on THAT target, so a worktree remote may stand in
-// for it only to recover a credential the redacted database copy cannot hold,
-// and only when credential-free TargetFingerprint identity proves that the
-// remote is the same target. A worktree whose origin points
-// somewhere else therefore never decides the adoption; the registered target
-// does, and an unusable credential fails the live check closed rather than
-// verifying against a remote the pipeline does not publish to.
 func (s *Service) resolvedPushURL(ctx context.Context, repo *db.Repo) string {
 	target := repo.PushURL()
 	if strings.TrimSpace(target) == "" {
@@ -1884,9 +1534,6 @@ func recoverAnchorRef(runID string) string {
 	return custody.RecoveryRef(runID)
 }
 
-// recoverLocalAnchorRef keeps the exact pre-recovery local commits reachable
-// when custody is returned by adopting an equivalent preserved head, which
-// leaves those SHAs unreferenced by the branch.
 func recoverLocalAnchorRef(runID string) string {
 	return custody.RecoveryLocalRef(runID)
 }
@@ -2283,11 +1930,6 @@ func exactPushedBinding(repo *db.Repo, run *db.Run, branch string) bool {
 		run.PushGeneration != nil
 }
 
-// supersededUnpublishedRun proves the narrow rerun relationship needed to
-// ignore an older terminal unpublished head during branch selection. The gate
-// is read-only evidence: its exact branch head must equal the newer push
-// binding, and Git must prove the older preserved head is its ancestor. Any
-// missing or conflicting evidence leaves the older run authoritative.
 func (s *Service) supersededUnpublishedRun(ctx context.Context, older, newer *db.Run, branch string) bool {
 	if older == nil || newer == nil || !terminalRunStatus(older.Status) || !unpublishedPipelineHead(older) ||
 		!samePushTargetBinding(older, newer) || strings.TrimSpace(s.GateDir) == "" || older.HeadSHA == "" || newer.LastPushedSHA == nil {
@@ -2312,17 +1954,6 @@ func terminalRunStatus(status types.RunStatus) bool {
 	return status.Terminal()
 }
 
-// classifyPipelineOwned reports a run that still holds branch custody without
-// a successful push binding. While the run is active the block is absolute:
-// the pipeline will publish or keep moving the head, so the worktree must
-// wait. Once a run that MOVED the head is TERMINAL nothing will ever publish
-// that head - the branch would be stranded in custody forever - so the same
-// state becomes recoverable and points at the guarded custody-return action
-// (issue: v1.38.1 dogfood, cancelled pre-push run with pipeline commits). A
-// terminal run that never moved the head is classified user_owned instead:
-// its terminal outcome releases ownership. The relation between the local
-// head and the run's recorded head is exposed whenever it is computable
-// locally, so the operator sees the exact ownership facts before acting.
 func (s *Service) classifyPipelineOwned(ctx context.Context, state *State, run *db.Run, activeMessage string) {
 	state.State = StatePipelineOwned
 	state.Pipeline.Phase = "pre_push"
@@ -2475,10 +2106,6 @@ func unavailableRecoverySource(safety, message string) recoverySourceProof {
 	return recoverySourceProof{safety: safety, err: message}
 }
 
-// recoverySourceAvailable is the single owner of preserved-head discovery and
-// recovery classification. It first evaluates the ordinary run-specific
-// recovery anchor path. A bound archive can add only one narrower result: keep
-// the exact required local head while the divergent later head stays archived.
 func (s *Service) recoverySourceAvailable(ctx context.Context, state *State, run *db.Run) recoverySourceProof {
 	if state == nil || run == nil || strings.TrimSpace(run.HeadSHA) == "" {
 		return unavailableRecoverySource("blocked_recover_unverified_head", "the terminal run has no recorded pipeline head to verify; no files or refs were changed")
@@ -2570,8 +2197,6 @@ func (s *Service) recoverySourceAvailable(ctx context.Context, state *State, run
 	)
 }
 
-// pinnedKeepLocalOffer refuses an unverified terminal head. Recover refuses
-// that head before keep-local, so status must not advertise the command.
 func (s *Service) pinnedKeepLocalOffer(ctx context.Context, state *State, run *db.Run) (recoverySourceProof, bool) {
 	if state == nil || run == nil || !state.Local.Clean || run.TerminalHeadVerifiedAt == nil || !terminalRunStatus(run.Status) || strings.TrimSpace(run.HeadSHA) == "" {
 		return recoverySourceProof{}, false
@@ -2785,9 +2410,6 @@ func sameRecoveryArchive(a, b *db.RecoveryArchive) bool {
 		a.PreservedHeadSHA == b.PreservedHeadSHA && a.ArchiveRef == b.ArchiveRef
 }
 
-// recoveryAnchorCompatible treats an absent ref as available for create-only
-// preservation, but rejects every existing ref that is not exactly the
-// recorded commit, including symbolic and non-commit evidence.
 func recoveryAnchorCompatible(ctx context.Context, repoDir, runID, preserved string) (bool, error) {
 	return exactCommitRefCompatible(ctx, repoDir, custody.RecoveryRef(runID), preserved)
 }
@@ -2811,11 +2433,6 @@ func exactCommitRefCompatible(ctx context.Context, repoDir, ref, expected string
 	return err == nil && anchored == expected, nil
 }
 
-// classifyUserOwned reports a branch released by its terminal outcome: the
-// terminal run ended before the pipeline changed the submitted head, so no
-// pipeline-created content exists to recover. The exact branch and head are
-// the operator's and immediately usable - no sync action is required or
-// offered, and a separately authorized direct push or PR is never blocked.
 func (s *Service) classifyUserOwned(ctx context.Context, state *State) {
 	state.State = StateUserOwned
 	state.Safety = "user_owned"
@@ -2824,32 +2441,19 @@ func (s *Service) classifyUserOwned(ctx context.Context, state *State) {
 	state.Relation = relationBetween(ctx, s.workDir(), state.Local.Head, state.Pipeline.CurrentHead)
 }
 
-// runHeadUnmoved reports whether the run's pipeline head still equals the
-// submitted head, i.e. the run holds no pipeline-authored commits beyond what
-// the operator submitted.
 func runHeadUnmoved(run *db.Run) bool {
 	return run != nil && run.SubmittedHeadSHA != nil && *run.SubmittedHeadSHA != "" && run.HeadSHA == *run.SubmittedHeadSHA
 }
 
-// releasedSubmittedHeadRun reports a terminal run whose outcome released
-// the branch: no push provenance, no custody stamp, and positive terminal
-// evidence that head_sha still equals submitted_head_sha.
 func releasedSubmittedHeadRun(run *db.Run) bool {
 	return run != nil && terminalRunStatus(run.Status) && run.CustodyReturnedAt == nil &&
 		run.LastPushedSHA == nil && run.TerminalHeadVerifiedAt != nil && runHeadUnmoved(run)
 }
 
-// RunHeadUnmoved reports whether the classified run's pipeline head still
-// equals the submitted head, i.e. the run holds no pipeline-authored commits
-// whose loss a fresh gate push could cause.
 func RunHeadUnmoved(state State) bool {
 	return state.Pipeline.SubmittedHead != "" && state.Pipeline.CurrentHead == state.Pipeline.SubmittedHead
 }
 
-// classifyCustodyReturned reports a branch whose stranded terminal run was
-// explicitly recovered and never had a push binding. A diverged local head is
-// not ready to start a fresh run until the gate lane has safely adopted the
-// already-published rewrite; all other relationships remain informative only.
 func (s *Service) classifyCustodyReturned(ctx context.Context, state *State) {
 	state.State = StateCustodyReturned
 	state.Error = ""
@@ -2872,8 +2476,6 @@ func (s *Service) classifyCustodyReturned(ctx context.Context, state *State) {
 	state.NextAction = &NextAction{Code: "run_pipeline", Command: `no-mistakes axi run --intent "<what the user set out to accomplish>"`}
 }
 
-// relationBetween classifies the local head against a target commit using only
-// local object evidence; a target that is missing locally stays unknown.
 func relationBetween(ctx context.Context, dir, local, target string) string {
 	if local == "" || target == "" || !objectExists(ctx, dir, target) {
 		return RelationUnknown

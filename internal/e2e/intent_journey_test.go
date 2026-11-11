@@ -15,21 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestIntentJourney exercises the full user-intent extraction
-// path end-to-end:
-//
-//   - real `no-mistakes init` + post-receive hook + daemon
-//   - a Claude transcript fixture seeded under the daemon's $HOME
-//   - real Claude reader walking that transcript and matching by cwd
-//   - real summarizer prompt sent to the fake agent
-//   - real DB persistence of intent_* columns on runs
-//   - real injection of the user-intent prompt section into the review
-//     step's agent prompt
-//
-// Failures here usually mean a wiring break between layers (e.g. the
-// executor stops populating StepContext.UserIntent, or the prompt helper
-// stops being called) - things that the package-level unit tests cannot
-// catch because they each stub out one boundary.
 func TestIntentJourney(t *testing.T) {
 	scenario := writeIntentScenario(t)
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: scenario})
@@ -153,8 +138,6 @@ func canonicalForCompare(t *testing.T, p string) string {
 	return p
 }
 
-// runIntentColumns is a small bag for the four nullable intent fields read
-// directly from the runs table.
 type runIntentColumns struct {
 	summary   *string
 	source    *string
@@ -185,10 +168,6 @@ func readRunIntent(t *testing.T, nmHome, runID string) runIntentColumns {
 	}
 }
 
-// seedClaudeTranscript writes a minimal but realistic Claude .jsonl file
-// at the path the Claude reader will look for it. The transcript records
-// cwd = repoCWD so canonicalPath matching succeeds and references
-// touchedFile so file-overlap scoring matches whatever change we push.
 func seedClaudeTranscript(t *testing.T, homeDir, repoCWD, touchedFile string) {
 	t.Helper()
 	encoded := testClaudeProjectDirName(repoCWD)
@@ -222,13 +201,6 @@ func testJSONString(t *testing.T, s string) string {
 	return string(b)
 }
 
-// writeIntentScenario writes a fakeagent scenario YAML that returns:
-//   - a deterministic summary when invoked with the intent summarizer prompt
-//   - the standard "no findings" response for everything else, so the
-//     pipeline sails through to completion without needing approval.
-//
-// Pattern matching is by substring (first match wins), so the summarizer
-// entry must come before the catch-all.
 func writeIntentScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "intent_scenario.yaml")

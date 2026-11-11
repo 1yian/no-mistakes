@@ -13,8 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A real CLI fix selection must settle a pre-upgrade, unanchored finding only
-// after the reviewer verifies the entire changed-file set without re-reporting it.
 func TestFilelessSelectedReviewFindingRequiresCompleteVerification(t *testing.T) {
 	for _, tc := range []struct {
 		name, coverage, rereport string

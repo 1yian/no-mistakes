@@ -15,10 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// replayFixture is a CI repair fixture whose reviewed branch carries two
-// commits, with the local base advanced by one commit the branch never saw,
-// so a test can rewrite the branch onto that base the way a rebase repair
-// does and observe which way the repair is recorded.
 type replayFixture struct {
 	*ciRepairFixture
 	reviewedHead string
@@ -60,8 +56,6 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-// record runs the CI repair recording exactly as a rebase repair round does:
-// with the resolved rebase target bound for the proof.
 func (f *replayFixture) record(t *testing.T) ciRepairResult {
 	t.Helper()
 	repair, err := (&CIStep{replayBase: f.base}).commitRepair(f.sctx, "rebase onto the base", nil)
@@ -86,9 +80,6 @@ func (f *replayFixture) approval(t *testing.T) string {
 	return strings.TrimSpace(*run.ReviewApprovedHeadSHA)
 }
 
-// The behavioral core of ci.carry_review_on_replay: the same advanced base,
-// rewritten in different ways, and the only rewrite that keeps the review
-// approval is an unattended replay of the exact reviewed commits.
 func TestCIStep_CarryReviewOnReplay_OnlyAPureReplayKeepsTheApproval(t *testing.T) {
 	t.Parallel()
 	cleanRebase := func(t *testing.T, f *replayFixture) {
@@ -235,9 +226,6 @@ func TestCIStep_CarryReviewOnReplay_OnlyAPureReplayKeepsTheApproval(t *testing.T
 	}
 }
 
-// A rebase that stopped on a conflict and was resolved is the case #826 is
-// about: the resolution is code nobody has reviewed, so the approval never
-// carries, even though the resolved head is a linear chain on the base.
 func TestCIStep_CarryReviewOnReplay_ResolvedConflictRevalidatesFromReview(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -269,11 +257,6 @@ func TestCIStep_CarryReviewOnReplay_ResolvedConflictRevalidatesFromReview(t *tes
 	}
 }
 
-// git rebase can complete unaided while the base edited lines adjacent to a
-// reviewed hunk; the replayed patch then differs (its context moved), so it is
-// not patch-identical and the approval does not carry. This pins the
-// documented boundary of the proof: it is deliberately narrower than "git
-// rebase did not stop".
 func TestCIStep_CarryReviewOnReplay_CleanRebaseWithShiftedContextIsNotPatchIdentical(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -321,8 +304,6 @@ func TestCIStep_CarryReviewOnReplay_CleanRebaseWithShiftedContextIsNotPatchIdent
 	}
 }
 
-// The approval is carried only from the approval the proof was made against:
-// one revoked meanwhile is never resurrected onto the replayed head.
 func TestCIStep_CarryReviewOnReplay_NeverResurrectsARevokedApproval(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -343,9 +324,6 @@ func TestCIStep_CarryReviewOnReplay_NeverResurrectsARevokedApproval(t *testing.T
 	}
 }
 
-// End to end through the CI monitor: a green PR GitHub reports BEHIND takes
-// the rebase repair, and with the flag on a clean replay restarts at Test with
-// the approval on the rebased head instead of restarting at Review.
 func TestCIStep_CarryReviewOnReplay_BehindPRRestartsAtTest(t *testing.T) {
 	t.Parallel()
 	var prompts []string
@@ -408,8 +386,6 @@ func TestCIStep_CarryReviewOnReplay_BehindPRRestartsAtTest(t *testing.T) {
 	}
 }
 
-// carry records a pure replay that carried the approval, as a rebase repair
-// round does, and returns the replayed head.
 func (f *replayFixture) carry(t *testing.T) string {
 	t.Helper()
 	gitCmd(t, f.dir, "rebase", f.base)
@@ -428,12 +404,6 @@ func (f *replayFixture) testRestartPending(t *testing.T) bool {
 	return pending
 }
 
-// The restart at Test a carry asks for must outlive the outcome that asked
-// for it. CI parked on ask-user findings and answered with a fix whose fixer
-// changed nothing reaches the repair recorder with the repaired head equal to
-// the (carried) approved head: that must restart at Test again, never publish
-// the carried head untested. Only a publication - the Push step's, once Test
-// onward ran - settles it.
 func TestCIStep_CarryReviewOnReplay_ALaterNoChangeFixStillRestartsAtTest(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -468,9 +438,6 @@ func TestCIStep_CarryReviewOnReplay_ALaterNoChangeFixStillRestartsAtTest(t *test
 	}
 }
 
-// A fix round that commits on top of a carried head that never went through
-// Test is not published either; it revalidates from Review, as the rebase
-// would have with the carry off.
 func TestCIStep_CarryReviewOnReplay_ACommitOnTopOfAPendingCarryRevalidatesFromReview(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -493,8 +460,6 @@ func TestCIStep_CarryReviewOnReplay_ACommitOnTopOfAPendingCarryRevalidatesFromRe
 	}
 }
 
-// Stale checks from the old published head cannot authorize a fixer while a
-// carried head is pending; the step waits and restarts Test instead.
 func TestCIStep_CarryReviewOnReplay_StaleChecksOnPendingCarryRestartTest(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)
@@ -524,12 +489,6 @@ func TestCIStep_CarryReviewOnReplay_StaleChecksOnPendingCarryRestartTest(t *test
 	}
 }
 
-// An independent merge-conflict finding legitimately invokes the fixer while
-// a carry is pending. A fixer that commits on top of that head and then fails
-// must not have that commit restart at Test under the carried approval: Test
-// and Push both accept a descendant, so the unreviewed commit would publish.
-// It is recorded like any other repair on a pending carry: approval revoked,
-// revalidation from Review.
 func TestCIStep_CarryReviewOnReplay_AFailedFixerCommitOnTopRevalidatesFromReview(t *testing.T) {
 	t.Parallel()
 	f := newReplayFixture(t, true, false)

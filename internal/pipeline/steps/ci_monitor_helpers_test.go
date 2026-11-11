@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestCICheckReadFailureOutcome_ProviderNeutral guards the parked finding text:
-// it must give provider-agnostic remediation for every supported SCM, not an
-// unconditional instruction to install or upgrade `gh`, which is GitHub-only.
 func TestCICheckReadFailureOutcome_ProviderNeutral(t *testing.T) {
 	t.Parallel()
 	outcome := ciCheckReadFailureOutcome(errors.New("glab mr checks: failed to read checks"))
@@ -46,8 +43,6 @@ func TestCICheckReadFailureOutcome_ProviderNeutral(t *testing.T) {
 	}
 }
 
-// TestCICheckReadFailureOutcome_GHVersionHintOnlyForJSONFlagRejection keeps the
-// gh >= 2.50 hint for the one case it describes: gh rejecting `pr checks --json`.
 func TestCICheckReadFailureOutcome_GHVersionHintOnlyForJSONFlagRejection(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -137,12 +137,6 @@ func TestEvalMissIngestLabelsFalseNegativeGold(t *testing.T) {
 	}
 }
 
-// Every read-or-converging eval subcommand must be idempotent at the CLI: the
-// second identical invocation prints the same output and leaves the same
-// state. Both halves are asserted - stdout equality alone let a command that
-// created a new file under the app root pass as idempotent. (eval run is
-// additive by design and is covered separately; eval miss ingest's duplicate
-// no-op is covered above.)
 func TestEvalCaptureSetsReportAndRelabelAreIdempotentAtTheCLI(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -257,8 +251,6 @@ type evalCLIFixture struct {
 	db    *db.DB
 }
 
-// setupEvalCLIFixture builds the minimal real gate, working clone, and
-// recorded review round the eval CLI commands read from.
 func setupEvalCLIFixture(t *testing.T, ctx context.Context, root, findings string) evalCLIFixture {
 	t.Helper()
 	p := paths.WithRoot(root)
@@ -315,9 +307,6 @@ func setupEvalCLIFixture(t *testing.T, ctx context.Context, root, findings strin
 	return evalCLIFixture{run: run, round: round, step: step, db: database}
 }
 
-// installFakeCLIReviewAgent puts a scripted claude on PATH that replies with
-// the given review findings, mirroring the fake agent the internal/eval
-// replay tests use.
 func installFakeCLIReviewAgent(t *testing.T, root, findingsJSON string) {
 	t.Helper()
 	fakeDir := t.TempDir()
@@ -347,10 +336,6 @@ func mustCLIGit(t *testing.T, ctx context.Context, dir string, args ...string) s
 	return out
 }
 
-// The eval-sets dashboard identifies a case's repository by name and lays the
-// finding-level gold out as a confusion matrix. The repository name is
-// resolved from the locally registered repositories, since a case stores only
-// the fingerprint of its upstream URL.
 func TestEvalSetsNamesTheRepositoryAndTablesTheConfusionMatrix(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -387,8 +372,6 @@ func TestEvalSetsNamesTheRepositoryAndTablesTheConfusionMatrix(t *testing.T) {
 	}
 }
 
-// The composition table shows one kind of repository identity for every row
-// and never runs past the dashboard box, however long the names are.
 func TestEvalCompositionRepoColumnIsUniformAndFitsTheBox(t *testing.T) {
 	rows := []eval.CompositionRow{
 		{Repo: "a-very-long-organization-name/no-mistakes", Language: "go", Size: "large", Severity: "warning", FindingType: "warning/auto-fix", Cases: 2},
@@ -425,12 +408,6 @@ func TestEvalCompositionRepoColumnIsUniformAndFitsTheBox(t *testing.T) {
 	}
 }
 
-// The composition table must fit the dashboard box on BOTH of its variable
-// axes. The repository column is only one of them: the strata are the other,
-// and a finding type carrying a non-canonical severity or action can push the
-// fixed strata past the room the box has, at which point clamping the
-// repository column to its minimum is not enough and the box renderer silently
-// cuts the finding type off the end of the row.
 func TestEvalCompositionFitsTheBoxWhenTheStrataAreOversized(t *testing.T) {
 	rows := []eval.CompositionRow{
 		{Repo: "kunchenguid/no-mistakes", Language: "javascript", Size: "medium", Severity: "warning", FindingType: "blocking-correctness-defect/requires-human-review", Cases: 3},
@@ -479,8 +456,6 @@ func TestEvalCompositionFitsTheBoxWhenCaseCountsExpand(t *testing.T) {
 	}
 }
 
-// nmHomeTree lists every path under root, relative and sorted, so a test can
-// assert that a command left the app root's shape untouched.
 func nmHomeTree(t *testing.T, root string) []string {
 	t.Helper()
 	var out []string
@@ -503,17 +478,9 @@ func nmHomeTree(t *testing.T, root string) []string {
 	return out
 }
 
-// The eval dashboards are display surfaces over the local corpus: they resolve
-// repository names from the pipeline database only if one already exists, and
-// must never bring that database into being. db.Open creates the file and runs
-// every migration, so a display-only lookup routed through it turned `eval
-// sets`, `eval report`, and `eval run` into commands that initialize pipeline
-// state on a machine that has none.
 func TestEvalDisplayCommandsDoNotCreateThePipelineDatabase(t *testing.T) {
 	tests := []struct {
-		command []string
-		// eval run legitimately refuses an empty case set; the filesystem
-		// effect under test is the same either way.
+		command    []string
 		allowError bool
 	}{
 		{command: []string{"eval", "sets"}},
@@ -546,8 +513,6 @@ func TestEvalDisplayCommandsDoNotCreateThePipelineDatabase(t *testing.T) {
 	}
 }
 
-// A pre-existing pipeline database still resolves repository names: opening it
-// read-only removes the side effect, not the feature.
 func TestEvalSetsStillNamesRepositoriesFromAnExistingDatabase(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

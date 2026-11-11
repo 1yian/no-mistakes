@@ -18,10 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agentcfg"
 )
 
-// Opt-in real-harness test: only the model provider is a loopback fixture.
-// OpenCode must execute its actual shell tool, persist the session projection,
-// and provide the final answer through the released V2 HTTP API. All OpenCode
-// state/configuration lives in the test's isolated HOME, never the user's DB.
 func TestOpencodeV2_RealHarnessExecutesToolAndReturnsValidatedOutput(t *testing.T) {
 	bin := os.Getenv("NO_MISTAKES_OPENCODE_V2_BIN")
 	if bin == "" {

@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// TestCodexMetricsAccumulator_CategorizesAndTimes proves the accumulator counts
-// productive round-trips, counts and categorizes tool calls (including compound
-// commands and wait/poll calls), and reader-times each tool's subprocess wall.
 func TestCodexMetricsAccumulator_CategorizesAndTimes(t *testing.T) {
 	m := newCodexMetricsAccumulator()
 	base := time.Unix(1_700_000_000, 0)
@@ -73,8 +70,6 @@ func TestCodexMetricsAccumulator_IgnoresNonModelItems(t *testing.T) {
 	}
 }
 
-// TestParseCodexEvents_ExtractsMetricsAndReasoning proves the live-stream parser
-// fills the metrics accumulator and captures reasoning tokens from usage.
 func TestParseCodexEvents_ExtractsMetricsAndReasoning(t *testing.T) {
 	events := strings.Join([]string{
 		`{"type":"thread.started","thread_id":"t-1"}`,
@@ -108,8 +103,6 @@ func TestParseCodexEvents_ExtractsMetricsAndReasoning(t *testing.T) {
 	}
 }
 
-// TestParseCodexEvents_MissingUsageLeavesZero proves an absent turn.completed
-// usage (missing provider usage) does not fabricate token counts.
 func TestParseCodexEvents_MissingUsageLeavesZero(t *testing.T) {
 	events := `{"type":"item.completed","item":{"type":"agent_message","text":"hi"}}` + "\n"
 	var usage TokenUsage

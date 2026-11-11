@@ -9,7 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// A successful CLI may write diagnostics on stderr; only stdout is JSON.
 func TestGetChecksSeparatesDiagnosticsFromJSON(t *testing.T) {
 	for _, tc := range []struct {
 		name          string

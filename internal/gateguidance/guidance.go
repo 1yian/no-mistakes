@@ -1,12 +1,7 @@
-// Package gateguidance owns the shared phase-ownership contract rendered into
-// every validation-step prompt and the installed no-mistakes skill.
 package gateguidance
 
 import "fmt"
 
-// SkillBoundary is the static defense-in-depth guard installed for agents.
-// Runtime classification remains authoritative; NO_MISTAKES_GATE alone never
-// decides whether an ordinary operator command is allowed.
 const SkillBoundary = `
 ## Active validation-step boundary
 
@@ -26,7 +21,6 @@ return control to the outer executor. Safe inspection remains available through
 ` + "`no-mistakes doctor`" + `.
 `
 
-// PromptBoundary is prepended centrally to every concrete agent invocation.
 func PromptBoundary(phase string) string {
 	if phase == "" {
 		phase = "current"

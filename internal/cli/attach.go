@@ -22,8 +22,6 @@ import (
 var runTUI = tui.Run
 var terminalInteractive = isInteractive
 
-// attachRun is the shared logic for attaching to a pipeline run. It's used by
-// both the root command (bare `no-mistakes`) and the `attach` subcommand.
 func attachRun(ctx context.Context, w io.Writer, runID string, rootDefault bool, autoYes bool, skipSteps []types.StepName) error {
 	p, d, err := openResources()
 	if err != nil {
@@ -31,8 +29,6 @@ func attachRun(ctx context.Context, w io.Writer, runID string, rootDefault bool,
 	}
 	defer d.Close()
 
-	// When no run ID is given, resolve the repo before starting the daemon
-	// so we fail fast (and avoid orphan daemon processes) when not in a git repo.
 	var repo *db.Repo
 	if runID == "" {
 		repo, err = findRepo(d)
@@ -59,7 +55,6 @@ func attachRun(ctx context.Context, w io.Writer, runID string, rootDefault bool,
 	startedViaWizard := false
 
 	if runID != "" {
-		// Fetch specific run.
 		var result ipc.GetRunResult
 		if err := client.Call(ipc.MethodGetRun, &ipc.GetRunParams{RunID: runID}, &result); err != nil {
 			return fmt.Errorf("get run: %w", err)
@@ -164,9 +159,6 @@ func activeRunBranch(state *repoState, rootDefault bool) string {
 	return ""
 }
 
-// isInteractive reports whether stdin and stdout are both connected to a
-// terminal. The visible wizard needs a real TTY to read keystrokes; without
-// one, the --yes path falls back to the headless auto-accept flow.
 func isInteractive() bool {
 	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
 }

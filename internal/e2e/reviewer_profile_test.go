@@ -43,8 +43,6 @@ func assertReviewerJourneyPin(t *testing.T, run *ipc.RunInfo, model string) {
 	}
 }
 
-// Captured argv is the executable agent interface, rather than a check of
-// implementation source. Codex spells its model flag -m.
 func assertReviewerJourneyTurns(t *testing.T, h *Harness, runID, reviewer string, requireFix bool) {
 	t.Helper()
 	reviews, fixes, writers := 0, 0, 0

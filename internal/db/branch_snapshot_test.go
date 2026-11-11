@@ -142,8 +142,6 @@ func TestGetBranchSnapshotReadsLegacyReportingColumnsWithoutMigration(t *testing
 	}
 }
 
-// The inventory exceeds a typical SQL parameter batch and has interleaved
-// step orders. Every run must retain its own pin and ordered step evidence.
 func TestGetBranchSnapshotWholeInventory(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/test/repo", "origin", "main")
@@ -227,9 +225,6 @@ func TestGetBranchSnapshotMissingStepStorageCannotLookEmpty(t *testing.T) {
 	}
 }
 
-// A separate writer connection changes run provenance, step state and branch
-// membership atomically. Every reader must see all three before or after that
-// commit, never a mix sampled by separate status and inventory reads.
 func TestGetBranchSnapshotConsistentDuringWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	writer, err := Open(path)

@@ -17,10 +17,6 @@ type readableColumn struct {
 	key     bool
 }
 
-// schemaReader is the shared projection boundary for observational queries.
-// Column names come from the read model, while their availability comes from
-// this connection's schema. No migration or schema cache is needed to read a
-// database left open by an older daemon.
 type schemaReader struct {
 	table    string
 	columns  map[string]readableColumn
@@ -57,9 +53,6 @@ func readSchema(ctx context.Context, q schemaQueryer, table string, required ...
 	return r, nil
 }
 
-// projection shares the scan order and destination types with the model's
-// scanner. Adding a model field therefore gets legacy-schema handling without
-// another list of historical columns or special cases for a particular table.
 func (r *schemaReader) projection(names string, destinations ...any) (string, error) {
 	columns := strings.Split(names, ",")
 	if len(columns) != len(destinations) {

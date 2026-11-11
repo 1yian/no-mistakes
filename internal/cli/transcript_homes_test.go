@@ -128,9 +128,6 @@ func serveTranscriptHomesProbe(srv *ipc.Server) {
 	})
 }
 
-// The privacy oracle is that an older daemon receives no launch request and
-// the gate does not move. Its permissive legacy handlers would otherwise start
-// discovery without the account selection and could read a competing account.
 func TestTranscriptHomesRefuseOlderDaemonBeforeLaunch(t *testing.T) {
 	for _, launch := range []string{"notify-push", "ordinary", "proof", "rerun"} {
 		t.Run(launch, func(t *testing.T) {

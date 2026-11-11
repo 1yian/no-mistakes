@@ -13,30 +13,13 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// baseAttributionMaxListed bounds each attributed failure list, and
-// baseAttributionMaxLineRunes each listed line, so a suite that fails
-// thousands of tests cannot grow the finding past what findings, IPC, and
-// repair prompts carry. The complete outputs stay in the step log.
 const (
 	baseAttributionMaxListed    = 20
 	baseAttributionMaxLineRunes = 300
 )
 
-// testFailureLine recognizes the per-test failure lines common runners print:
-// go test (`--- FAIL: TestX`), pytest (`FAILED path::test`), jest/vitest
-// (`✕ name`), TAP (`not ok N - name`), and cargo (`test name ... FAILED`).
-// Package- or file-level aggregates (`FAIL\tpkg`, jest's `FAIL file`) are
-// deliberately not matched: they fail on both sides whenever any test in them
-// does, so they would list a package holding a new regression as
-// pre-existing. A suite whose failures match none of these gets an honest
-// "could not separate" attribution instead of a guessed one.
 var testFailureLine = regexp.MustCompile(`^(?:--- FAIL: |FAILED |not ok |[✕✗×] )|\.\.\. FAILED$`)
 
-// goPackageResult is the `FAIL\tpkg` / `ok  \tpkg` line that closes a go test
-// package's block. It names the package of the per-test lines printed before
-// it, which carry only the test name, so same-named tests in different
-// packages are told apart. The tab keeps jest's space-separated `FAIL file`
-// header out.
 var goPackageResult = regexp.MustCompile(`^(?:FAIL|ok)\s*\t(\S+)`)
 
 var (
@@ -45,34 +28,16 @@ var (
 	tapOrdinal         = regexp.MustCompile(`^not ok \d+`)
 )
 
-// baseAttribution is the result of re-running a failing commands.test on the
-// run's base commit: which of the head's failures the change introduced and
-// which already fail without it.
 type baseAttribution struct {
 	baseSHA      string
 	baseExitCode int
 	introduced   []string
 	preexisting  []string
-	// ambiguous holds failures that also fail on the base but carry no
-	// package or file identity, so the match may be a different test sharing
-	// the name.
-	ambiguous []string
-	// unattributed holds head package results that failed without any
-	// per-test line (a build failure, a TestMain or init panic) and did not
-	// fail that way on the base, so no test inside them can be attributed.
+	ambiguous    []string
 	unattributed []string
-	// unavailable explains why no base result exists; every failure then
-	// stays attributed to the change, exactly as without the opt-in.
-	unavailable string
+	unavailable  string
 }
 
-// attributeTestFailures runs testCmd on a disposable checkout of baseSHA and
-// diffs its failures against the head's. Attribution only informs: the head
-// failure keeps its severity, action, and description (which is also the
-// configured-command override reason), so an approval over a pre-existing
-// failure is still a recorded waiver. The only error returned is the step's
-// own cancellation; any other problem yields an unavailable attribution and
-// the run continues.
 func attributeTestFailures(sctx *pipeline.StepContext, testCmd, baseSHA, headOutput string) (baseAttribution, error) {
 	attribution := baseAttribution{baseSHA: baseSHA}
 	if strings.TrimSpace(baseSHA) == "" || baseSHA == git.EmptyTreeSHA || git.IsZeroSHA(baseSHA) {
@@ -94,10 +59,6 @@ func attributeTestFailures(sctx *pipeline.StepContext, testCmd, baseSHA, headOut
 	return attribution, nil
 }
 
-// classify splits the head's recognized failures by whether they also fail in
-// baseOutput. A failing base with no recognized failure lines leaves every
-// list empty, so render reports that the two could not be separated rather
-// than listing every head failure as introduced.
 func (a *baseAttribution) classify(headOutput, baseOutput string) {
 	baseFailures := map[string]bool{}
 	baseUnattributed := map[string]bool{}
@@ -133,14 +94,6 @@ func (a *baseAttribution) classify(headOutput, baseOutput string) {
 	}
 }
 
-// runTestCommandOnBase checks baseSHA out into a throwaway clone that shares
-// the run worktree's object store, runs the trusted commands.prepare there
-// when configured, then testCmd. A separate clone rather than a linked
-// worktree keeps the gate repository and the run worktree untouched.
-// Preparation is cleaned exactly as on the head, so only its ignored
-// materialization reaches the base suite, and prepare plus test share the
-// Test budget (test_agent_timeout): a base run that outlives it is stopped
-// and reported unavailable rather than holding the head's finding back.
 func runTestCommandOnBase(sctx *pipeline.StepContext, testCmd, baseSHA string) (string, int, error) {
 	scratch, err := os.MkdirTemp("", "no-mistakes-test-base-")
 	if err != nil {
@@ -205,14 +158,6 @@ func runTestCommandOnBase(sctx *pipeline.StepContext, testCmd, baseSHA string) (
 	return output, exitCode, nil
 }
 
-// testFailureLines returns the recognized failure lines of output in order,
-// deduplicated, and normalized so run-to-run noise (durations, TAP ordinals,
-// colors, indentation, pytest's failure reason) does not make the same
-// failure look new. A go test line is prefixed with the package its block
-// closes with. qualified names the lines that carry a package or file
-// identity (a packaged go test or a pytest `path::test` id); any other line
-// may be a different test sharing the name. unattributed lists the go
-// `FAIL pkg` results that closed a block without any per-test failure line.
 func testFailureLines(output string) (lines []string, qualified map[string]bool, unattributed []string) {
 	var failures []string
 	qualified = map[string]bool{}
@@ -262,9 +207,6 @@ func testFailureLines(output string) (lines []string, qualified map[string]bool,
 	return lines, qualified, unattributed
 }
 
-// pytestTestID drops the " - reason" pytest appends to a FAILED line. The
-// reason starts at the first " - " outside any [...] parameter id, so a
-// parametrized id that itself contains " - " stays whole.
 func pytestTestID(line string) string {
 	depth := 0
 	for i := 0; i < len(line); i++ {
@@ -284,8 +226,6 @@ func pytestTestID(line string) string {
 	return line
 }
 
-// render is the attribution the Test step puts ahead of the failing command's
-// output in the findings summary and in the evidence prompt.
 func (a baseAttribution) render() string {
 	if a.unavailable != "" {
 		return "Base attribution unavailable (" + a.unavailable + "); every failure is attributed to this change."

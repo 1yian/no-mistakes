@@ -15,10 +15,6 @@ import (
 // names them only so a global config that still sets one keeps parsing, with a
 // deprecation warning and no effect.
 
-// TestRetiredJevKeysParseWithoutEffect pins the retirement contract: a global
-// config carrying either removed key loads cleanly and merges exactly like a
-// config without the block - there is no Jev setting left on GlobalConfig or
-// the merged Config to set.
 func TestRetiredJevKeysParseWithoutEffect(t *testing.T) {
 	withKeys, err := LoadGlobalFromBytes([]byte("log_level: info\njev:\n  review_assist: true\n  candidate_excerpt_bytes: 1024\n"))
 	if err != nil {
@@ -38,9 +34,6 @@ func TestRetiredJevKeysParseWithoutEffect(t *testing.T) {
 	}
 }
 
-// TestRetiredJevKeysWarnAtLoad pins that an operator whose config still sets a
-// retired key is told it has no effect, once per set key, on the load-time
-// diagnostic channel.
 func TestRetiredJevKeysWarnAtLoad(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -76,8 +69,6 @@ func TestRetiredJevKeysWarnAtLoad(t *testing.T) {
 	}
 }
 
-// TestUnknownJevSubkeyFails pins that the tombstone tolerates exactly the two
-// retired keys: anything else under jev: is rejected like any unknown field.
 func TestUnknownJevSubkeyFails(t *testing.T) {
 	_, err := LoadGlobalFromBytes([]byte("jev:\n  something_else: true\n"))
 	if err == nil || !strings.Contains(err.Error(), "not found in type") {
@@ -85,18 +76,12 @@ func TestUnknownJevSubkeyFails(t *testing.T) {
 	}
 }
 
-// TestEmptyJevBlockStillParses covers `jev:` with nothing under it, which must
-// behave exactly like an absent key.
 func TestEmptyJevBlockStillParses(t *testing.T) {
 	if _, err := LoadGlobalFromBytes([]byte("jev:\nlog_level: info\n")); err != nil {
 		t.Fatalf("empty jev block must parse: %v", err)
 	}
 }
 
-// TestUnknownTopLevelKeyStillFails pins that the tombstone did not weaken the
-// strict decoder anywhere else: a genuinely unknown top-level key is still
-// rejected, so the retired block is tolerated by name, not by turning off
-// known-fields checking.
 func TestUnknownTopLevelKeyStillFails(t *testing.T) {
 	_, err := LoadGlobalFromBytes([]byte("not_a_real_key: true\n"))
 	if err == nil || !strings.Contains(err.Error(), "not found in type") {

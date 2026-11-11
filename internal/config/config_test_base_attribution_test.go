@@ -2,9 +2,6 @@ package config
 
 import "testing"
 
-// A pushed branch cannot turn base attribution on for its own run: it spends
-// a second suite run and executes commands on another checkout, so only the
-// trusted default-branch copy decides, with or without allow_repo_commands.
 func TestTestBaseAttributionTrustAndMerge(t *testing.T) {
 	pushed, err := LoadRepoFromBytes([]byte("test:\n  base_attribution: true\n"))
 	if err != nil {

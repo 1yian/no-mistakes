@@ -15,25 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestWorktreeRootJourney walks the whole worktree_roots feature the way an
-// operator reaches it, with nothing about the placement stubbed:
-//
-//   - `no-mistakes init --worktree-root <dir>` refuses the directories the
-//     daemon refuses to start on, so the entry it prints is one that can be
-//     pasted.
-//   - the entry it prints is pasted into the real global config verbatim, and
-//     the daemon restarts on it.
-//   - a real `git push no-mistakes` run is then created in that directory:
-//     every pipeline agent runs with <dir>/<run id> as its cwd, which is the
-//     whole point of the setting (mise/direnv resolve by path ancestry), and
-//     the run records that directory.
-//   - the default placement under NM_HOME is never used for that run, and when
-//     the run ends only its own directory is gone - the operator's own files in
-//     that directory are untouched.
-//
-// The unit tests own each seam; this is the wiring check that the printed
-// guidance, the config, run creation, the agent cwd, and cleanup all agree on
-// one directory.
 func TestWorktreeRootJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 
@@ -158,7 +139,6 @@ func TestWorktreeRootJourney(t *testing.T) {
 	t.Logf("after the run, %s holds only the operator's own %s", runsRoot, filepath.Base(operatorFile))
 }
 
-// waitForRemoval waits for the daemon's run cleanup to remove dir.
 func waitForRemoval(t *testing.T, dir string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -174,10 +154,6 @@ func waitForRemoval(t *testing.T, dir string, timeout time.Duration) {
 	}
 }
 
-// worktreeRootEntryFromGuidance reads the config entry line init printed,
-// exactly as it must be pasted. It is read out of the command's own output
-// rather than reconstructed, because the point of the printout is that pasting
-// what it says works.
 func worktreeRootEntryFromGuidance(t *testing.T, out, root string) string {
 	t.Helper()
 	if !strings.Contains(out, "worktree_roots:") {

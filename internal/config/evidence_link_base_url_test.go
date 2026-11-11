@@ -8,10 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestEvidenceLinkBaseURLIsGlobalOnly is the trust-boundary regression for
-// test.evidence.link_base_url: it decides where every PR body's evidence links
-// point, so like local_root it resolves from GlobalConfig alone. A repository
-// value, trusted copy included, loads without error and is ignored.
 func TestEvidenceLinkBaseURLIsGlobalOnly(t *testing.T) {
 	global, err := LoadGlobalFromBytes([]byte("test:\n  evidence:\n    link_base_url: https://evidence.example.com/no-mistakes/\n"))
 	if err != nil {
@@ -34,11 +30,6 @@ func TestEvidenceLinkBaseURLIsGlobalOnly(t *testing.T) {
 	}
 }
 
-// TestRepoConfigProvenanceRoundTripAcceptsEvidenceLinkBaseURL: a review round
-// records yaml.Marshal of the effective RepoConfig as its provenance, and eval
-// capture and the carried-review check read it back through LoadRepoFromBytes.
-// That record names every raw field, so refusing the global-only key by name
-// at parse time broke both for every run. The key must round-trip.
 func TestRepoConfigProvenanceRoundTripAcceptsEvidenceLinkBaseURL(t *testing.T) {
 	for _, src := range []string{"", "test:\n  evidence:\n    link_base_url: https://attacker.example/evidence\n"} {
 		repo, err := LoadRepoFromBytes([]byte(src))

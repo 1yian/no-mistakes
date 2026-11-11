@@ -295,13 +295,6 @@ func TestExecutor_GateRecheckIsBoundedAndApprovalWinsAfterTimeout(t *testing.T) 
 	}
 }
 
-// TestExecutor_AppliesGateReconcileTimingsFromGlobalConfig is the operator
-// path for gate_reconcile_interval / gate_reconcile_timeout: write them in
-// global config.yaml, load + merge, construct NewExecutor with that Config
-// (no SetGateReconcileTimings), and prove a hanging reconcile is bounded by
-// the configured timeout rather than the hardcoded 30s default. If wiring
-// were missing, the blocking check would hold the gate for ~30s and this
-// 1s deadline would fail.
 func TestExecutor_AppliesGateReconcileTimingsFromGlobalConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -350,10 +343,6 @@ func TestExecutor_AppliesGateReconcileTimingsFromGlobalConfig(t *testing.T) {
 	}
 }
 
-// TestExecutor_AppliesGateReconcileIntervalFromGlobalConfig proves the
-// operator-configured interval (not the hardcoded 2m) drives how often a
-// still-parked gate is rechecked. With interval 10ms, a second reconcile must
-// arrive well before the 2m default; Approve ends the park cleanly.
 func TestExecutor_AppliesGateReconcileIntervalFromGlobalConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")

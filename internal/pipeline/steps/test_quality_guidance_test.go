@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// assertTestQualityRulePrompt checks the intentional generated interface sent
-// to a fake agent. It does not inspect implementation source or claim that a
-// fake model can judge tests.
 func assertTestQualityRulePrompt(t *testing.T, prompt string) {
 	t.Helper()
 	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")

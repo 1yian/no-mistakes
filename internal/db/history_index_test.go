@@ -15,9 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// historyIndexes are the run-history lookup indexes and their key columns in
-// order. A missing one, or one with a different column order, puts a full
-// history scan back on the daemon's single connection.
 var historyIndexes = map[string][]string{
 	"idx_step_results_run_order_id":   {"run_id", "step_order", "id"},
 	"idx_step_rounds_step_round":      {"step_result_id", "round"},
@@ -25,9 +22,6 @@ var historyIndexes = map[string][]string{
 	"idx_runs_status_created_id":      {"status", "created_at", "id"},
 }
 
-// seedHistory writes two runs on one branch, each with a review step and
-// rounds, one of them carrying a recorded user decision, so every history
-// reader below has rows to return.
 func seedHistory(t *testing.T, d *DB) (repoID, branch string, current *Run, review *StepResult) {
 	t.Helper()
 	repo, err := d.InsertRepo(t.TempDir(), "https://example.invalid/repo", "main")
@@ -48,8 +42,6 @@ func seedHistory(t *testing.T, d *DB) (repoID, branch string, current *Run, revi
 	return repo.ID, "feature", current, review
 }
 
-// dropHistoryIndexes turns a migrated database back into one written before
-// the history indexes existed.
 func dropHistoryIndexes(t *testing.T, d *DB) {
 	t.Helper()
 	for name := range historyIndexes {
@@ -89,8 +81,6 @@ func assertHistoryIndexes(t *testing.T, d *DB) {
 	}
 }
 
-// schemaAndRows is everything an idempotent migration must leave unchanged
-// once it has run: the schema text and the row count of every table.
 func schemaAndRows(t *testing.T, d *DB) map[string]string {
 	t.Helper()
 	snapshot := map[string]string{}
@@ -140,8 +130,6 @@ func TestOpenCreatesHistoryIndexesOnAFreshDatabase(t *testing.T) {
 	assertHistoryIndexes(t, openTestDB(t))
 }
 
-// A database written before the history indexes existed gains them on its
-// next writable open, keeps every row, and later opens change nothing.
 func TestOpenAddsHistoryIndexesToAnExistingDatabaseOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	d, err := Open(path)
@@ -203,9 +191,6 @@ func TestOpenAddsHistoryIndexesToAnExistingDatabaseOnce(t *testing.T) {
 	}
 }
 
-// queryRecorder captures every query a DB method sends, with its arguments,
-// so the test plans the exact statements production code runs rather than a
-// copy of them that could drift.
 type queryRecorder struct {
 	mu      sync.Mutex
 	queries []recordedQuery
@@ -262,14 +247,8 @@ func (c recordingConn) QueryContext(ctx context.Context, query string, args []dr
 	return c.queryer.QueryContext(ctx, query, args)
 }
 
-// historyScan matches a query-plan step that walks a whole run-history table,
-// by name or by the aliases the branch joins use (r, res, sr). SEARCH steps,
-// temporary sorts, and scans of other tables are all allowed: the regression
-// this guards is a lookup going back to reading the entire history.
 var historyScan = regexp.MustCompile(`^SCAN (runs|step_results|step_rounds|r|res|sr)\b`)
 
-// historyScans runs fn against the database at path, then plans every query
-// it sent and returns the plan steps that scan a whole history table.
 func historyScans(t *testing.T, path string, fn func(*DB) error) []string {
 	t.Helper()
 	probe, err := sql.Open("sqlite", path)
@@ -312,12 +291,6 @@ func historyScans(t *testing.T, path string, fn func(*DB) error) []string {
 	return scans
 }
 
-// Every run-history lookup on the daemon's hot paths must use the history
-// indexes rather than scan the run, step, or round history. Each lookup is
-// also planned against the same database with the indexes dropped, which
-// must scan: that proves the lookup depends on these indexes, so the test
-// fails if one is removed or a query changes shape so it can no longer use
-// them.
 func TestHistoryLookupsUseHistoryIndexes(t *testing.T) {
 	dir := t.TempDir()
 	indexed := filepath.Join(dir, "indexed.sqlite")

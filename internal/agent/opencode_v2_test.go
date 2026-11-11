@@ -16,9 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agentcfg"
 )
 
-// These fixtures implement the published V2 OpenAPI and session-event contract,
-// not the V1 adapter's wire types. The full pipeline fixture and opt-in real
-// OpenCode smoke test cover process startup independently of this HTTP boundary.
 type opencodeV2Fixture struct {
 	mu           sync.Mutex
 	calls        []string
@@ -321,7 +318,6 @@ data: {"type":"session.text.ended","data":{"sessionID":"ses_fixture","assistantM
 	if chunks.String() != "hello world" {
 		t.Fatalf("expected complete text after the end event: %q", chunks.String())
 	}
-	// Activity must be reported while deltas are buffered, before the end.
 	var sawActivity bool
 	for _, event := range lifecycle {
 		if event.Phase == LifecyclePhaseActivity {

@@ -17,15 +17,11 @@ import (
 
 var _ scm.ReviewCommentsHost = (*Host)(nil)
 
-// gitlabUser is the author object GitLab attaches to a note.
 type gitlabUser struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 }
 
-// gitlabNotePosition is the diff position of a resolvable note. A note on an
-// added line carries new_path/new_line; one on a removed or unchanged line
-// carries old_path/old_line instead, which is why both halves are decoded.
 type gitlabNotePosition struct {
 	NewPath string `json:"new_path"`
 	NewLine *int   `json:"new_line"`
@@ -34,7 +30,6 @@ type gitlabNotePosition struct {
 	HeadSHA string `json:"head_sha"`
 }
 
-// gitlabNote is one note of a merge request discussion.
 type gitlabNote struct {
 	ID         int                 `json:"id"`
 	Body       string              `json:"body"`
@@ -46,16 +41,11 @@ type gitlabNote struct {
 	Position   *gitlabNotePosition `json:"position"`
 }
 
-// gitlabDiscussion is one merge request discussion as
-// `projects/:id/merge_requests/:iid/discussions` returns it.
 type gitlabDiscussion struct {
 	ID    string       `json:"id"`
 	Notes []gitlabNote `json:"notes"`
 }
 
-// positionPathLine returns the file and line the note is anchored to. An
-// added-line comment reports the new side; a removed-line comment has no
-// new_line, so the old side is the only anchor available.
 func (n gitlabNote) positionPathLine() (string, int) {
 	if n.Position == nil {
 		return "", 0
@@ -73,10 +63,6 @@ func (n gitlabNote) positionPathLine() (string, int) {
 	return path, 0
 }
 
-// ProjectPathFromMRURL returns the "group/project" path a GitLab merge request
-// URL addresses, or "" when raw is not one. ProjectPath is its repository-remote
-// sibling, and both are needed: a reattached run can have a PR URL whose project
-// differs from the resolved upstream remote.
 func ProjectPathFromMRURL(raw string) string {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -94,16 +80,6 @@ func ProjectPathFromMRURL(raw string) string {
 	return strings.Join(segments, "/")
 }
 
-// GetReviewComments implements scm.ReviewCommentsHost. It reads the merge
-// request's unresolved discussion notes, which is GitLab's equivalent of
-// GitHub's unresolved review threads.
-//
-// Two GitLab facts shape the filter. Resolution is reported on a discussion's
-// notes, and only a diff note is resolvable at all: a general MR comment
-// reports resolvable=false and can never be a review finding. And a bot posts
-// as an ordinary account here - there are no GitHub App slugs and no "[bot]"
-// login spelling - so identity comes from the registered review-bot logins
-// (scm.IsReviewBotLogin), never from an application name.
 func (h *Host) GetReviewComments(ctx context.Context, pr *scm.PR) ([]scm.ReviewComment, error) {
 	project, iid, err := h.reviewCommentTarget(ctx, pr)
 	if err != nil {
@@ -163,9 +139,6 @@ func (h *Host) GetReviewComments(ctx context.Context, pr *scm.PR) ([]scm.ReviewC
 	return comments, nil
 }
 
-// reviewCommentURL builds the merge request link that lands on the note. The
-// discussions API returns no per-note URL, and the MR web URL plus the note
-// anchor is the link GitLab itself renders.
 func reviewCommentURL(pr *scm.PR, noteID int) string {
 	if pr == nil || noteID == 0 {
 		return ""
@@ -177,15 +150,6 @@ func reviewCommentURL(pr *scm.PR, noteID int) string {
 	return base + "#note_" + strconv.Itoa(noteID)
 }
 
-// reviewCommentTarget resolves the project path and merge request IID the
-// discussions read addresses. A host built without a project path (or a run
-// whose remote could not be parsed) falls back to the recorded PR URL, which is
-// validated against the host and project exactly like every other MR-URL read.
-//
-// It reports scm.ErrUnsupported when neither source names a project: the host
-// was built without the coordinates this read needs, which is the same
-// "provider cannot supply comments" answer a provider without the capability
-// gives, not a failed read to park on.
 func (h *Host) reviewCommentTarget(ctx context.Context, pr *scm.PR) (string, int, error) {
 	if pr == nil {
 		return "", 0, errors.New("pr is nil")
@@ -324,12 +288,6 @@ func containsReviewer(reviewers []string, want string) bool {
 	return false
 }
 
-// decodeGitlabDiscussions reads every discussion from glab output. The payload
-// is one JSON array (the default json output merges the pages) or several
-// arrays concatenated back to back, one per page. A streaming decoder reads
-// each top-level value in turn. A malformed document is an error rather than an
-// empty result: an unreadable page must never look like "no unresolved
-// comments".
 func decodeGitlabDiscussions(out []byte) ([]gitlabDiscussion, error) {
 	trimmed := bytes.TrimSpace(out)
 	if len(trimmed) == 0 {

@@ -17,15 +17,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestStep runs baseline tests, gathers evidence for user intent, and optionally asks the agent to fix failures.
 type TestStep struct{}
 
 var _ pipeline.ApprovalOverrideVerifier = (*TestStep)(nil)
 
 func (s *TestStep) Name() types.StepName { return types.StepTest }
 
-// Both turns need the same scope: the repair turn leaves an unauthorized
-// remedy unapplied, and the evidence turn reports the unresolved failure.
 const testRepairScopeRules = `
 
 Repair scope:
@@ -60,22 +57,6 @@ func (s *TestStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, e
 		}
 	}
 
-	// In fix mode, ask agent to fix test failures first.
-	//
-	// Targeted-validation rules (reproduce the specific failure, focused
-	// re-verification only, never a complete repository suite) are a product
-	// contract: local Test proves the requested intent, while remote CI owns
-	// broad regression and remains mandatory before a PR is ready. A forensic
-	// audit measured ~82 minutes of local complete-suite walks on one repair
-	// path when prompts only said "run the tests" / "relevant". This is a
-	// prompt contract, not an enforced sandbox - the agent has free shell
-	// access - so the pinned regression tests guard the wording, not the
-	// runtime. Process-group reaping on clean exit (#357) remains the lifecycle
-	// safety net when agents do spawn test workers; it is not a reason to force
-	// a deterministic full-suite commands.test override.
-	// Captured inside the fix turn, before commitAgentFixes stages and commits:
-	// detectNewTestFiles reads uncommitted status, so the evidence turn that
-	// follows can no longer see a test file the fixer already committed.
 	var newTestsFromFix []string
 	var fixSummary string
 	var repairCut error
@@ -378,13 +359,6 @@ Rules:
 	}, nil
 }
 
-// testAnalyzerMaxAttempts is the number of evidence-analyzer invocations
-// allowed for one Test step Execute, including the first. An invalid
-// findings payload is not a product defect: it is returned to the analyzer
-// with the validation errors so the caller can correct and resubmit. Only
-// exhausting this bound is a genuine blocking failure. The bound is
-// independent of auto_fix.test, which is for repairing the product rather
-// than correcting structured output.
 const testAnalyzerMaxAttempts = 3
 
 func runTestAnalyzer(sctx *pipeline.StepContext, prompt string) (Findings, error) {
@@ -455,12 +429,6 @@ func parseTestAnalyzerOutput(result *agent.Result) (Findings, error) {
 	return findings, nil
 }
 
-// The common RunOpts contract has no invocation-scoped, cross-adapter tool
-// restriction. Keep this fresh turn correction-only through a narrow prompt:
-// it receives no original task or runbook, and the rejected material is framed
-// strictly as data. Adapter-specific argv permissions would leave other
-// supported agents unrestricted, so this deliberately does not pretend to
-// provide a capability boundary that the shared agent interface cannot enforce.
 func testAnalyzerCorrectionPrompt(err error, rejected []byte) string {
 	var b strings.Builder
 	b.WriteString(`Your previous structured findings were REJECTED because they violate the live-validation contract. Correct the rejected JSON and resubmit the full findings object.
@@ -479,8 +447,6 @@ Validation errors:
 	return b.String()
 }
 
-// testRunbookSections renders the machine-local runbook ahead of the trusted
-// one, for both the repair and the evidence prompt.
 func testRunbookSections(sctx *pipeline.StepContext) string {
 	return repositoryTestInstructionsSection(sctx) + trustedTestInstructionsSection(sctx)
 }
@@ -497,10 +463,6 @@ func trustedTestInstructionsSection(sctx *pipeline.StepContext) string {
 		sanitizePromptMultilineText(instructions) + "\n"
 }
 
-// repositoryTestInstructionsSection renders the operator's machine-local
-// runbook for this repository (a repository_overrides entry). It is labeled as
-// the operator's so it never reads as the repository's own runbook, and it
-// only adds to the trusted runbook.
 func repositoryTestInstructionsSection(sctx *pipeline.StepContext) string {
 	if sctx.Config == nil {
 		return ""
@@ -513,33 +475,6 @@ func repositoryTestInstructionsSection(sctx *pipeline.StepContext) string {
 		sanitizePromptMultilineText(instructions) + "\n"
 }
 
-// verdictFindings turns the evidence turn's own verdict into findings, which
-// is what stops a verdict from being decoration on a green step.
-//
-// The policy is deliberately asymmetric (captain's call C2 = a, plus the
-// 2026-09-07 no-surface ask-user decision):
-//
-//   - "no-go" is an error finding, so hasBlockingFindings parks the step for a
-//     decision. It is auto-fixable because a failed scenario is a defect the
-//     fix round can attack, exactly like a failed configured test command;
-//     escalating every failed scenario to a human instead would make the
-//     contract too expensive to keep switched on.
-//   - "inconclusive" is a warning finding: the change has a live-exercisable
-//     surface but too little could be driven live to judge, which is a
-//     question for the human rather than something a fix round can repair,
-//     so it parks and asks.
-//   - "no-surface" is a warning finding: the change itself has nothing
-//     no-mistakes can drive live, so it parks and asks whether proceeding
-//     without live validation is acceptable. It is not a silent pass and
-//     not a hard fail. A change that claimed a pass/fail or drove anything
-//     live cannot reach this branch (unmarshalRequiredTestFindings rejects
-//     that masquerade).
-//   - "go" adds nothing.
-//
-// Untested scenarios never produce a finding at any verdict. They are listed
-// on the pull request (see the Testing section's scenario table) precisely so
-// that reporting one honestly costs a contributor nothing; making them park
-// would push the agent back towards guessing a pass.
 func verdictFindings(findings Findings) []Finding {
 	live, total := types.LiveScenarioCounts(findings.Scenarios)
 	coverage := fmt.Sprintf("%d of %d scenarios were driven live against the product", live, total)
@@ -578,9 +513,6 @@ func untestedScenarioSuffix(scenarios []types.TestScenario) string {
 	return scenarioNameSuffix(scenarios, types.ScenarioResultUntested, "untested")
 }
 
-// untestedScenarioReasonSuffix names each untested scenario together with the
-// reason it could not be driven, so a no-surface park carries why there is
-// nothing to validate rather than only the scenario titles.
 func untestedScenarioReasonSuffix(scenarios []types.TestScenario) string {
 	var parts []string
 	for _, scenario := range scenarios {
@@ -617,11 +549,6 @@ func scenarioNameSuffix(scenarios []types.TestScenario, result, label string) st
 	return "; " + label + ": " + strings.Join(names, ", ")
 }
 
-// mergeNewTestFiles unions the test files a fix turn created with the ones
-// still uncommitted at the evidence turn, preserving order and dropping
-// duplicates. Both halves are needed: a fix turn's files are already committed
-// by the time the evidence turn looks (detectNewTestFiles reads uncommitted
-// status), and the evidence turn's own files were never in the fix turn's view.
 func mergeNewTestFiles(fromFix, fromEvidence []string) []string {
 	seen := make(map[string]bool, len(fromFix)+len(fromEvidence))
 	var merged []string
@@ -651,10 +578,6 @@ func testAgentWorkingTimeout(sctx *pipeline.StepContext) time.Duration {
 	return sctx.Config.TestAgentWorkingTimeout
 }
 
-// testAgentContext bounds the base-checkout prepare and test commands by
-// test_agent_timeout. The deadline is a child of the step context, so agent
-// turns still receive a stall budget from RunAgentBudget instead of inheriting
-// an absolute parent deadline.
 func testAgentContext(sctx *pipeline.StepContext) (context.Context, context.CancelFunc, time.Duration) {
 	timeout := testAgentTimeout(sctx)
 	ctx, cancel := context.WithTimeoutCause(sctx.Ctx, timeout, errTestAgentTimeout)
@@ -663,15 +586,6 @@ func testAgentContext(sctx *pipeline.StepContext) (context.Context, context.Canc
 
 var errTestAgentTimeout = errors.New("test agent timeout")
 
-// testAgentTimeoutOutcome parks the Test step when an evidence or repair
-// invocation burned its stall budget. A budget cut is not a code
-// failure: the run stays alive with the worktree so leftover commits and
-// uncommitted files are not discarded, and an approval is a Test exception
-// rather than a silent green pass. Late structured output from the expired
-// turn is still not used as a successful result. The configured command's
-// result from this execution rides along with its exit code, so approving over
-// a failing command still needs the same waiver as any other Test gate, and a
-// fix round keeps the gate it was answering.
 func testAgentTimeoutOutcome(sctx *pipeline.StepContext, err error, startHead string, baseline []Finding, baselineSummary string, exitCode int) *pipeline.StepOutcome {
 	park := answeredTestGate(sctx)
 	cause := "This is a budget or provider-slowness cut, not a code failure."
@@ -720,13 +634,6 @@ func testAgentTimeoutOutcome(sctx *pipeline.StepContext, err error, startHead st
 	}
 }
 
-// answeredTestGate is what a fix round carries onto a budget-cut park from the
-// gate it answers: its selected and deferred findings, the last completed
-// evidence turn's verdict, scenarios, and tested head, and the head an earlier
-// cut measured unvalidated work from. The budget-cut findings and the
-// configured-command result are left out because this execution derives them
-// again, and IDs are cleared so the executor numbers the park without
-// colliding with them.
 func answeredTestGate(sctx *pipeline.StepContext) Findings {
 	var carried Findings
 	if !sctx.Fixing {
@@ -753,14 +660,6 @@ func answeredTestGate(sctx *pipeline.StepContext) Findings {
 	return carried
 }
 
-// unselectedTestFindings returns the ask-user or blocking findings an earlier
-// round deferred when the automatic fix loop started this round. They can
-// record what an earlier turn observed - a write outside the workspace, say -
-// rather than a property of the code, so this round's clean result cannot
-// clear them; only a human response can. Step-owned findings are skipped
-// because this execution derives them again. A re-report replaces a deferred
-// finding only when SameFinding and the effective action both match: matching
-// content alone could erase an undecided ask-user finding after an action change.
 func unselectedTestFindings(sctx *pipeline.StepContext, current []Finding) []Finding {
 	if !sctx.AutoFixRound {
 		return nil
@@ -791,25 +690,13 @@ func unselectedTestFindings(sctx *pipeline.StepContext, current []Finding) []Fin
 	return carried
 }
 
-// testBudgetCutIDs are the step-owned findings of a Test budget-cut park. They
-// are operator decisions, never defects for an agent to repair, so an agent's
-// own finding can never claim them.
 var testBudgetCutIDs = []string{types.FindingIDTestAgentTimeout, types.FindingIDTestAgentUnvalidatedWork}
 
-// onlyTestBudgetCutFindings reports whether a fix selection holds nothing but
-// a Test budget cut, which leaves the repair turn nothing to repair.
 func onlyTestBudgetCutFindings(raw string) bool {
 	findings, err := types.ParseFindingsJSON(raw)
 	return err == nil && len(findings.Items) > 0 && len(types.ExcludeFindings(findings, testBudgetCutIDs).Items) == 0
 }
 
-// budgetCutGuidanceSection renders the instructions attached to selected
-// budget-cut findings, keeping the user's decision apart from guidance an
-// agent driver passed with axi respond --instructions so the evidence turn
-// never presents the driver's note as the user's choice. The repair turn never sees those findings, so
-// the evidence turn is the one that must follow them. One note given to both
-// budget-cut findings (axi respond --instructions copies it onto each) is
-// rendered once.
 func budgetCutGuidanceSection(sctx *pipeline.StepContext) string {
 	if !sctx.Fixing {
 		return ""
@@ -842,8 +729,6 @@ func budgetCutGuidanceSection(sctx *pipeline.StepContext) string {
 	return section
 }
 
-// testRepairFindings is the fix selection the repair agent is asked to
-// address: everything but the budget-cut findings.
 func testRepairFindings(raw string) string {
 	findings, err := types.ParseFindingsJSON(raw)
 	if err != nil {
@@ -860,13 +745,6 @@ func testRepairFindings(raw string) string {
 	return encoded
 }
 
-// unvalidatedTestWork names what the worktree holds beyond validatedHead - the
-// head the last completed evidence turn saw, else the head an earlier cut in
-// this fix chain measured from, else this execution's start -
-// with how to inspect it, or returns "" when there is nothing. A commit the
-// timed-out agent made is recorded as the run head so custody sees it, unless
-// an unfinished rebase or merge makes HEAD a partial result. An unreadable HEAD
-// or status fails closed.
 func unvalidatedTestWork(sctx *pipeline.StepContext, validatedHead string) string {
 	dir := sctx.WorkDir
 	var parts []string
@@ -910,9 +788,6 @@ func porcelainPaths(status string) []string {
 	return paths
 }
 
-// testAgentError renders a Test-invocation budget expiry. The shared
-// agent-run seam supplies which bound cut the turn (silent budget, stall budget, or still-working cap),
-// how long it ran, and the measured activity evidence.
 func testAgentError(timeout time.Duration, prefix string, err error) error {
 	if timeout > 0 && errors.Is(err, errTestAgentTimeout) {
 		return fmt.Errorf("%s timed out %s: %w", prefix, pipeline.AgentBudgetBound(err, timeout), err)
@@ -923,15 +798,6 @@ func testAgentError(timeout time.Duration, prefix string, err error) error {
 	return nil
 }
 
-// VerifyApprovalOverride implements pipeline.ApprovalOverrideVerifier. It
-// records an explicit override when a human answers ActionApprove on a Test
-// gate that is parked because the configured commands.test exited non-zero,
-// so that completion cannot read as a silent green pass the way a genuinely
-// passing command does. The condition is the parked findings of this step
-// (the command result from this execution), not a re-run. A step with no
-// configured command, or whose command passed and parked for another reason,
-// returns "" so PR enforcement does not claim a configured-command waiver.
-// The executor records the broader Test exception separately as ApprovalReason.
 func (s *TestStep) VerifyApprovalOverride(sctx *pipeline.StepContext) (string, error) {
 	if sctx == nil {
 		return "could not verify configured test command: step context is not available", nil

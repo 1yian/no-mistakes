@@ -17,10 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// attributionRepo commits a failing-suite script on main, then a feature
-// commit that changes it, and returns the step context for the feature head.
-// The script prints one go-test style failure line per name in failures.txt,
-// closed by its package's result line, and exits non-zero when there is any.
 func attributionRepo(t *testing.T, baseFailures, headFailures string, attribution bool) (*pipeline.StepContext, *mockAgent, string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -60,10 +56,6 @@ func lastPrompt(ag *mockAgent) string {
 	return ag.calls[len(ag.calls)-1].Prompt
 }
 
-// A head that keeps one failure main already has and adds one of its own must
-// name only the new one as introduced, while the configured-command finding,
-// its approval-override reason, and the run worktree stay exactly as they are
-// without attribution.
 func TestTestStep_BaseAttributionSeparatesIntroducedFromPreexisting(t *testing.T) {
 	t.Parallel()
 	sctx, ag, dir := attributionRepo(t, "TestFlakyOnMain\n", "TestFlakyOnMain\nTestBrokenByChange\n", true)
@@ -112,8 +104,6 @@ func TestTestStep_BaseAttributionSeparatesIntroducedFromPreexisting(t *testing.T
 	}
 }
 
-// A suite that is green on the base commit means the change introduced every
-// failure, which is stated rather than left for the reader to infer.
 func TestTestStep_BaseAttributionGreenBaseBlamesTheChange(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "", "TestBrokenByChange\n", true)
@@ -134,8 +124,6 @@ func TestTestStep_BaseAttributionGreenBaseBlamesTheChange(t *testing.T) {
 	}
 }
 
-// A base preparation that succeeds still leaves its output in the Test log,
-// as normal preparation does, so an unexpected base result can be explained.
 func TestTestStep_BaseAttributionLogsSuccessfulBasePreparation(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "TestFlakyOnMain\n", "TestFlakyOnMain\nTestBrokenByChange\n", true)
@@ -155,8 +143,6 @@ func TestTestStep_BaseAttributionLogsSuccessfulBasePreparation(t *testing.T) {
 	}
 }
 
-// Off by default: without the opt-in the base commit is never checked out or
-// run, so the summary is the head output alone.
 func TestTestStep_BaseAttributionIsOptIn(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "TestFlakyOnMain\n", "TestFlakyOnMain\nTestBrokenByChange\n", false)
@@ -176,8 +162,6 @@ func TestTestStep_BaseAttributionIsOptIn(t *testing.T) {
 	}
 }
 
-// Package-level aggregates fail on both sides whenever any test in the package
-// does, so they must never be listed: only per-test lines are compared.
 func TestTestFailureLinesNormalizesRunnerNoise(t *testing.T) {
 	t.Parallel()
 	output := strings.Join([]string{
@@ -211,9 +195,6 @@ func TestTestFailureLinesNormalizesRunnerNoise(t *testing.T) {
 	}
 }
 
-// A package that fails with no per-test line (here a build failure) must be
-// named, so a head that also keeps a pre-existing failure never reads as
-// introducing nothing.
 func TestBaseAttributionNamesPackagesFailingWithoutAPerTestLine(t *testing.T) {
 	t.Parallel()
 	base := "--- FAIL: TestFoo (0.01s)\nFAIL\nFAIL\texample.com/pkg/a\t0.1s\nok  \texample.com/pkg/b\t0.1s\n"
@@ -231,8 +212,6 @@ func TestBaseAttributionNamesPackagesFailingWithoutAPerTestLine(t *testing.T) {
 	}
 }
 
-// A machine-local additional check never runs on the base, so its failures
-// must not be classified against it.
 func TestTestStep_BaseAttributionIgnoresMachineLocalChecks(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "TestFlakyOnMain\n", "TestFlakyOnMain\nTestBrokenByChange\n", true)
@@ -257,9 +236,6 @@ func classifiedAttribution(baseExitCode int, headOutput, baseOutput string) base
 	return a
 }
 
-// go test prints only the test name on a failure line, so a same-named test
-// failing in another package must be keyed by its package and not matched
-// against the base's failure.
 func TestBaseAttributionKeysGoFailuresByPackage(t *testing.T) {
 	t.Parallel()
 	base := "--- FAIL: TestParse (0.01s)\nFAIL\nFAIL\texample.com/pkg/a\t0.1s\nok  \texample.com/pkg/b\t0.1s\n"
@@ -273,9 +249,6 @@ func TestBaseAttributionKeysGoFailuresByPackage(t *testing.T) {
 	}
 }
 
-// jest/vitest and TAP lines carry no file or suite identity, so a name failing
-// once on each side may be a different test: it is never claimed as
-// pre-existing, while a name only the head fails is still introduced.
 func TestBaseAttributionUnqualifiedMatchIsAmbiguous(t *testing.T) {
 	t.Parallel()
 	base := "FAIL src/a.test.js\n  ✕ parses input (3 ms)\nnot ok 1 - loads config\n"
@@ -292,8 +265,6 @@ func TestBaseAttributionUnqualifiedMatchIsAmbiguous(t *testing.T) {
 	}
 }
 
-// pytest's reason after the test id carries assertion values, so the same
-// test failing with a different message on the head is still pre-existing.
 func TestBaseAttributionKeysPytestFailuresByTestID(t *testing.T) {
 	t.Parallel()
 	base := "FAILED tests/test_api.py::test_login - AssertionError: assert 1 == 2\n"
@@ -307,8 +278,6 @@ func TestBaseAttributionKeysPytestFailuresByTestID(t *testing.T) {
 	}
 }
 
-// A " - " inside a parametrized id is part of the id, not the reason, so two
-// parameter sets that differ only after it stay distinct tests.
 func TestBaseAttributionKeepsPytestParameterIDsWhole(t *testing.T) {
 	t.Parallel()
 	base := "FAILED tests/test_a.py::test_login[user - password] - AssertionError\n"
@@ -323,9 +292,6 @@ func TestBaseAttributionKeepsPytestParameterIDsWhole(t *testing.T) {
 	}
 }
 
-// A base that fails without any recognized per-test line (here a build
-// failure, whose aggregate line is deliberately ignored) cannot say which head
-// failures it shares, so nothing is listed as introduced.
 func TestBaseAttributionUnrecognizedBaseFailureCannotBeSeparated(t *testing.T) {
 	t.Parallel()
 	base := "# example.com/pkg/a\na.go:3:1: syntax error\nFAIL\texample.com/pkg/a [build failed]\n"
@@ -336,8 +302,6 @@ func TestBaseAttributionUnrecognizedBaseFailureCannotBeSeparated(t *testing.T) {
 	}
 }
 
-// A base preparation that edits a tracked file is reset before the base suite
-// runs, as on the head, so the base result reflects the base commit's files.
 func TestTestStep_BaseAttributionResetsBasePreparationChanges(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "TestFlakyOnMain\n", "TestFlakyOnMain\nTestInjectedByPrepare\n", true)
@@ -353,8 +317,6 @@ func TestTestStep_BaseAttributionResetsBasePreparationChanges(t *testing.T) {
 	}
 }
 
-// A base suite that hangs is stopped at the Test budget and reported
-// unavailable, while the head's failing command still parks promptly.
 func TestTestStep_BaseAttributionStopsABaseRunPastTheTestBudget(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "", "TestBrokenByChange\n", true)
@@ -381,8 +343,6 @@ func TestTestStep_BaseAttributionStopsABaseRunPastTheTestBudget(t *testing.T) {
 	}
 }
 
-// A base command the shell cannot find (here an ignored runner the fresh
-// clone lacks) never ran the suite, so it is not reported as a base failure.
 func TestTestStep_BaseAttributionCommandNotFoundOnBaseIsUnavailable(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := attributionRepo(t, "", "TestBrokenByChange\n", true)

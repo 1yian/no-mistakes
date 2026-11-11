@@ -12,17 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestCleanupOrphanWorktreesSweepsEveryRemovableDirectoryInOneSnapshot bounds
-// what startup cleanup pays for the sweep that has to precede every removal.
-// One snapshot per removal pass makes the daemon slower to start the more a
-// crash left behind: a scoped sweep has no age floor, so each snapshot
-// enumerates every process on the machine (a whole-machine lsof on darwin,
-// capped at 10s), and the whole pass runs before the socket is bound, against
-// the startup budget. Startup runs two passes - reapWorktrees for the default
-// tree (retention-aware) and cleanupOrphanWorktrees for operator-placed
-// leftovers (unconditional) - and each must still sweep its own directories
-// in one snapshot rather than one per directory. Per-directory decisions must
-// not change: an active run's worktree is neither swept nor removed.
 func TestCleanupOrphanWorktreesSweepsEveryRemovableDirectoryInOneSnapshot(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -91,8 +80,6 @@ func TestCleanupOrphanWorktreesSweepsEveryRemovableDirectoryInOneSnapshot(t *tes
 	}
 }
 
-// placeCleanupRun records a run placed in root, creates its directory, and
-// leaves it in the given status.
 func placeCleanupRun(t *testing.T, d *db.DB, repoID, root string, status types.RunStatus) string {
 	t.Helper()
 	run, err := d.InsertRun(repoID, "feature", "head", "base")

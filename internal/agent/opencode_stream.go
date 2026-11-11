@@ -29,7 +29,6 @@ func accumulateUsage(byMsg map[string]TokenUsage) TokenUsage {
 	return total
 }
 
-// parseOpencodeSSE processes the SSE stream from OpenCode's /global/event endpoint.
 func parseOpencodeSSE(r io.Reader, state *opencodeStreamState) error {
 	var sawIdle bool
 	var streamErr error

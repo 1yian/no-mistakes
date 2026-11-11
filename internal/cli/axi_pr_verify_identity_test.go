@@ -18,9 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline/steps"
 )
 
-// The oracle is the requested repository, independent of every adapter's
-// interpretation of a numbered PR. A foreign or absent identity must never
-// reach the command's verdict output, even when title and body are valid.
 func TestPRAppendixVerifyRepositoryIdentity(t *testing.T) {
 	_, source, _, _ := runtime.Caller(0)
 	module := filepath.Clean(filepath.Join(filepath.Dir(source), "../.."))

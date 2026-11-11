@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// A transport helper (ssh, git-remote-https) outlives a killed git and keeps its
-// inherited stderr pipe open, so a read that only kills git never returns. The
-// script answers git's `ssh -G` variant probe, records that it was reached, then
-// never speaks again.
 func TestCIStep_CommitRepair_StalledTransportHelperFailsClosedWithinItsDeadline(t *testing.T) {
 	original := publishedHeadResolveWindow
 	publishedHeadResolveWindow = time.Second

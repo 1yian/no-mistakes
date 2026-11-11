@@ -25,9 +25,6 @@ func sameStrings(got, want []string) bool {
 	return true
 }
 
-// Positive regression for the reported bug: authoritative intent requires a
-// pipeline-owned PR outcome ("Open PR A unmerged"). Review runs before push/PR,
-// so a finding that only says the PR/remote do not exist yet must not park.
 func TestReviewStep_DropsDeferredPipelineOwnedPRFinding(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -129,8 +126,6 @@ func TestReviewStep_DropsDeferredPipelineOwnedPRFinding(t *testing.T) {
 	}
 }
 
-// Negative: a finding about a pre-existing external PR stays enforceable at
-// pre-push review - the strip must not globally ignore external delivery.
 func TestReviewStep_KeepsExternalPRLifecycleFinding(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -178,7 +173,6 @@ func TestReviewStep_KeepsExternalPRLifecycleFinding(t *testing.T) {
 	}
 }
 
-// Mixed: real source defect kept; deferred delivery dropped; still parks.
 func TestReviewStep_StripsOnlyDeferredAmongMixedFindings(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

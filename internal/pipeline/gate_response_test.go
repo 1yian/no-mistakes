@@ -12,8 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// gateFindingsThree is the shape of a fix-review gate: a carried ask-user
-// finding the human already decided on, and two auto-fix findings.
 const gateFindingsThree = `{"findings":[` +
 	`{"id":"R1","severity":"error","file":"a.go","description":"first","action":"ask-user"},` +
 	`{"id":"R2","severity":"error","file":"a.go","description":"second","action":"auto-fix"},` +
@@ -92,9 +90,6 @@ func TestSplitFixResponse_KeepsAnEarlierDecisionOnOmission(t *testing.T) {
 	}
 }
 
-// A gate response cannot reverse an applied fix: --ignore naming a finding an
-// earlier user round of the same step already chose to fix is refused, and the
-// refusal names those findings so a caller can correct itself by omitting them.
 func TestSplitFixResponse_RefusesDecliningAFindingChosenToFixEarlier(t *testing.T) {
 	rounds := []*db.StepRound{userDecisionRound(t, gateFindingsThree, "R1")}
 
@@ -146,8 +141,6 @@ func TestSplitFixResponse_AnApprovalDecidesEveryFindingItShowed(t *testing.T) {
 	}
 }
 
-// The shape `--yes` and the auto-driver send: every finding the gate shows,
-// with no declines.
 func TestSplitFixResponse_EveryFindingSelectedWithNoDeclinesPasses(t *testing.T) {
 	got, err := splitFixResponse(gateFindingsThree, nil, []string{"R1", "R2", "R3"}, nil)
 	if err != nil {
@@ -171,9 +164,6 @@ func TestSplitFixResponse_DispositionsAreInGateOrder(t *testing.T) {
 	}
 }
 
-// Readability is part of the guarantee: the gate's findings are the contract a
-// fix response is validated against, so a payload this cannot read refuses the
-// response (fail closed) rather than passing as a gate that showed nothing.
 func TestSplitFixResponse_UnreadableGateRefusesTheResponse(t *testing.T) {
 	_, err := splitFixResponse("{not json", nil, []string{"R1"}, nil)
 
@@ -193,8 +183,6 @@ func TestSplitFixResponse_UnreadableGateRefusesTheResponse(t *testing.T) {
 	}
 }
 
-// respondFixStepFindings drives one review step through a gate that shows the
-// three-finding payload on every round.
 func respondFixStepFindings(t *testing.T) (*Executor, *db.DB, *db.Run, *db.Repo, <-chan error) {
 	t.Helper()
 	database, p, run, repo := setupTest(t)
@@ -210,8 +198,6 @@ func respondFixStepFindings(t *testing.T) (*Executor, *db.DB, *db.Run, *db.Repo,
 	return exec, database, run, repo, done
 }
 
-// The refusal happens before the gate is resolved, so the response can be
-// corrected and sent again.
 func TestExecutor_FixResponseRefusalLeavesTheGateParked(t *testing.T) {
 	exec, database, run, _, done := respondFixStepFindings(t)
 
@@ -238,10 +224,6 @@ func TestExecutor_FixResponseRefusalLeavesTheGateParked(t *testing.T) {
 	waitExecutorDone(t, done)
 }
 
-// The round history is the other half of the contract: when the earlier
-// decisions cannot be established at all - here a parked gate with no step
-// result id - the response is refused instead of being validated against none
-// of them, and the gate stays parked so the caller can retry.
 func TestExecutor_FixResponseRefusedWhenEarlierDecisionsAreUnavailable(t *testing.T) {
 	exec, database, run, _, done := respondFixStepFindings(t)
 	steps, err := database.GetStepsByRun(run.ID)
@@ -281,10 +263,6 @@ func TestExecutor_FixResponseRefusedWhenEarlierDecisionsAreUnavailable(t *testin
 	waitExecutorDone(t, done)
 }
 
-// A failed read of the round history refuses the response the same way and
-// names the read failure; the parked executor is then cancelled by cleanup,
-// since a gate that cannot be validated against its history cannot be answered
-// with a fix response at all.
 func TestExecutor_FixResponseRefusedWhenTheRoundReadFails(t *testing.T) {
 	exec, database, _, _, _ := respondFixStepFindings(t)
 	if err := database.Close(); err != nil {
@@ -301,10 +279,6 @@ func TestExecutor_FixResponseRefusedWhenTheRoundReadFails(t *testing.T) {
 	}
 }
 
-// An accepted fix response that declines every finding and selects none is a
-// decision, not an empty round: without the declined marker its declines would
-// be unrecorded, the derived decline set (the selection's complement) would be
-// empty, and the next gate would show the same findings as undecided.
 func TestExecutor_AllIgnoredFixResponseRecordsTheDeclines(t *testing.T) {
 	exec, database, run, _, done := respondFixStepFindings(t)
 	steps, err := database.GetStepsByRun(run.ID)
@@ -384,9 +358,6 @@ func TestExecutor_AllIgnoredFixResponseRecordsTheDeclines(t *testing.T) {
 	waitExecutorDone(t, done)
 }
 
-// A padded id must not pass validation as R1 and then match nothing: the ids
-// the validation accepted are the ones dispatched to the fixer and recorded on
-// the round, so the real finding is never left looking declined.
 func TestExecutor_FixResponseNormalizesIDsBeforeDispatchAndPersistence(t *testing.T) {
 	contexts := make(chan *StepContext, 4)
 	step := &adaptiveCallStep{
@@ -476,9 +447,6 @@ func TestExecutor_FixResponseNormalizesIDsBeforeDispatchAndPersistence(t *testin
 	waitExecutorDone(t, done)
 }
 
-// An omission of a finding an earlier round of the same step already decided is
-// kept, never re-declined, and a later --ignore naming an earlier fix is
-// refused: the gate stays parked and the caller corrects the response.
 func TestExecutor_FixResponseKeepsEarlierDecisionsAndRefusesTheirReversal(t *testing.T) {
 	exec, database, run, _, done := respondFixStepFindings(t)
 	steps, err := database.GetStepsByRun(run.ID)
@@ -600,9 +568,6 @@ func selectedIDsOf(t *testing.T, round *db.StepRound) []string {
 	return selectionIDsOf(t, round.SelectedFindingIDs)
 }
 
-// A recovered gate applies the same validation and recording as a live one: an
-// unaccounted response is refused with the gate still parked, and a corrected
-// response records its selection on the recovered round.
 func TestExecutor_RecoveredGateValidatesAndRecordsTheDecision(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {
@@ -804,10 +769,6 @@ func TestExecutor_DispositionEchoIncludesNormalizedAdditions(t *testing.T) {
 	}
 }
 
-// A user-added finding must not take the ID of a gate finding this response
-// declined - outside Review too. The added finding is a separate concern, so it
-// is allocated a fresh ID: the decline stays attributed to the real finding,
-// and the fixer's input carries the added concern rather than the declined one.
 func TestExecutor_AddedFindingCannotTakeADeclinedGateFindingID(t *testing.T) {
 	const gateFindings = `{"findings":[` +
 		`{"id":"lint-1","severity":"warning","description":"keep selected","action":"auto-fix"},` +
@@ -903,11 +864,6 @@ recorded:
 	waitExecutorDone(t, done)
 }
 
-// A gate ID is whatever the producer normalized, and normalization trims it:
-// surrounding whitespace is not part of the identity, so both the displayed
-// spelling and a padded one select or decline the same finding. Before the
-// producer trimmed, a padded gate ID had no spelling that survived the
-// response-side trim and could equal it.
 func TestSplitFixResponse_PaddedGateIDIsSelectableByItsTrimmedID(t *testing.T) {
 	findings := types.NormalizeFindings(types.Findings{Items: []types.Finding{
 		{ID: " R1 ", Severity: "error", Description: "padded gate id"},
@@ -929,10 +885,6 @@ func TestSplitFixResponse_PaddedGateIDIsSelectableByItsTrimmedID(t *testing.T) {
 	}
 }
 
-// The fail-closed promise covers the stored decisions, not only the read: a
-// round whose recorded selection cannot be decoded parks the gate instead of
-// silently counting as "nothing was decided", which would let a response be
-// attributed against an identity set the state does not actually support.
 func TestExecutor_FixResponseRefusedWhenAStoredDecisionCannotBeDecoded(t *testing.T) {
 	exec, database, run, _, done := respondFixStepFindings(t)
 	steps, err := database.GetStepsByRun(run.ID)

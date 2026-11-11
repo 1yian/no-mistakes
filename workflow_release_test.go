@@ -88,10 +88,6 @@ func TestReleaseWorkflowEmbedsSelfHostedTelemetryConfig(t *testing.T) {
 	}
 }
 
-// Partial-release protection: release-please must create drafts so that a
-// release is never marked "latest" until all binaries and checksums are
-// uploaded. A separate finalize job gates the promotion on every asset job
-// succeeding.
 func TestReleasePleaseConfigCreatesDrafts(t *testing.T) {
 	data, err := os.ReadFile("release-please-config.json")
 	if err != nil {
@@ -187,10 +183,6 @@ func TestReleaseWorkflowPublishesPrereleaseOnlyAfterAssetsComplete(t *testing.T)
 	}
 }
 
-// TestReleaseWorkflowCallsPublishChannelsAfterFinalize pins that a
-// release-please cut refreshes channels.json from the same run, after the
-// prerelease and every binary asset are live. GitHub does not cascade
-// GITHUB_TOKEN release events, so on: release cannot cover this path.
 func TestReleaseWorkflowCallsPublishChannelsAfterFinalize(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 	job := wf.Jobs["publish-channels"]

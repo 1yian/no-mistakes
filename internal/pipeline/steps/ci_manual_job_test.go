@@ -7,11 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// A blocking manual job holds the pipeline until a person runs it, so
-// the monitor must name that wait - "checks running" would describe work that
-// does not exist and hide the only thing that moves the pipeline along. The two
-// holds read differently to the person they wait on, so each keeps its own
-// wording.
 func TestCIWaitingMessage_NamesTheManualJobHold(t *testing.T) {
 	t.Parallel()
 
@@ -42,10 +37,6 @@ func TestCIWaitingMessage_NamesTheManualJobHold(t *testing.T) {
 	}
 }
 
-// The manual hold is a wait on a person, not work in flight and not a verdict
-// on the commit: it keeps the PR from reading green, never reaches the failing
-// set the fix agent repairs, and never defers escalation of a failure it is
-// observed alongside.
 func TestManualJobHoldIsAWaitNotAFailure(t *testing.T) {
 	t.Parallel()
 

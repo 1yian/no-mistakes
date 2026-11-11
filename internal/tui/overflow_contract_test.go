@@ -45,8 +45,6 @@ func snapshot(rev int64, ciReady bool, ciStatus types.StepStatus) *ipc.RunInfo {
 	}
 }
 
-// firstMsgOfType runs a command (unwrapping a batch) and returns the first
-// message of the requested type.
 func reconciledFrom(t *testing.T, cmd tea.Cmd) runReconciledMsg {
 	t.Helper()
 	if cmd == nil {
@@ -71,8 +69,6 @@ func reconciledFrom(t *testing.T, cmd tea.Cmd) runReconciledMsg {
 	return got
 }
 
-// A live "checks passed" title must not survive an authoritative readiness
-// invalidation that the daemon had to coalesce away under buffer pressure.
 func TestTUIOverflow_GreenTitleClearsFromAuthoritativeSnapshot(t *testing.T) {
 	m := ciRunningModel(true)
 	m.stateRev = 10
@@ -166,8 +162,6 @@ func TestTUIOverflow_StaleSnapshotSchedulesFollowUp(t *testing.T) {
 	}
 }
 
-// A delta that was queued before the snapshot must not regress state after it,
-// even though it arrives later in the stream.
 func TestTUIOverflow_StaleQueuedDeltaCannotRegressAfterSnapshot(t *testing.T) {
 	m := ciRunningModel(true)
 	m.reconcile = func(context.Context) (*ipc.RunInfo, error) {
@@ -203,7 +197,6 @@ func TestTUIOverflow_StaleQueuedDeltaCannotRegressAfterSnapshot(t *testing.T) {
 	}
 }
 
-// A newer delta arriving after the snapshot must still apply.
 func TestTUIOverflow_NewerDeltaAfterSnapshotStillApplies(t *testing.T) {
 	m := ciRunningModel(false)
 	m.reconcile = func(context.Context) (*ipc.RunInfo, error) {
@@ -273,8 +266,6 @@ func TestTUIUnknownCustomGateEventReconcilesAuthoritativePlan(t *testing.T) {
 	}
 }
 
-// A snapshot older than what the model already holds is ignored, so two
-// reconciliations racing cannot move state backwards.
 func TestTUIOverflow_OlderSnapshotIsIgnored(t *testing.T) {
 	m := ciRunningModel(false)
 	m.stateRev = 90
@@ -287,8 +278,6 @@ func TestTUIOverflow_OlderSnapshotIsIgnored(t *testing.T) {
 	}
 }
 
-// A terminal snapshot delivered through a gap must end the run view even if
-// the run_completed frame itself was coalesced away.
 func TestTUIOverflow_TerminalSnapshotThroughGapCompletesTheView(t *testing.T) {
 	m := ciRunningModel(false)
 	m.reconcile = func(context.Context) (*ipc.RunInfo, error) {
@@ -310,9 +299,6 @@ func TestTUIOverflow_TerminalSnapshotThroughGapCompletesTheView(t *testing.T) {
 	}
 }
 
-// A dropped stream must resubscribe and converge rather than freezing the live
-// view on an error. The new subscription opens gapped, so the model resets its
-// applied revision and adopts the daemon's numbering.
 func TestTUIOverflow_DroppedStreamResubscribesAndResetsRevision(t *testing.T) {
 	m := ciRunningModel(true)
 	m.stateRev = 10
@@ -332,8 +318,6 @@ func TestTUIOverflow_DroppedStreamResubscribesAndResetsRevision(t *testing.T) {
 	}
 }
 
-// Reconnect attempts are bounded and delayed, so a daemon that is genuinely
-// gone surfaces as a visible error instead of a reconnect spin.
 func TestTUIOverflow_ReconnectAttemptsAreBounded(t *testing.T) {
 	m := ciRunningModel(false)
 	var last tea.Cmd
@@ -353,8 +337,6 @@ func TestTUIOverflow_ReconnectAttemptsAreBounded(t *testing.T) {
 	}
 }
 
-// A successful reconnect clears the retry budget so a later drop gets a fresh
-// set of attempts.
 func TestTUIOverflow_RetryBudgetResetsOnlyAfterAuthoritativeProgress(t *testing.T) {
 	m := ciRunningModel(false)
 	updated, _ := m.Update(subscriptionErrMsg{err: fmt.Errorf("dial: no daemon"), subscriptionID: m.subscriptionID})
@@ -409,7 +391,6 @@ func TestTUIOverflow_CompletedGapThenCloseConvergesWithoutReconnect(t *testing.T
 	}
 }
 
-// A completed run must not keep resubscribing.
 func TestTUIOverflow_DroppedStreamOnDoneRunDoesNotResubscribe(t *testing.T) {
 	m := ciRunningModel(false)
 	m.done = true
@@ -419,8 +400,6 @@ func TestTUIOverflow_DroppedStreamOnDoneRunDoesNotResubscribe(t *testing.T) {
 	}
 }
 
-// Concurrent gaps coalesce into one in-flight authoritative read plus exactly
-// one follow-up, so overflow can never turn into a reconciliation storm.
 func TestTUIOverflow_ReconciliationRequestsCoalesce(t *testing.T) {
 	m := ciRunningModel(true)
 	calls := 0
@@ -463,8 +442,6 @@ func TestTUIOverflow_ReconciliationRequestsCoalesce(t *testing.T) {
 	}
 }
 
-// Activity frames carry no revision and must never advance the applied
-// revision or trigger reconciliation work.
 func TestTUIOverflow_ActivityDoesNotTouchRevisionOrReconcile(t *testing.T) {
 	m := ciRunningModel(false)
 	m.stateRev = 12
@@ -485,8 +462,6 @@ func TestTUIOverflow_ActivityDoesNotTouchRevisionOrReconcile(t *testing.T) {
 	}
 }
 
-// Events without a revision (an older daemon) must keep applying, so a new
-// client against an old daemon is no worse off than before.
 func TestTUIOverflow_UnversionedDeltasStillApply(t *testing.T) {
 	m := ciRunningModel(false)
 	m.stateRev = 12
@@ -524,8 +499,6 @@ func TestTUIOverflow_UnknownStateEventRequestsAuthoritativeReconciliation(t *tes
 	}
 }
 
-// The fix-review diff is fetched on demand and lands in the model, so removing
-// it from the event stream costs the user nothing.
 func TestTUIOverflow_FixReviewDiffIsFetchedOnDemand(t *testing.T) {
 	m := ciRunningModel(false)
 	m.steps = append(m.steps, ipc.StepResultInfo{
@@ -561,8 +534,6 @@ func TestTUIOverflow_FixReviewDiffIsFetchedOnDemand(t *testing.T) {
 	}
 }
 
-// A gate reached while the model was out of sync still gets its diff from the
-// reconciled snapshot path.
 func TestTUIOverflow_SnapshotGateAlsoFetchesItsDiff(t *testing.T) {
 	m := ciRunningModel(false)
 	m.fetchStepDiff = func(types.StepName) (string, error) { return "diff body\n", nil }

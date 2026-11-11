@@ -15,15 +15,10 @@ func processAlive(pid int) (bool, error) {
 	return processAliveOS(pid)
 }
 
-// ProcessAlive reports whether pid is still a live process. Exited zombies do
-// not count as live: they no longer hold the daemon singleton lock even though
-// a signal-zero probe still finds their unreaped process-table entry.
 func ProcessAlive(pid int) (bool, error) {
 	return processAlive(pid)
 }
 
-// MatchesDaemonRoot reports whether pid's argv is a no-mistakes daemon run
-// for exactly the given NM_HOME root (bounded ownership check).
 func MatchesDaemonRoot(pid int, nmHome string) bool {
 	cmd, err := processCommandLine(pid)
 	if err != nil || cmd == "" {
@@ -178,12 +173,10 @@ func samePath(a, b string) bool {
 	return false
 }
 
-// signalProcess sends sig to pid. Used only after MatchesDaemonRoot.
 func signalProcess(pid int, sig os.Signal) error {
 	return signalProcessOS(pid, sig)
 }
 
-// waitProcessExit waits until pid is gone or timeout.
 func waitProcessExit(pid int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

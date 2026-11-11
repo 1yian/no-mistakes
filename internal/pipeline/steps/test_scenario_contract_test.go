@@ -16,11 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestTestStep_PromptBoundsCompletionAndStatesBudget pins issue #1576: the
-// evidence turn must be told to stop widening once its proportionate list has
-// results, to leave nothing it started running in the background when it
-// returns, and how much wall-clock time it has, so a finished verdict is not
-// lost at the budget cut.
 func TestTestStep_PromptBoundsCompletionAndStatesBudget(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -64,14 +59,6 @@ func TestTestStep_PromptBoundsCompletionAndStatesBudget(t *testing.T) {
 	}
 }
 
-// TestTestStep_PromptDerivesScenariosAndMarksLive pins the live-validation
-// prompt contract: the step asks for named scenarios driven against the real
-// product, agent-owned workarounds (disposable, isolated setups it builds
-// itself) to get each scenario live, an explicit live marking that a unit test
-// cannot claim, untested reserved for scenarios that are truly impossible to
-// drive live with a reason saying what was tried, and a verdict. The
-// pre-contract framing that let a green unit-test run stand in for driving the
-// product must be gone.
 func TestTestStep_PromptDerivesScenariosAndMarksLive(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -233,9 +220,6 @@ func TestTestStep_PromptIncludesOnlyConfiguredTrustedRunbook(t *testing.T) {
 	}
 }
 
-// The operator's machine-local runbook reaches the repair and the evidence
-// prompt, labeled and ahead of the trusted runbook, while a pushed branch's
-// runbook still reaches neither.
 func TestTestStep_MachineLocalRunbookPrecedesTrustedAndPushedStaysOut(t *testing.T) {
 	t.Parallel()
 	global, err := config.LoadGlobalFromBytes([]byte("repository_overrides:\n  https://github.com/acme/widget.git:\n    test:\n      instructions: Never install on a physical device; use the emulator.\n"))
@@ -341,11 +325,6 @@ const passingScenarioFindingsJSON = `{
   "verdict": "go"
 }`
 
-// TestTestStep_VerdictPolicy proves captain's call C2 = a end to end: a no-go
-// verdict parks the step with a blocking finding, an untested scenario passes
-// through without parking, a go verdict adds nothing, and a no-surface
-// verdict parks as ask-user rather than hard-failing. All four keep the
-// scenario record on the step so the PR can render it.
 func TestTestStep_VerdictPolicy(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -457,10 +436,6 @@ func TestTestStep_VerdictPolicy(t *testing.T) {
 	}
 }
 
-// TestTestStep_MissingScenarioContractFails proves the contract is required
-// rather than advisory: an evidence turn that answers without scenarios or
-// without a verdict has not answered, and a bad verdict is not silently
-// accepted as "unknown".
 func TestTestStep_MissingScenarioContractFails(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -589,10 +564,6 @@ const noSurfaceCIWorkflowFindingsJSON = `{
   "verdict": "no-surface"
 }`
 
-// TestTestStep_NoLiveSurfaceCIWorkflowAsksUser models the captain's
-// windows-shard failure: a CI-workflow-only change has nothing no-mistakes
-// can drive live. The evidence turn must park as ask-user with the reason,
-// not hard-fail the step the way pass+live:false used to.
 func TestTestStep_NoLiveSurfaceCIWorkflowAsksUser(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, _ := setupGitRepo(t)
@@ -686,11 +657,6 @@ type rejectedStructuredOutputError struct{ message string }
 func (e rejectedStructuredOutputError) Error() string                { return e.message }
 func (rejectedStructuredOutputError) StructuredOutputRejected() bool { return true }
 
-// TestTestStep_InvalidAnalyzerPayloadTriggersCorrectionRound is the
-// recoverability contract: a pass that was not live-validated, or an
-// untested scenario missing a reason, is returned to the analyzer with an
-// actionable message so it can resubmit. The step must not fail the run on
-// that first invalid payload.
 func TestTestStep_InvalidAnalyzerPayloadTriggersCorrectionRound(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -834,9 +800,6 @@ func TestTestStep_MalformedJSONTriggersCorrectionRound(t *testing.T) {
 	}
 }
 
-// TestTestStep_InvalidAnalyzerPayloadExhaustsCorrectionBound proves the
-// loop is bounded: a payload that stays invalid is a genuine blocking
-// failure after testAnalyzerMaxAttempts, never an infinite resubmit.
 func TestTestStep_InvalidAnalyzerPayloadExhaustsCorrectionBound(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

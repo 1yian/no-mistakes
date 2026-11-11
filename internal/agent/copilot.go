@@ -13,10 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// copilotAgent spawns the GitHub Copilot CLI for each invocation. Copilot
-// runs non-interactively with the prompt on stdin and `--output-format json`,
-// emitting JSONL events on stdout. The lifecycle is codex/pi-shaped: one
-// process per Run, no managed server.
 type copilotAgent struct {
 	bin       string
 	extraArgs []string
@@ -102,14 +98,6 @@ func (a *copilotAgent) runOnce(ctx context.Context, opts RunOpts) (*Result, erro
 	return res, err
 }
 
-// finalizeCopilotResult converts the assistant messages emitted during a run
-// into a structured Result. With no schema it uses the final message verbatim.
-// With a schema it tries each assistant message newest-first and returns the
-// first that parses against it: Copilot is non-deterministic about honoring the
-// JSON-only output contract and frequently emits the schema JSON in an earlier
-// message, then closes with a prose summary (e.g. "Now I've applied all four
-// fixes…") that no extraction strategy can recover. If none parse it falls back
-// to the final message so the returned error reflects the actual final output.
 func finalizeCopilotResult(messages []string, schema json.RawMessage, usage TokenUsage) (*Result, error) {
 	lastMessage := ""
 	if len(messages) > 0 {
@@ -138,12 +126,6 @@ func copilotErrorDetail(copilotErr, stderr string) string {
 	return stderr
 }
 
-// buildArgs constructs the copilot CLI arguments. User-supplied extraArgs
-// (from agent_args_override) are inserted ahead of the managed flags so user
-// choices (e.g. --model, --effort) win over no-mistakes' defaults. If the user
-// supplied their own permission flag, the default --allow-all-tools is not
-// added; --no-ask-user is always added so the agent never blocks waiting for
-// interactive input.
 func (a *copilotAgent) buildArgs() []string {
 	args := make([]string, 0, len(a.extraArgs)+6)
 	args = append(args, a.extraArgs...)
@@ -160,13 +142,6 @@ func (a *copilotAgent) buildArgs() []string {
 	return args
 }
 
-// copilotUserSetPermissionMode reports whether extraArgs already grant tool
-// auto-approval, in which case buildArgs skips its default --allow-all-tools.
-// Only a blanket approval flag (--allow-all-tools, --allow-all, --yolo) or an
-// explicit allowlist (--allow-tool) counts. Flags that merely restrict the tool
-// set or filesystem paths (--available-tools, --excluded-tools, --deny-tool,
-// --allow-all-paths) do not grant approval, so the non-interactive -p run still
-// needs the default --allow-all-tools to avoid blocking on approval prompts.
 func copilotUserSetPermissionMode(extraArgs []string) bool {
 	for _, arg := range extraArgs {
 		switch {
@@ -182,8 +157,6 @@ func copilotUserSetPermissionMode(extraArgs []string) bool {
 	return false
 }
 
-// copilotUserSetAskUser reports whether extraArgs already control the ask_user
-// tool, in which case buildArgs skips its default --no-ask-user.
 func copilotUserSetAskUser(extraArgs []string) bool {
 	for _, arg := range extraArgs {
 		if arg == "--no-ask-user" {
@@ -193,10 +166,6 @@ func copilotUserSetAskUser(extraArgs []string) bool {
 	return false
 }
 
-// buildCopilotPrompt appends a JSON-output contract to the user prompt when a
-// schema is provided. The Copilot CLI has no equivalent of codex's
-// --output-schema flag, so we inline the schema in the prompt the same way pi
-// and rovodev do, then parse the final text with finalizeTextResult.
 func buildCopilotPrompt(prompt string, schema json.RawMessage) string {
 	if len(schema) == 0 {
 		return prompt
@@ -211,7 +180,6 @@ func buildCopilotPrompt(prompt string, schema json.RawMessage) string {
 		string(pretty)
 }
 
-// copilotEvent is the top-level JSONL event from the copilot CLI.
 type copilotEvent struct {
 	Type     string            `json:"type"`
 	Data     *copilotEventData `json:"data,omitempty"`
@@ -219,20 +187,13 @@ type copilotEvent struct {
 }
 
 type copilotEventData struct {
-	// assistant.message_delta
 	DeltaContent string `json:"deltaContent,omitempty"`
-	// assistant.message
 	Content      string `json:"content,omitempty"`
 	OutputTokens int    `json:"outputTokens,omitempty"`
-	// error / abort events
-	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Message      string `json:"message,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
-// parseCopilotEvents reads JSONL from the reader and dispatches events. It
-// streams assistant.message_delta content to onChunk, appends each non-empty
-// assistant.message text to messages (oldest first), accumulates output tokens,
-// and records the terminal result event's exit code.
 func parseCopilotEvents(
 	ctx context.Context,
 	r io.Reader,

@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// gateOptOutWorktree builds a bare gate repo whose default branch carries the
-// given .no-mistakes.yaml (empty string => no file), plus a linked worktree with
-// origin/main fetched, and returns (wtDir, trustedSHA).
 func gateOptOutWorktree(t *testing.T, repoYAML string) (string, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -59,9 +56,6 @@ func gateOptOutWorktree(t *testing.T, repoYAML string) (string, string) {
 	return wt, sha
 }
 
-// TestAssertGateTrustedConfigReadable_FileAbsentIsOK proves the common
-// ordinary-repo case: the trusted tree is readable and simply has no
-// .no-mistakes.yaml, which is NOT opted out and must NOT abort.
 func TestAssertGateTrustedConfigReadable_FileAbsentIsOK(t *testing.T) {
 	wt, sha := gateOptOutWorktree(t, "")
 	if err := assertGateTrustedConfigReadable(context.Background(), wt, "main", sha); err != nil {
@@ -69,8 +63,6 @@ func TestAssertGateTrustedConfigReadable_FileAbsentIsOK(t *testing.T) {
 	}
 }
 
-// TestAssertGateTrustedConfigReadable_PresentAndParseableIsOK proves a readable,
-// parseable trusted config (opted out or not) does not abort.
 func TestAssertGateTrustedConfigReadable_PresentAndParseableIsOK(t *testing.T) {
 	wt, sha := gateOptOutWorktree(t, "disable_project_settings: true\n")
 	if err := assertGateTrustedConfigReadable(context.Background(), wt, "main", sha); err != nil {
@@ -83,9 +75,6 @@ func TestAssertGateTrustedConfigReadable_PresentAndParseableIsOK(t *testing.T) {
 	}
 }
 
-// TestAssertGateTrustedConfigReadable_FetchFailureAborts is the captain's
-// security correction: an empty trustedSHA (fetch/resolve failure) must abort
-// LOUD, never silently become false.
 func TestAssertGateTrustedConfigReadable_FetchFailureAborts(t *testing.T) {
 	wt, _ := gateOptOutWorktree(t, "disable_project_settings: true\n")
 	err := assertGateTrustedConfigReadable(context.Background(), wt, "main", "")
@@ -97,8 +86,6 @@ func TestAssertGateTrustedConfigReadable_FetchFailureAborts(t *testing.T) {
 	}
 }
 
-// TestAssertGateTrustedConfigReadable_NoDefaultBranchAborts proves an unknown
-// default branch (no trusted copy to read) aborts.
 func TestAssertGateTrustedConfigReadable_NoDefaultBranchAborts(t *testing.T) {
 	wt, sha := gateOptOutWorktree(t, "")
 	if err := assertGateTrustedConfigReadable(context.Background(), wt, "", sha); err == nil {
@@ -106,9 +93,6 @@ func TestAssertGateTrustedConfigReadable_NoDefaultBranchAborts(t *testing.T) {
 	}
 }
 
-// TestAssertGateTrustedConfigReadable_UnreadableCommitAborts proves an
-// unresolvable commit (missing object / partial fetch) aborts rather than being
-// mistaken for a legitimately-absent file.
 func TestAssertGateTrustedConfigReadable_UnreadableCommitAborts(t *testing.T) {
 	wt, _ := gateOptOutWorktree(t, "")
 	bogus := "0123456789abcdef0123456789abcdef01234567"
@@ -158,8 +142,6 @@ func TestAssertGateTrustedConfigReadable_PresentUnreadableBlobAborts(t *testing.
 	}
 }
 
-// TestAssertGateTrustedConfigReadable_UnparseableAborts proves a present but
-// malformed trusted .no-mistakes.yaml aborts (we cannot evaluate the boundary).
 func TestAssertGateTrustedConfigReadable_UnparseableAborts(t *testing.T) {
 	wt, sha := gateOptOutWorktree(t, "disable_project_settings: : : {{not yaml\n")
 	err := assertGateTrustedConfigReadable(context.Background(), wt, "main", sha)

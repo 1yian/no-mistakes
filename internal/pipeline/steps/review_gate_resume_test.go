@@ -15,12 +15,6 @@ import (
 
 const openQuestionGateFindings = `{"findings":[{"id":"question-q1","severity":"warning","description":"Review question awaiting an answer: keep the legacy route?","action":"ask-user","category":"review-question"}],"summary":"one open question"}`
 
-// TestReviewStep_ResumeApprovalGateOnlyWhenTheConversationIsSettled covers every
-// condition the resumer has to get right before it may hand the executor an
-// action, because each wrong answer has its own failure: resuming a gate parked
-// on ordinary code findings steals the operator's verdict, resuming while a
-// question is open defeats the park, and resuming with the conversation off
-// changes behaviour for repositories that never opted in.
 func TestReviewStep_ResumeApprovalGateOnlyWhenTheConversationIsSettled(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -111,8 +105,6 @@ func TestReviewStep_ResumeApprovalGateOnlyWhenTheConversationIsSettled(t *testin
 	}
 }
 
-// Unreadable findings leave the gate parked rather than resuming it, which is
-// the fail-closed direction the interface requires.
 func TestReviewStep_ResumeApprovalGateFailsClosedOnUnreadableFindings(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -122,22 +114,6 @@ func TestReviewStep_ResumeApprovalGateFailsClosedOnUnreadableFindings(t *testing
 	}
 }
 
-// TestReviewStep_AnswerRacingTheParkStillReachesTheReviewer drives the state the
-// race leaves behind, through the real executor.
-//
-// ReviewStep.Execute loads the conversation, builds a finding for the open
-// question and returns; only afterwards does the executor write the step rows
-// and register the gate as waiting. An answer landing in that window is appended
-// to disk, so the daemon's answer handler sees nothing open, calls Respond, gets
-// "no step awaiting approval" and reports the answer recorded - truthfully, but
-// no reviewer is left to read it. The resulting state is exactly what this test
-// sets up: a gate parked on a question finding, nothing open on disk, and no
-// response coming. ReviewStep implemented no gate re-check at all, so
-// waitForApprovalOrReconcile blocked on approvalCh alone and the run parked
-// forever.
-//
-// Nothing here calls Respond. The run has to move on its own, or it does not
-// move.
 func TestReviewStep_AnswerRacingTheParkStillReachesTheReviewer(t *testing.T) {
 	t.Parallel()
 	mock := &sessionMockAgent{}

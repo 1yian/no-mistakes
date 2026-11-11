@@ -8,8 +8,6 @@ import (
 
 var httpURLPattern = regexp.MustCompile(`https?://[^\s'"<>]+`)
 
-// Redact hides URL userinfo while leaving non-URL and credential-free values
-// unchanged.
 func Redact(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

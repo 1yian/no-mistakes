@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// TestClosingIssueRefsPublishedIntentIsNeutralized drives a real run whose
-// intent carries closing keywords (short, cross-repo, and URL forms) without
-// --closes: the published Intent keeps the text but never a live closing
-// reference, so the PR closes nothing on merge.
 func TestClosingIssueRefsPublishedIntentIsNeutralized(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	statePath := setupStatefulGitHub(t, h)

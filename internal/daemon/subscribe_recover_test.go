@@ -70,7 +70,6 @@ subscribeNow:
 	}
 	defer cancelSub()
 
-	// Approve the step to trigger completion events.
 	var respondResult ipc.RespondResult
 	err = client.Call(ipc.MethodRespond, &ipc.RespondParams{
 		RunID:  pushResult.RunID,
@@ -810,11 +809,6 @@ func TestRecoverPreservesInterruptedCIMonitorWorktree(t *testing.T) {
 	}
 }
 
-// TestSkipWorktreeCleanup_CIMonitorInterrupted covers the reclamation rule for
-// runs marked RunCIMonitorInterrupted (issue #361): reclaim the worktree when
-// its HEAD is the already-pushed head, but preserve it when it may hold an
-// unpushed CI auto-fix commit (see steps/ci_fix.go) so recoverable work is
-// never discarded.
 func TestSkipWorktreeCleanup_CIMonitorInterrupted(t *testing.T) {
 	tmpDir := t.TempDir()
 	p := paths.WithRoot(tmpDir)
@@ -902,10 +896,6 @@ func TestSkipWorktreeCleanup_CIMonitorInterrupted(t *testing.T) {
 	})
 }
 
-// TestRecoverIsolatesGateRepoHooksPath covers issue #122 for existing
-// installs: bare repos created before the fix have no per-worktree
-// core.hookspath, so a husky pollution still disables their hook.
-// Daemon startup must migrate them in place.
 func TestRecoverIsolatesGateRepoHooksPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	p := paths.WithRoot(tmpDir)

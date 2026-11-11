@@ -10,7 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// editorKind identifies which modal editor is currently active.
 type editorKind int
 
 const (
@@ -19,7 +18,6 @@ const (
 	editorAddFinding
 )
 
-// addFindingField identifies the currently focused input in the add-finding modal.
 type addFindingField int
 
 const (
@@ -28,18 +26,14 @@ const (
 	addFieldCount
 )
 
-// editorState holds in-progress state for the currently open modal editor.
-// Only one editor is active at a time; m.editor is nil when none is open.
 type editorState struct {
 	kind     editorKind
 	step     types.StepName
 	errorMsg string
 
-	// instruction editor fields
 	findingID   string
 	instruction textarea.Model
 
-	// add-finding editor fields
 	addDesc  textarea.Model
 	addInstr textarea.Model
 	addFocus addFindingField
@@ -88,14 +82,8 @@ func newAddFindingEditor(step types.StepName) *editorState {
 	return e
 }
 
-// isActive reports whether an editor modal is currently open.
 func (m Model) editorActive() bool { return m.editor != nil && m.editor.kind != editorNone }
 
-// updateEditor routes a key event to the active editor. It returns the
-// possibly-updated model plus any tea.Cmd produced by the underlying
-// bubble components. When the editor consumes the key (anything that is
-// not an escape/save shortcut) the caller should not fall through to the
-// app-level key handling.
 func (m Model) updateEditor(msg tea.KeyMsg) (Model, tea.Cmd) {
 	if m.editor == nil {
 		return m, nil
@@ -228,8 +216,6 @@ func (m *Model) saveAddFinding() error {
 	return nil
 }
 
-// nextUserFindingID returns a unique "user-N" ID that does not collide
-// with any agent-produced finding or prior user-added finding for this step.
 func (m Model) nextUserFindingID(step types.StepName) string {
 	used := make(map[string]bool)
 	for _, item := range m.findingItems(step) {
@@ -250,8 +236,6 @@ func (m Model) nextUserFindingID(step types.StepName) string {
 	}
 }
 
-// removeUserFinding removes a user-added finding by ID from the given step
-// if present. Returns true when a removal occurred.
 func (m *Model) removeUserFinding(step types.StepName, id string) bool {
 	items := m.addedFindings[step]
 	for i, item := range items {
@@ -282,9 +266,6 @@ func (m *Model) updateUserFindingInstruction(step types.StepName, id, text strin
 	return false
 }
 
-// findingAtCursor returns the finding currently highlighted in the findings
-// list for the given step, combining agent-produced and user-added items.
-// Returns false when the cursor is out of range.
 func (m Model) findingAtCursor(step types.StepName) (types.Finding, bool) {
 	all := m.combinedFindingItems(step)
 	if len(all) == 0 {
@@ -297,8 +278,6 @@ func (m Model) findingAtCursor(step types.StepName) (types.Finding, bool) {
 	return all[cur], true
 }
 
-// combinedFindingItems returns the full list of findings for a step as
-// rendered: agent-produced items first, user-added items appended.
 func (m Model) combinedFindingItems(step types.StepName) []types.Finding {
 	items := m.findingItems(step)
 	result := make([]types.Finding, 0, len(items)+len(m.addedFindings[step]))
@@ -307,7 +286,6 @@ func (m Model) combinedFindingItems(step types.StepName) []types.Finding {
 	return result
 }
 
-// renderInstructionEditor renders the instruction editor overlay.
 func (m Model) renderInstructionEditor(width int) string {
 	if m.editor == nil || m.editor.kind != editorInstruction {
 		return ""
@@ -334,7 +312,6 @@ func (m Model) renderInstructionEditor(width int) string {
 	return renderBoxWithStyledTitle(title, body.String(), boxWidth, "")
 }
 
-// renderAddFindingEditor renders the add-finding editor overlay.
 func (m Model) renderAddFindingEditor(width int) string {
 	if m.editor == nil || m.editor.kind != editorAddFinding {
 		return ""

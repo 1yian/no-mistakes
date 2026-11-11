@@ -18,27 +18,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// pinCIMonitorClock takes a CI-monitor test off the wall clock and off the
-// network.
-//
-// The idle timeout is measured with step.now, and every poll re-arms it by
-// resolving the upstream default-branch tip - which, for a repo whose upstream
-// is gitlab.com, is a real fetch over the network. Leaving both live makes the
-// test assert that that round trip plus several fake-CLI subprocess spawns all
-// finish inside CITimeout; a loaded runner does not guarantee that, and when it
-// does not, the monitor times out before it has ever read a check and reports
-// "PR was still open when CI monitoring timed out" instead of the outcome under
-// test. None of these tests exercise timeout re-arming, so both inputs are
-// pinned to fixed values.
 func pinCIMonitorClock(step *steps.CIStep) {
 	frozen := time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC)
 	step.SetNow(func() time.Time { return frozen })
 	step.SetBaseBranchTip(func(context.Context) (string, bool) { return "base-tip-sha", true })
 }
 
-// failOnExtraPoll is the waitForNextPoll for a test whose step must resolve on
-// its first poll. Under a frozen clock nothing else would stop the loop, so a
-// regression has to surface as this error rather than as a hang.
 func failOnExtraPoll(context.Context, time.Duration) error {
 	return errors.New("CI monitor polled again instead of resolving on its first poll")
 }
@@ -317,14 +302,6 @@ func TestCIStep_GitLabStalePipelineNeverReportsPassed(t *testing.T) {
 	}
 }
 
-// TestCIStep_GitLabHeadBindingRefusalWaitsForTheDeliveredCommit pins the
-// distinction between a head-binding refusal and a provider failure. The merge
-// request is at the run's head while its head pipeline still ran at an older
-// commit - the window a push opens, and the state a stale pointer leaves behind
-// when no pipeline is created for the new head. The read is refused, and the
-// monitor must keep waiting for the head's own pipeline: a refusal must not
-// count toward the consecutive-read-error limit, which would park the run after
-// a few minutes telling the operator to check a CLI that answered fine.
 func TestCIStep_GitLabHeadBindingRefusalWaitsForTheDeliveredCommit(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -387,10 +364,6 @@ func TestCIStep_GitLabHeadBindingRefusalWaitsForTheDeliveredCommit(t *testing.T)
 	}
 }
 
-// TestCIStep_GitLabProviderReadFailureStillParks keeps the other half of that
-// distinction: a merge request read that genuinely fails is still a read
-// failure, so after the consecutive-error limit the step parks with the
-// provider-neutral CLI and credentials finding.
 func TestCIStep_GitLabProviderReadFailureStillParks(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -503,16 +476,6 @@ func TestCIStep_GitLabPendingChecksKeepMonitoringWhenDone(t *testing.T) {
 	}
 }
 
-// TestCIStep_GitLabReviewBotDiscussionCommentsParkUnderAlways is the GitLab
-// half of the review-bot comment read: an unresolved discussion note left by a
-// registered review bot's GitLab account (greptileai - GitLab has no app slug
-// and no "[bot]" login) becomes an ask-user finding under
-// ci.review_bot_comments: always, exactly as a GitHub review thread does, and
-// the head is not reported checks-passed over it.
-//
-// GitLab's job objects name no publishing application, so there is no check
-// identity to make `on_failure` (the default) fire: the comment read is the
-// whole integration here, and it runs on the green/not-yet-registered path.
 func TestCIStep_GitLabReviewBotDiscussionCommentsParkUnderAlways(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -562,8 +525,6 @@ func TestCIStep_GitLabReviewBotDiscussionCommentsParkUnderAlways(t *testing.T) {
 	}
 }
 
-// Under the always policy, only a successfully read empty discussion array
-// permits readiness. Invalid provider output must park without checks-passed.
 func TestCIStep_GitLabDiscussionReadRequiresValidArray(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -626,7 +587,6 @@ func TestCIStep_GitLabDiscussionReadRequiresValidArray(t *testing.T) {
 	}
 }
 
-// gitlabCIFindings unmarshals the findings a GitLab CI outcome carries.
 func gitlabCIFindings(t *testing.T, outcome *pipeline.StepOutcome) types.Findings {
 	t.Helper()
 	var findings types.Findings

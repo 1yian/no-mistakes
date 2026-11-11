@@ -16,10 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agentcfg"
 )
 
-// V2 admits prompts asynchronously. Its event stream is volatile, not a proof
-// of completion or of absent tool effects. Wait for the owned execution, then
-// read the complete paginated projection before accepting an answer. The V1
-// adapter remains separate because its synchronous message contract differs.
 func (a *opencodeAgent) runV2(ctx context.Context, opts RunOpts, baseURL string) (*Result, error) {
 	a.mu.Lock()
 	client := opencodeV2Client{authorization: a.v2Auth}
@@ -175,13 +171,6 @@ func (a *opencodeAgent) runV2(ctx context.Context, opts RunOpts, baseURL string)
 	if len(messages) == 0 {
 		return resultFromUsage(total), opencodeTurnFailure(opencodeToolsUnknown, fmt.Errorf("opencode projection: no messages after execution"))
 	}
-	// Completion and live events have independent delivery timing. The wait
-	// response may win even when final text is still buffered on the stream.
-	// Flush any buffered parts of the final message that never reached a
-	// definitive end, in their original (ordinal) order and using the complete
-	// fetched text for each part, so displayed progress is neither garbled nor
-	// stale. Then reconcile the final projection without emitting a prefix
-	// twice.
 	var unfinished []string
 	for key := range state.parts {
 		if !strings.HasPrefix(key, finalMessageID+":") || state.flushed[key] {
@@ -210,8 +199,6 @@ func (a *opencodeAgent) runV2(ctx context.Context, opts RunOpts, baseURL string)
 	return result, opencodeTurnFailure(evidence, err)
 }
 
-// ordinalOf returns the text-part ordinal embedded in a stream part key
-// ("messageID:ordinal"), or -1 when the key is malformed.
 func ordinalOf(key string) int {
 	i := strings.LastIndex(key, ":")
 	if i < 0 || i == len(key)-1 {
@@ -224,8 +211,6 @@ func ordinalOf(key string) int {
 	return n
 }
 
-// The private server credential is sent only to the selected loopback server,
-// never followed through a redirect or interpolated into an error URL.
 var opencodeV2HTTP = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
 type opencodeV2Client struct{ authorization string }

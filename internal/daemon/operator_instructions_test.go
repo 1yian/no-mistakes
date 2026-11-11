@@ -23,9 +23,6 @@ func pathInstructionsYAML(indent, prefix string, n int) string {
 	return b.String()
 }
 
-// Each config file fits the review-prompt caps on its own, but the operator's
-// global rules plus the repository's trusted rules do not; the run must fail
-// before any step runs instead of handing the reviewer an oversized prompt.
 func TestStartRun_FailsClosedWhenOperatorAndTrustedPathInstructionsOverrunTheCap(t *testing.T) {
 	step := &mockPassStep{name: types.StepReview}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step { return []pipeline.Step{step} })

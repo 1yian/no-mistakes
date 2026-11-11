@@ -17,14 +17,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// sessionMockAgent is a session-capable scripted agent for review-loop tests.
-// It mints deterministic session ids ("sess-1", "sess-2", ...) for new
-// sessions and echoes resumed ids, recording every invocation.
 type sessionMockAgent struct {
-	mu     sync.Mutex
-	calls  []agent.RunOpts
-	nextID int
-	// respond picks the reply for one invocation (called under the lock).
+	mu      sync.Mutex
+	calls   []agent.RunOpts
+	nextID  int
 	respond func(opts agent.RunOpts) *agent.Result
 }
 
@@ -80,10 +76,6 @@ func (a *sessionFallbackTimeoutAgent) Run(ctx context.Context, opts agent.RunOpt
 	return nil, ctx.Err()
 }
 
-// reviewSessionHarness wires a real executor around real steps with a
-// session-capable mock agent and real git worktree.
-// tweaks adjust the run's effective config before the executor is built, for
-// the tests of a setting the harness must not turn on by default.
 func reviewSessionHarness(t *testing.T, mock *sessionMockAgent, steps []pipeline.Step, tweaks ...func(*config.Config)) (*pipeline.Executor, *db.DB, *db.Run, *db.Repo, string) {
 	t.Helper()
 	workDir, baseSHA, headSHA := setupGitRepo(t)
@@ -136,18 +128,6 @@ func fixCalls(calls []agent.RunOpts) []agent.RunOpts {
 	return out
 }
 
-// TestReviewLoop_IndependentReviewTurnsOneFixerSession drives the real review
-// step through the executor's auto-fix loop for multiple rounds and proves:
-// every review turn (the initial review and every post-fix rereview) runs
-// session-free, N fix rounds share ONE durable fixer session, the review
-// turns never receive the fixer's identity, and every review round still asks
-// for a full review pass of the branch.
-//
-// Review turns are deliberately session-free: round N's fixes implement round
-// N-1's review findings, so resuming any prior review turn's session would
-// seat the prescriber of those fixes as their certifier. The cross-round
-// context a rereview legitimately needs travels in the explicit sanitized
-// round-history prompt section instead.
 func TestReviewLoop_IndependentReviewTurnsOneFixerSession(t *testing.T) {
 	t.Parallel()
 	reviewRound := 0
@@ -228,15 +208,6 @@ func TestReviewLoop_IndependentReviewTurnsOneFixerSession(t *testing.T) {
 	}
 }
 
-// TestReviewLoop_RereviewNeverResumesTheSessionThatPrescribedItsFixes is the
-// class regression for the pipeline certifying its own fixes: an auto-fix
-// round implements the findings the previous review turn prescribed, so the
-// rereview that certifies the pipeline-authored result must not resume the
-// session holding the prescriber's reasoning. Under the retired
-// one-durable-reviewer-session design the rereview resumed exactly that
-// session and degenerated into verifying that its own prescription had been
-// implemented, letting a defect the pipeline itself introduced pass with zero
-// findings.
 func TestReviewLoop_RereviewNeverResumesTheSessionThatPrescribedItsFixes(t *testing.T) {
 	t.Parallel()
 	reviewRound := 0
@@ -273,10 +244,6 @@ func TestReviewLoop_RereviewNeverResumesTheSessionThatPrescribedItsFixes(t *test
 	}
 }
 
-// TestReviewLoop_ParkRespondFixKeepsRoleSessions parks the review step at an
-// ask-user gate, responds with a fix action, and proves the user-driven fix
-// turn uses the durable fixer session while the follow-up full rereview stays
-// session-free.
 func TestReviewLoop_ParkRespondFixKeepsRoleSessions(t *testing.T) {
 	t.Parallel()
 	reviewRound := 0
@@ -370,9 +337,6 @@ func TestReviewFixerSession_FreshFallbackTimeoutExcludesResumeActivity(t *testin
 	}
 }
 
-// TestReviewLoop_OtherStepsStaySessionIsolated proves the reviewer/fixer
-// sessions are never lent to other pipeline steps: agent-driven document and
-// lint work runs with no session at all.
 func TestReviewLoop_OtherStepsStaySessionIsolated(t *testing.T) {
 	t.Parallel()
 	mock := &sessionMockAgent{}

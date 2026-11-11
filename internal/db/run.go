@@ -16,123 +16,59 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/verificationplan"
 )
 
-// Run represents a pipeline run.
 type Run struct {
-	ID      string
-	RepoID  string
-	Branch  string
-	HeadSHA string
-	BaseSHA string
-	// WorktreeDir is the directory this run's worktree was created in, resolved
-	// once at run creation from the operator's configured placement (see
-	// internal/worktrees). Every consumer of an existing run's worktree reads
-	// it instead of re-deriving placement, so editing that configuration while
-	// a run exists cannot retarget the run. It is nil only for runs recorded
-	// before the column existed, which worktrees.RecordedDir resolves to the
-	// default placement.
-	WorktreeDir *string
-	// EvidenceDir is the absolute directory this run writes evidence into,
-	// resolved once at creation from evidence_dir (or the local_root default).
-	// Nil only for runs recorded before the column existed. Those keep
-	// resolving through test.evidence.local_root and ignore a later
-	// evidence_dir, so a settings change cannot retarget them and nothing
-	// moves an existing directory.
-	EvidenceDir      *string
-	SubmittedHeadSHA *string
-	// NoMistakesVersion and NoMistakesBuildSHA identify the binary that created
-	// this run. They remain nil only for runs recorded before these fields.
-	NoMistakesVersion  *string
-	NoMistakesBuildSHA *string
-	// ReviewApprovedHeadSHA is the exact commit approved by the last
-	// successfully completed full review. It is nil for legacy runs and until
-	// review completes; mutable run/worktree heads never infer this authority.
-	ReviewApprovedHeadSHA *string
-	Status                types.RunStatus
-	PRURL                 *string
-	PRState               *string
-	PRStateObservedAt     *int64
-	CIReadyAt             *int64
-	CIReadyNoCI           bool
-	// CIReleasedAt is non-nil once the CI step finished at its checks-passed
-	// verdict under ci.release_after_checks_pass, releasing the run there. It
-	// is the durable record of that opt-in path, so the run's terminal status
-	// never reads as checks_passed for a run that only monitored the PR.
-	CIReleasedAt           *int64
-	LastPushedSHA          *string
-	PushTargetKind         *string
-	PushTargetFingerprint  *string
-	PushRef                *string
-	LastPushedAt           *int64
-	PushGeneration         *int64
-	PushActive             bool
-	TerminalHeadVerifiedAt *int64
-	// CustodyReturnedAt is non-nil once a guarded branch-sync recovery
-	// explicitly ended this run's ownership of an unpublished pipeline head
-	// (terminal run whose head was never successfully pushed, or moved after
-	// the last push). It never changes push provenance; it only records that
-	// the operator worktree took the branch back.
-	CustodyReturnedAt *int64
-	Error             *string
-	// AwaitingAgentSince is the unix-seconds timestamp at which the run parked
-	// at a gate awaiting the driving agent's response (an awaiting_approval or
-	// fix_review step). It is nil whenever the run is not parked: the executor
-	// sets it on gate entry and clears it the moment the agent responds (or the
-	// wait is cancelled). It is observability only and does not affect gate
-	// resolution.
-	AwaitingAgentSince *int64
-	// ParkedMS accumulates the run's total parked-at-gate wall time in
-	// milliseconds across every gate wait (local performance telemetry;
-	// step duration_ms values exclude this time).
-	ParkedMS        int64
-	Intent          *string
-	IntentSource    *string
-	IntentCheckJSON *string `json:"-"`
-	IntentSessionID *string
-	IntentScore     *float64
-	// LaunchNonce, LaunchValidationGeneration, and LaunchIntentDigest are
-	// nullable for ordinary and historical rows. Together they bind one opaque
-	// proof request to this run; only receipt-specific IPC exposes them.
+	ID                         string
+	RepoID                     string
+	Branch                     string
+	HeadSHA                    string
+	BaseSHA                    string
+	WorktreeDir                *string
+	EvidenceDir                *string
+	SubmittedHeadSHA           *string
+	NoMistakesVersion          *string
+	NoMistakesBuildSHA         *string
+	ReviewApprovedHeadSHA      *string
+	Status                     types.RunStatus
+	PRURL                      *string
+	PRState                    *string
+	PRStateObservedAt          *int64
+	CIReadyAt                  *int64
+	CIReadyNoCI                bool
+	CIReleasedAt               *int64
+	LastPushedSHA              *string
+	PushTargetKind             *string
+	PushTargetFingerprint      *string
+	PushRef                    *string
+	LastPushedAt               *int64
+	PushGeneration             *int64
+	PushActive                 bool
+	TerminalHeadVerifiedAt     *int64
+	CustodyReturnedAt          *int64
+	Error                      *string
+	AwaitingAgentSince         *int64
+	ParkedMS                   int64
+	Intent                     *string
+	IntentSource               *string
+	IntentCheckJSON            *string `json:"-"`
+	IntentSessionID            *string
+	IntentScore                *float64
 	LaunchNonce                *string
 	LaunchValidationGeneration *string
 	LaunchIntentDigest         *string
 	LaunchReceiptClaimedAt     *int64
-	// PRBaseBranch is a per-run override for the integration/PR target branch.
-	// It is set by the operator (axi run --base-branch) and takes precedence
-	// over pr.base_branch in repo config for this run only.
-	PRBaseBranch *string
-	// OmitIntent records the caller-side, tighten-only decision to keep the
-	// generated Intent section out of the PR body for this run. It is the
-	// OR of the per-run flag and the operator's global intent.publish_intent
-	// default, resolved once at run start. It can only reduce publication:
-	// the repository's trusted pr.publish_intent is enforced independently
-	// by the PR step.
-	OmitIntent bool
-	// PiProfile is immutable launch selection; nil retains legacy live config.
-	PiProfile       *agentcfg.PiProfile
-	ReviewerProfile *agentcfg.ReviewerProfile
-	// TranscriptHomes is immutable caller context, local to discovery.
-	TranscriptHomes *runenv.TranscriptHomes `json:"-"`
-	// QuotaRouting is the run's quota-aware agent ordering record (the
-	// quotarouting.Record JSON), written at run setup when the feature is on
-	// and appended to when a mid-run quota switch moves the run. Empty for
-	// runs from before the feature and whenever it is off. It is local-only.
-	QuotaRouting     string
-	VerificationPlan *verificationplan.Snapshot
-	// ClosingIssueRefs are the explicit issues (axi run --closes) the generated
-	// PR should close, canonicalized by internal/closingissues.
-	ClosingIssueRefs []string
-	// ClosingIssueRefsLockedAt is non-nil once a PR body composition has sampled
-	// ClosingIssueRefs, after which a reattach can no longer add to them.
-	ClosingIssueRefsLockedAt *int64
-	// PRTitle and PRBody are the caller-supplied PR title and description
-	// (axi run --pr-title / --pr-body-file), already validated. They are
-	// written only when the run is inserted, so a launch receipt can compare
-	// them without a race, and the PR step publishes them only when this run
-	// creates the PR. Nil means none was supplied.
-	PRTitle   *string
-	PRBody    *string
-	CreatedAt int64
-	UpdatedAt int64
+	PRBaseBranch               *string
+	OmitIntent                 bool
+	PiProfile                  *agentcfg.PiProfile
+	ReviewerProfile            *agentcfg.ReviewerProfile
+	TranscriptHomes            *runenv.TranscriptHomes `json:"-"`
+	QuotaRouting               string
+	VerificationPlan           *verificationplan.Snapshot
+	ClosingIssueRefs           []string
+	ClosingIssueRefsLockedAt   *int64
+	PRTitle                    *string
+	PRBody                     *string
+	CreatedAt                  int64
+	UpdatedAt                  int64
 }
 
 const runColumns = `id, repo_id, branch, head_sha, base_sha, worktree_dir, submitted_head_sha, no_mistakes_version, no_mistakes_build_sha, review_approved_head_sha, status, pr_url, pr_state, pr_state_observed_at, ci_ready_at, ci_ready_no_ci, ci_released_at, last_pushed_sha, push_target_kind, push_target_fingerprint, push_ref, last_pushed_at, push_generation, push_active, terminal_head_verified_at, custody_returned_at, error, awaiting_agent_since, parked_ms, intent, intent_source, intent_session_id, intent_score, intent_check_json, launch_nonce, launch_validation_generation, launch_intent_digest, launch_receipt_claimed_at, pr_base_branch, omit_intent, pi_profile, quota_routing, verification_plan, closing_issue_refs, closing_issue_refs_locked_at, pr_title, pr_body, evidence_dir, transcript_homes, created_at, updated_at, reviewer_profile`
@@ -173,9 +109,6 @@ func scanRun(row interface {
 	return nil
 }
 
-// WorktreePath returns the recorded worktree directory of this run, or "" for
-// a run recorded before placement was durable. Callers resolve the empty case
-// through worktrees.RecordedDir rather than treating it as a path.
 func (r *Run) WorktreePath() string {
 	if r == nil || r.WorktreeDir == nil {
 		return ""
@@ -183,8 +116,6 @@ func (r *Run) WorktreePath() string {
 	return *r.WorktreeDir
 }
 
-// EvidencePath returns the evidence directory pinned at run creation, or ""
-// when this run predates that pin.
 func (r *Run) EvidencePath() string {
 	if r == nil || r.EvidenceDir == nil {
 		return ""
@@ -192,7 +123,6 @@ func (r *Run) EvidencePath() string {
 	return *r.EvidenceDir
 }
 
-// InsertRun creates a new run record.
 func (d *DB) InsertRun(repoID, branch, headSHA, baseSHA string) (*Run, error) {
 	return d.InsertRunWithIntent(repoID, branch, headSHA, baseSHA, nil, "")
 }
@@ -201,24 +131,15 @@ func (d *DB) InsertRunWithIntent(repoID, branch, headSHA, baseSHA string, intent
 	return d.InsertRunWithIntentAndLaunchNonce(repoID, branch, headSHA, baseSHA, intent, "", "", "", prBaseBranch, false, nil)
 }
 
-// InsertRunWithIntentAndLaunchNonce persists an optional proof binding and the
-// caller-side omit-intent decision. The partial unique index remains the
-// duplicate defense across daemon processes; callers additionally serialize
-// selection under their branch lock.
 func (d *DB) InsertRunWithIntentAndLaunchNonce(repoID, branch, headSHA, baseSHA string, intent *RunIntent, launchNonce, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, plan *verificationplan.Snapshot, profiles ...agentcfg.RunSelection) (*Run, error) {
 	return d.InsertRunWithPRText(repoID, branch, headSHA, baseSHA, intent, launchNonce, validationGeneration, intentDigest, prBaseBranch, omitIntent, plan, RunPRText{}, profiles...)
 }
 
-// RunPRText is a caller-supplied PR title and description. An empty field
-// means that part was not supplied.
 type RunPRText struct {
 	Title string
 	Body  string
 }
 
-// PRTextDigest binds a caller-supplied PR title and description for strict
-// launch receipts and reattach checks. It is "" when neither was supplied, and
-// each value is length-prefixed so no title/body split shares a digest.
 func PRTextDigest(title, body string) string {
 	if title == "" && body == "" {
 		return ""
@@ -227,7 +148,6 @@ func PRTextDigest(title, body string) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-// PRTextDigest is PRTextDigest of the run's stored PR text.
 func (r *Run) PRTextDigest() string {
 	if r == nil {
 		return ""
@@ -242,14 +162,10 @@ func (r *Run) PRTextDigest() string {
 	return PRTextDigest(title, body)
 }
 
-// InsertRunWithPRText is InsertRunWithIntentAndLaunchNonce that also stores
-// the caller-supplied PR text in the same row write.
 func (d *DB) InsertRunWithPRText(repoID, branch, headSHA, baseSHA string, intent *RunIntent, launchNonce, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, plan *verificationplan.Snapshot, prText RunPRText, profiles ...agentcfg.RunSelection) (*Run, error) {
 	return d.InsertRunWithTranscriptHomes(repoID, branch, headSHA, baseSHA, intent, launchNonce, validationGeneration, intentDigest, prBaseBranch, omitIntent, plan, prText, nil, profiles...)
 }
 
-// InsertRunWithTranscriptHomes records discovery roots in the creation write,
-// before a run can be observed or resumed by the daemon.
 func (d *DB) InsertRunWithTranscriptHomes(repoID, branch, headSHA, baseSHA string, intent *RunIntent, launchNonce, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, plan *verificationplan.Snapshot, prText RunPRText, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (*Run, error) {
 	pin := agentcfg.OptionalPiProfile(profiles)
 	if err := pin.Validate(); err != nil {
@@ -314,27 +230,12 @@ func (d *DB) InsertRunWithTranscriptHomes(repoID, branch, headSHA, baseSHA strin
 	return r, nil
 }
 
-// RunWorktree is one run's recorded worktree placement, identified by the run
-// and repository that own it.
 type RunWorktree struct {
 	RunID  string
 	RepoID string
 	Dir    string
 }
 
-// ActiveRunWorktrees returns the identity and recorded placement of every
-// pending or running run, including before this binary has migrated the database.
-//
-// The gate-execution-context preflight runs before any command opens the database
-// read-write, so on the first invocation after an upgrade it reads through
-// OpenReadOnly, which deliberately does not migrate. A query naming a column the
-// schema does not have yet fails there, and because that preflight guards every
-// pipeline-control command - including the ones that would perform the migration -
-// the whole CLI would be unusable until the file was repaired by hand. So the
-// placement column is selected only when the schema has it; a database without it
-// predates worktree_roots entirely, and the empty value resolves to the default
-// placement (see worktrees.RecordedDir), which is the only one such a run can
-// have.
 func (d *DB) ActiveRunWorktrees() ([]RunWorktree, error) {
 	placement := "''"
 	if d.hasColumn("runs", "worktree_dir") {
@@ -359,9 +260,6 @@ func (d *DB) ActiveRunWorktrees() ([]RunWorktree, error) {
 	return out, rows.Err()
 }
 
-// hasColumn reports whether a table currently has a column. It reads the live
-// schema rather than assuming this binary's migrations have been applied, which
-// is what lets a read-only caller work against an older database.
 func (d *DB) hasColumn(table, column string) bool {
 	rows, err := d.sql.Query(`SELECT 1 FROM pragma_table_info(?) WHERE name = ?`, table, column)
 	if err != nil {
@@ -371,41 +269,10 @@ func (d *DB) hasColumn(table, column string) bool {
 	return rows.Next()
 }
 
-// RunWorktreesOutside returns every run whose recorded worktree directory is
-// not under prefix, newest first. It exists so startup recovery can find the
-// run worktrees this machine placed outside <NM_HOME>/worktrees without asking
-// the configuration where they might be: an edited or deleted worktree_roots
-// entry must not hide a directory a run recorded, and the run rows are the only
-// record of it.
-//
-// The prefix test is a cheap pre-filter, not the authority - a caller compares
-// canonical paths itself, since two spellings of one directory (/var and
-// /private/var) are equal to the filesystem but not to SQLite. It errs toward
-// returning too much for that reason.
-//
-// Rows with no recorded placement are deliberately excluded. A run predating
-// the column also predates worktree_roots, so its worktree can only be in the
-// default tree, which is walked directly.
-//
-// Run rows are never pruned, so this grows with the history of a repository
-// that uses worktree_roots. Callers therefore bound what they do with it -
-// see ActiveRunWorktreesOutside for the bounded set, and the daemon's startup
-// recovery for how the two are used.
 func (d *DB) RunWorktreesOutside(prefix string) ([]RunWorktree, error) {
 	return d.runWorktreesOutside(prefix, "")
 }
 
-// ActiveRunWorktreesOutside is RunWorktreesOutside restricted to runs that are
-// still pending or running.
-//
-// It is the bounded set: it holds a handful of rows at any time, where the full
-// set grows with a repository's whole history. That matters where the cost is
-// per row rather than per directory on disk - the startup process sweep turns
-// every entry into a path matcher tested against every candidate process - and
-// it is the right restriction there, because a worktree that is gone while
-// something is still standing in it belongs to a run that was executing when
-// this daemon started. Read it BEFORE crash recovery settles run statuses,
-// which turns exactly those runs terminal.
 func (d *DB) ActiveRunWorktreesOutside(prefix string) ([]RunWorktree, error) {
 	return d.runWorktreesOutside(prefix, ` AND status IN ('pending', 'running')`)
 }
@@ -434,7 +301,6 @@ func (d *DB) runWorktreesOutside(prefix, statusClause string) ([]RunWorktree, er
 	return out, rows.Err()
 }
 
-// GetRun returns a run by ID.
 func (d *DB) GetRun(id string) (*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -451,8 +317,6 @@ func (d *DB) GetRun(id string) (*Run, error) {
 	return r, nil
 }
 
-// GetRunByLaunchNonce returns the one durable proof binding for a repository
-// branch, or nil when this nonce has not created a run.
 func (d *DB) GetRunByLaunchNonce(repoID, branch, launchNonce string) (*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -472,20 +336,10 @@ func (d *DB) GetRunByLaunchNonce(repoID, branch, launchNonce string) (*Run, erro
 	return r, nil
 }
 
-// ClaimLaunchReceipt atomically returns the exact nonce-bound row and whether
-// this caller is its first observer. The expected immutable receipt binding,
-// including an explicit PR base branch, is part of the UPDATE predicate, so a
-// conflicting observer cannot consume `created`.
 func (d *DB) ClaimLaunchReceipt(repoID, branch, launchNonce, submittedHeadSHA, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, profiles ...agentcfg.RunSelection) (*Run, bool, error) {
 	return d.ClaimLaunchReceiptWithPRText(repoID, branch, launchNonce, submittedHeadSHA, validationGeneration, intentDigest, prBaseBranch, omitIntent, "", profiles...)
 }
 
-// ClaimLaunchReceiptWithPRText is ClaimLaunchReceipt that also requires the
-// run's supplied PR text to match prTextDigest ("" for none). The digest is
-// checked on the row already read, and the UPDATE is pinned to that row's ID;
-// its PR text is written with the row and never changes, so a conflicting
-// observer cannot consume `created`, even when the row is inserted while this
-// call runs. With no row yet it returns nil, like any unclaimable receipt.
 func (d *DB) ClaimLaunchReceiptWithPRText(repoID, branch, launchNonce, submittedHeadSHA, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, prTextDigest string, profiles ...agentcfg.RunSelection) (*Run, bool, error) {
 	request := agentcfg.OptionalPiProfile(profiles)
 	if err := request.ValidateRequest(); err != nil {
@@ -544,7 +398,6 @@ func (d *DB) ClaimLaunchReceiptWithPRText(repoID, branch, launchNonce, submitted
 	return r, false, nil
 }
 
-// GetRunsByRepo returns all runs for a repo, newest first.
 func (d *DB) GetRunsByRepo(repoID string) ([]*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -566,10 +419,6 @@ func (d *DB) GetRunsByRepo(repoID string) ([]*Run, error) {
 	return runs, rows.Err()
 }
 
-// GetRunsByRepoHead returns the runs for a repo matching an exact branch and
-// head SHA, newest first. It lets a caller detect the run created by a specific
-// push without scanning (and rebuilding step data for) the repo's entire run
-// history, so the cost stays bounded to the handful of runs for one head.
 func (d *DB) GetRunsByRepoHead(repoID, branch, headSHA string) ([]*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -594,11 +443,6 @@ func (d *DB) GetRunsByRepoHead(repoID, branch, headSHA string) ([]*Run, error) {
 	return runs, rows.Err()
 }
 
-// GetActiveRun returns the currently active run (pending or running) for a repo,
-// if any. When branch is non-empty, only a run on that exact branch is returned
-// - the setup wizard relies on this to decide whether a new run is needed for
-// the current branch. When branch is empty, returns the most recently created
-// active run across any branch.
 func (d *DB) GetActiveRun(repoID, branch string) (*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -623,7 +467,6 @@ func (d *DB) GetActiveRun(repoID, branch string) (*Run, error) {
 	return r, nil
 }
 
-// GetActiveRuns returns all pending or running runs across all repos, newest first.
 func (d *DB) GetActiveRuns() ([]*Run, error) {
 	columns, err := d.runColumns()
 	if err != nil {
@@ -649,7 +492,6 @@ func (d *DB) GetActiveRuns() ([]*Run, error) {
 	return runs, rows.Err()
 }
 
-// UpdateRunStatus updates a run's status and updated_at timestamp.
 func (d *DB) UpdateRunStatus(id string, status types.RunStatus) error {
 	// push_active is cleared for a terminal status: a run that can no longer
 	// push (or repair and re-push) must not keep the marker that makes
@@ -661,8 +503,6 @@ func (d *DB) UpdateRunStatus(id string, status types.RunStatus) error {
 	return nil
 }
 
-// UpdateRunPRURL sets the PR URL on a run. A delayed PR-step write must not
-// regress terminal lifecycle truth already observed by the CI monitor.
 func (d *DB) UpdateRunPRURL(id, prURL string) error {
 	ts := now()
 	_, err := d.sql.Exec(`UPDATE runs SET pr_url = ?, pr_state = CASE WHEN pr_state IN ('merged', 'closed') THEN pr_state ELSE 'open' END, pr_state_observed_at = ?, updated_at = ? WHERE id = ?`, prURL, ts, ts, id)
@@ -672,9 +512,6 @@ func (d *DB) UpdateRunPRURL(id, prURL string) error {
 	return nil
 }
 
-// PushBinding records the exact target and commit proven by a successful
-// pipeline-owned push. TargetFingerprint is a one-way digest and must never be
-// a raw URL.
 type PushBinding struct {
 	HeadSHA           string
 	TargetKind        string
@@ -682,9 +519,6 @@ type PushBinding struct {
 	Ref               string
 }
 
-// UpdateRunPushBinding advances a run's successful-push provenance and
-// increments its generation. It is called for both a completed push and a
-// freshly verified already-up-to-date push.
 func (d *DB) UpdateRunPushBinding(id string, binding PushBinding) error {
 	ts := now()
 	_, err := d.sql.Exec(
@@ -697,11 +531,6 @@ func (d *DB) UpdateRunPushBinding(id string, binding PushBinding) error {
 	return nil
 }
 
-// UpdateRunPublication atomically records the exact published head and its
-// successful-push provenance. A publication also settles a pending Test
-// restart (see UpdateRunHeadSHAWithCarriedReview): while one is pending the CI
-// step refuses to publish, so only the Push step - after Test onward ran - can
-// reach this write.
 func (d *DB) UpdateRunPublication(id string, binding PushBinding) error {
 	ts := now()
 	_, err := d.sql.Exec(
@@ -714,9 +543,6 @@ func (d *DB) UpdateRunPublication(id string, binding PushBinding) error {
 	return nil
 }
 
-// PushRebind is the exact verified state a rewritten-remote recovery may
-// rebind from and the live head it rebinds to. UpstreamURL and ForkURL are the
-// repo target the live head was verified against.
 type PushRebind struct {
 	Status             types.RunStatus
 	ExpectedPushed     string
@@ -732,16 +558,6 @@ type PushRebind struct {
 	Head               string
 }
 
-// RebindRunPushedHead moves a terminal run's push binding to a head the
-// configured target was verified to hold after a rewrite outside the pipeline.
-// It is a single compare-and-swap over the exact binding and repo target the
-// caller verified (run status, pushed head, generation, recorded run head and
-// custody state, target kind,
-// fingerprint, ref, no active push, no retired PR, no other non-terminal run
-// on the same repo branch, and the repo's current upstream and fork URLs) and
-// reports whether it applied. head_sha follows only
-// when it equalled the old binding, so a custody-returned run keeps its own
-// recorded head.
 func (d *DB) RebindRunPushedHead(id string, rebind PushRebind) (bool, error) {
 	result, err := d.sql.Exec(
 		`UPDATE runs SET head_sha = CASE WHEN head_sha = last_pushed_sha THEN ? ELSE head_sha END, last_pushed_sha = ?, push_generation = COALESCE(push_generation, 0) + 1, updated_at = ?
@@ -768,10 +584,6 @@ func (d *DB) RebindRunPushedHead(id string, rebind PushRebind) (bool, error) {
 	return affected == 1, nil
 }
 
-// SetRunCustodyReturned stamps the moment a guarded recovery explicitly
-// returned custody of this run's branch to the operator worktree. Stamping is
-// idempotent: the first timestamp wins so the record keeps the original
-// recovery moment.
 func (d *DB) SetRunCustodyReturned(id string) error {
 	return d.SetRunsCustodyReturned([]string{id})
 }
@@ -797,8 +609,6 @@ func (d *DB) SetRunsCustodyReturned(ids []string) error {
 	return nil
 }
 
-// SetRunPushActive marks whether a pipeline phase currently owns a possible
-// branch-head update. Sync refuses while this marker is set.
 func (d *DB) SetRunPushActive(id string, active bool) error {
 	_, err := d.sql.Exec(`UPDATE runs SET push_active = ?, updated_at = ? WHERE id = ?`, active, now(), id)
 	if err != nil {
@@ -807,11 +617,6 @@ func (d *DB) SetRunPushActive(id string, active bool) error {
 	return nil
 }
 
-// UpdateRunPRState persists normalized lifecycle truth independently of logs.
-// A merged or closed PR is also the terminal outcome of the final CI monitor
-// step, so the PR observation and active-run finalization are committed in one
-// transaction. This makes the database authoritative even if execution stops
-// before the executor's ordinary follow-up completion write.
 func (d *DB) UpdateRunPRState(id, state string) error {
 	state = strings.ToLower(strings.TrimSpace(state))
 	ts := now()
@@ -843,10 +648,6 @@ func (d *DB) UpdateRunPRState(id, state string) error {
 	return nil
 }
 
-// ReconcileTerminalPRRuns repairs active rows written by an older or
-// interrupted daemon after terminal PR truth became durable but before the
-// separate run completion write. It is called during exclusive daemon startup
-// before parked-run planning and generic crash recovery.
 func (d *DB) ReconcileTerminalPRRuns() (int, error) {
 	ts := now()
 	tx, err := d.sql.Begin()
@@ -933,8 +734,6 @@ func finalizeTerminalPRRun(tx *sql.Tx, id string, ts int64) error {
 	return nil
 }
 
-// SetRunCIReady persists checks-passed readiness so fresh TUI and AXI attaches
-// do not depend on receiving a historical log line.
 func (d *DB) SetRunCIReady(id string, ready bool) error {
 	return d.SetRunCIReadyWithReason(id, ready, false)
 }
@@ -957,8 +756,6 @@ func (d *DB) SetRunCIReadyWithReason(id string, ready, declaredNoCI bool) error 
 	return nil
 }
 
-// UpdateRunReviewApprovedHeadSHA replaces the run's review authority with the
-// exact commit approved by the latest successfully completed full review.
 func (d *DB) UpdateRunReviewApprovedHeadSHA(id, headSHA string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET review_approved_head_sha = ?, updated_at = ? WHERE id = ?`, headSHA, now(), id)
 	if err != nil {
@@ -967,10 +764,6 @@ func (d *DB) UpdateRunReviewApprovedHeadSHA(id, headSHA string) error {
 	return nil
 }
 
-// SetRunWorktreeDir records the directory this run's worktree is created in.
-// The caller writes it before the directory exists, so the run's placement is
-// durable from the moment anything can observe the run, and never changes
-// afterwards even if the operator edits worktree_roots.
 func (d *DB) SetRunWorktreeDir(id, dir string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET worktree_dir = ?, updated_at = ? WHERE id = ?`, dir, now(), id)
 	if err != nil {
@@ -979,9 +772,6 @@ func (d *DB) SetRunWorktreeDir(id, dir string) error {
 	return nil
 }
 
-// SetRunEvidenceDir records the evidence directory resolved for this run.
-// A second call does not move it: existing runs stay where they were pinned,
-// including when evidence_dir later points somewhere else.
 func (d *DB) SetRunEvidenceDir(id, dir string) error {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
@@ -994,7 +784,6 @@ func (d *DB) SetRunEvidenceDir(id, dir string) error {
 	return nil
 }
 
-// UpdateRunHeadSHA updates the run head SHA and timestamp.
 func (d *DB) UpdateRunHeadSHA(id, headSHA string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, updated_at = ? WHERE id = ?`, headSHA, now(), id)
 	if err != nil {
@@ -1003,8 +792,6 @@ func (d *DB) UpdateRunHeadSHA(id, headSHA string) error {
 	return nil
 }
 
-// UpdateRunHeadSHAForRevalidation records a late repair while revoking the
-// previous review binding so the repaired head must pass review before push.
 func (d *DB) UpdateRunHeadSHAForRevalidation(id, headSHA string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, review_approved_head_sha = NULL, updated_at = ? WHERE id = ?`, headSHA, now(), id)
 	if err != nil {
@@ -1013,17 +800,6 @@ func (d *DB) UpdateRunHeadSHAForRevalidation(id, headSHA string) error {
 	return nil
 }
 
-// UpdateRunHeadSHAWithCarriedReview records a late repair that was proven to
-// be a pure replay of the approved commits and moves the review approval to
-// it in the same write. The update applies only while the run still holds
-// approvedHeadSHA as its approval, so an approval revoked or replaced in the
-// meantime is never resurrected onto the new head; it reports whether the
-// carry was recorded.
-//
-// The same write marks a Test restart pending. The carried head has not been
-// through Test onward yet, and the outcome that asks for that restart does not
-// survive a later fix response or a daemon restart while the CI step is
-// parked; the durable flag does, until UpdateRunPublication settles it.
 func (d *DB) UpdateRunHeadSHAWithCarriedReview(id, approvedHeadSHA, headSHA string) (bool, error) {
 	result, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, review_approved_head_sha = ?, ci_test_restart_pending = 1, updated_at = ? WHERE id = ? AND review_approved_head_sha = ?`, headSHA, headSHA, now(), id, approvedHeadSHA)
 	if err != nil {
@@ -1036,8 +812,6 @@ func (d *DB) UpdateRunHeadSHAWithCarriedReview(id, approvedHeadSHA, headSHA stri
 	return rows == 1, nil
 }
 
-// RunTestRestartPending reports whether a carried review approval still
-// awaits its restart at Test (see UpdateRunHeadSHAWithCarriedReview).
 func (d *DB) RunTestRestartPending(id string) (bool, error) {
 	var pending bool
 	if err := d.sql.QueryRow(`SELECT ci_test_restart_pending FROM runs WHERE id = ?`, id).Scan(&pending); err != nil {
@@ -1046,12 +820,10 @@ func (d *DB) RunTestRestartPending(id string) (bool, error) {
 	return pending, nil
 }
 
-// UpdateRunError sets the error message on a run.
 func (d *DB) UpdateRunError(id, errMsg string) error {
 	return d.UpdateRunErrorStatus(id, errMsg, types.RunFailed)
 }
 
-// UpdateRunErrorStatus sets the error message and terminal status on a run.
 func (d *DB) UpdateRunErrorStatus(id, errMsg string, status types.RunStatus) error {
 	_, err := d.sql.Exec(`UPDATE runs SET error = ?, status = ?, push_active = 0, terminal_head_verified_at = NULL, updated_at = ? WHERE id = ?`, errMsg, status, now(), id)
 	if err != nil {
@@ -1088,11 +860,6 @@ func (d *DB) VerifyTerminalRunHeadRewrite(id string, status types.RunStatus, rec
 	return updated == 1, err
 }
 
-// VerifyTerminalRunRecordedHead stamps a terminal run's recorded head as its
-// verified head without moving it. It is a compare-and-swap on everything the
-// caller's proof read - status, recorded head, review authority, no earlier
-// stamp, custody not yet returned - so a run that changed while the proof was
-// being built is left alone and the caller refuses.
 func (d *DB) VerifyTerminalRunRecordedHead(id string, status types.RunStatus, recordedHead, reviewedHead string) (bool, error) {
 	ts := now()
 	result, err := d.sql.Exec(`UPDATE runs SET push_active = 0, terminal_head_verified_at = ?, updated_at = ? WHERE id = ? AND status = ? AND head_sha = ? AND review_approved_head_sha = ? AND terminal_head_verified_at IS NULL AND custody_returned_at IS NULL`, ts, ts, id, status, recordedHead, reviewedHead)
@@ -1103,9 +870,6 @@ func (d *DB) VerifyTerminalRunRecordedHead(id string, status types.RunStatus, re
 	return updated == 1, err
 }
 
-// RecordRunTerminalHeadEvidence records a managed worktree head that was
-// verified immediately before crash recovery makes the run terminal. The
-// subsequent stale-run status transition deliberately preserves this stamp.
 func (d *DB) RecordRunTerminalHeadEvidence(id, headSHA string) error {
 	ts := now()
 	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, terminal_head_verified_at = ?, updated_at = ? WHERE id = ? AND status IN (?, ?)`,
@@ -1113,27 +877,14 @@ func (d *DB) RecordRunTerminalHeadEvidence(id, headSHA string) error {
 	return err
 }
 
-// RunIntentSourceAgent is the intent_source value stamped when the driving
-// agent supplied the intent explicitly via `axi run --intent`. It marks an
-// authoritative, author-stated goal (score 1) as opposed to a transcript
-// inference (whose source is the matched agent name: "claude", "codex", ...).
-// Prompt-construction code branches on this to frame an explicit intent as
-// authoritative acceptance criteria rather than a low-confidence hint.
 const RunIntentSourceAgent = "agent"
 
-// RunIntentSourceRerun marks an authoritative intent inherited from the run
-// selected for a rerun. It remains authoritative, but the distinct value keeps
-// inherited intent inspectable instead of confusing it with a new override.
 const RunIntentSourceRerun = "rerun"
 
-// IsAuthoritativeRunIntentSource reports whether a run's intent came from an
-// explicit operator/agent contract, either directly or through rerun
-// inheritance.
 func IsAuthoritativeRunIntentSource(source string) bool {
 	return source == RunIntentSourceAgent || source == RunIntentSourceRerun
 }
 
-// RunIntent carries the four intent-related columns persisted on a run.
 type RunIntent struct {
 	Summary   string
 	Source    string
@@ -1141,8 +892,6 @@ type RunIntent struct {
 	Score     float64
 }
 
-// SetRunIntentCheck pins the merged admission policy for the run. It may be
-// written once after insertion and cannot be changed afterward.
 func (d *DB) SetRunIntentCheck(id, policyJSON string) error {
 	result, err := d.sql.Exec(`UPDATE runs SET intent_check_json = ? WHERE id = ? AND intent_check_json IS NULL`, policyJSON, id)
 	if err != nil {
@@ -1156,7 +905,6 @@ func (d *DB) SetRunIntentCheck(id, policyJSON string) error {
 	return nil
 }
 
-// UpdateRunIntent persists the inferred user intent for a run.
 func (d *DB) UpdateRunIntent(id string, intent RunIntent) error {
 	_, err := d.sql.Exec(
 		`UPDATE runs SET intent = ?, intent_source = ?, intent_session_id = ?, intent_score = ?, updated_at = ? WHERE id = ?`,
@@ -1168,21 +916,8 @@ func (d *DB) UpdateRunIntent(id string, intent RunIntent) error {
 	return nil
 }
 
-// ErrClosingIssueRefsLocked reports that a PR body composition already sampled
-// a run's closing issue references, so a later update cannot reach the Issues section. It is
-// the fail-closed half of the claim protocol described on
-// ClaimClosingIssueRefsForPRBody: callers must surface it rather than treat the
-// write as applied.
 var ErrClosingIssueRefsLocked = errors.New("closing issue references already consumed by PR body composition")
 
-// UpdateRunClosingIssueRefs sets the canonical closing issue references on a
-// run record. The PR step renders them in its stable Issues section.
-//
-// The write is refused with ErrClosingIssueRefsLocked once the PR step has claimed
-// the value (closing_issue_refs_locked_at is non-NULL). Reporting success for a write
-// that can no longer change the PR body is the race this guard closes: the
-// reattach path in `axi run --closes` would otherwise tell the caller the link
-// was applied while the already-composed body shipped without it.
 func (d *DB) UpdateRunClosingIssueRefs(id string, refs []string) error {
 	encoded, err := closingissues.Encode(refs)
 	if err != nil {
@@ -1206,8 +941,6 @@ func (d *DB) UpdateRunClosingIssueRefs(id string, refs []string) error {
 	if affected > 0 {
 		return nil
 	}
-	// No row changed: either the run is gone or its closing issue references are locked.
-	// Distinguish the two so a missing run does not masquerade as a race.
 	var locked sql.NullInt64
 	switch err := d.sql.QueryRow(`SELECT closing_issue_refs_locked_at FROM runs WHERE id = ?`, id).Scan(&locked); {
 	case err == sql.ErrNoRows:
@@ -1224,8 +957,6 @@ func (d *DB) UpdateRunClosingIssueRefs(id string, refs []string) error {
 	}
 }
 
-// MergeRunClosingIssueRefs adds refs to an unclaimed run without dropping
-// values supplied when the run started or by an earlier reattachment.
 func (d *DB) MergeRunClosingIssueRefs(id string, refs []string) error {
 	incoming, err := closingissues.Normalize(refs)
 	if err != nil {
@@ -1285,16 +1016,6 @@ func (d *DB) MergeRunClosingIssueRefs(id string, refs []string) error {
 	return nil
 }
 
-// ClaimClosingIssueRefsForPRBody returns the run's closing issue references and
-// marks them as consumed by PR body composition in one transaction. After the claim, a
-// concurrent UpdateRunClosingIssueRefs fails with ErrClosingIssueRefsLocked instead of
-// silently landing too late to appear in the composed body.
-//
-// The claim is deliberately never released. A PR step that runs again (a
-// resume, or a later update of an existing PR) recomposes from the value it
-// already claimed, so refusing the late write stays correct; the caller is told
-// to edit the PR or start a fresh run rather than being told a link was added
-// that never appears.
 func (d *DB) ClaimClosingIssueRefsForPRBody(id string) ([]string, error) {
 	tx, err := d.sql.Begin()
 	if err != nil {
@@ -1332,10 +1053,6 @@ func (d *DB) ClaimClosingIssueRefsForPRBody(id string) ([]string, error) {
 	return refs, nil
 }
 
-// SetRunAwaitingAgent marks a run as parked awaiting the driving agent,
-// stamping awaiting_agent_since with the current time. Called by the executor
-// when a step enters a gate (awaiting_approval / fix_review). This is a pollable
-// observability signal only; it does not change gate resolution.
 func (d *DB) SetRunAwaitingAgent(id string) error {
 	ts := now()
 	_, err := d.sql.Exec(`UPDATE runs SET awaiting_agent_since = ?, updated_at = ? WHERE id = ?`, ts, ts, id)
@@ -1345,10 +1062,6 @@ func (d *DB) SetRunAwaitingAgent(id string) error {
 	return nil
 }
 
-// ClearRunAwaitingAgent clears the awaiting-agent marker on a run. Called by the
-// executor the moment the agent responds (or the approval wait is cancelled) and
-// the run resumes, so awaiting_agent_since is non-nil exactly while a gate is
-// actually parked.
 func (d *DB) ClearRunAwaitingAgent(id string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET awaiting_agent_since = NULL, updated_at = ? WHERE id = ?`, now(), id)
 	if err != nil {
@@ -1357,8 +1070,6 @@ func (d *DB) ClearRunAwaitingAgent(id string) error {
 	return nil
 }
 
-// AddRunParkedDuration accumulates parked-at-gate wall time onto a run's
-// total. Called by the executor when a gate wait ends.
 func (d *DB) AddRunParkedDuration(id string, ms int64) error {
 	if ms <= 0 {
 		return nil
@@ -1386,17 +1097,10 @@ func (d *DB) CompleteRunAwaitingAgent(id string, ms int64) error {
 	return nil
 }
 
-// RecoverStaleRuns recovers any runs stuck in pending/running status after a
-// previous daemon crash. Runs interrupted while monitoring CI for an already
-// created PR are preserved as a non-failure outcome; all other stale runs are
-// failed. Returns the number of recovered runs.
 func (d *DB) RecoverStaleRuns(errMsg string) (int, error) {
 	return d.RecoverStaleRunsExcept(errMsg, nil)
 }
 
-// RecoverStaleRunsExcept marks active runs as failed unless their IDs appear
-// in preserved. Callers use preserved only after independently proving a run
-// can be reconstructed safely.
 func (d *DB) RecoverStaleRunsExcept(errMsg string, preserved map[string]struct{}) (int, error) {
 	ts := now()
 
@@ -1566,10 +1270,6 @@ func recoveryExclusionClause(preserved map[string]struct{}) (string, []any) {
 	return " AND id NOT IN (" + strings.Join(placeholders, ", ") + ")", args
 }
 
-// GetRunGates returns the gate list pinned to a run at creation, or the empty
-// string for a run that pinned none. The payload is opaque here: config owns
-// its shape (config.MarshalGates/ParseGates), and the database only guarantees
-// that what was written survives a restart.
 func (d *DB) GetRunGates(id string) (string, error) {
 	var gates sql.NullString
 	err := d.sql.QueryRow(`SELECT gates_json FROM runs WHERE id = ?`, id).Scan(&gates)
@@ -1582,11 +1282,6 @@ func (d *DB) GetRunGates(id string) (string, error) {
 	return gates.String, nil
 }
 
-// SetRunGates records the repository-declared gates this run executes. The
-// caller writes it once, at run creation, before the executor can record a
-// single step, so the run's step sequence is fixed from the moment anything can
-// observe it and stays fixed even if the trusted default branch's gates change
-// while the run is in flight.
 func (d *DB) SetRunGates(id, gates string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET gates_json = ?, updated_at = ? WHERE id = ?`, gates, now(), id)
 	if err != nil {
@@ -1595,11 +1290,6 @@ func (d *DB) SetRunGates(id, gates string) error {
 	return nil
 }
 
-// SetRunQuotaRouting records (or amends) one run's quota-aware agent
-// ordering payload. The daemon owns the read-modify-write: it reads the run's
-// record, appends a mid-run switch, and writes the whole record back, so the
-// database stores an opaque JSON blob exactly as it does for the CI rerun
-// state.
 func (d *DB) SetRunQuotaRouting(id, payload string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET quota_routing = ?, updated_at = ? WHERE id = ?`, payload, now(), id)
 	if err != nil {
@@ -1608,8 +1298,6 @@ func (d *DB) SetRunQuotaRouting(id, payload string) error {
 	return nil
 }
 
-// GetRunQuotaRouting returns the run's stored quota-routing payload, or the
-// empty string when the run has none (feature off, or a pre-feature run).
 func (d *DB) GetRunQuotaRouting(id string) (string, error) {
 	var payload sql.NullString
 	err := d.sql.QueryRow(`SELECT quota_routing FROM runs WHERE id = ?`, id).Scan(&payload)
@@ -1622,10 +1310,6 @@ func (d *DB) GetRunQuotaRouting(id string) (string, error) {
 	return payload.String, nil
 }
 
-// GetRunCIRerunState returns the CI step's persisted rerun budget for a run, or
-// the empty string when the run has never spent one. The payload is opaque
-// here: the CI step owns its shape, and the database only guarantees that what
-// was written survives a restart.
 func (d *DB) GetRunCIRerunState(id string) (string, error) {
 	var state sql.NullString
 	err := d.sql.QueryRow(`SELECT ci_rerun_state FROM runs WHERE id = ?`, id).Scan(&state)
@@ -1638,10 +1322,6 @@ func (d *DB) GetRunCIRerunState(id string) (string, error) {
 	return state.String, nil
 }
 
-// SetRunCIRerunState persists the CI step's rerun budget. The CI step calls
-// this before asking the provider to re-run a check, so a crash between the
-// reservation and the request costs the budget instead of handing the recovered
-// run a rerun the limit already accounted for.
 func (d *DB) SetRunCIRerunState(id, state string) error {
 	_, err := d.sql.Exec(`UPDATE runs SET ci_rerun_state = ?, updated_at = ? WHERE id = ?`, state, now(), id)
 	if err != nil {

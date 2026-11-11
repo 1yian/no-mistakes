@@ -12,12 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestProviderPluginJourney drives a full run against a host no built-in
-// provider recognizes, with PR and CI handled by an operator-configured
-// provider plugin: the global provider_plugins block is read by the real
-// loader.
-// The plugin is the reference fake (internal/scm/plugin/fakeplugin) behind
-// the fakeagent binary, so the test exercises only the public CLI contract.
 func TestProviderPluginJourney(t *testing.T) {
 	const (
 		pluginHost = "ssm.example.com"

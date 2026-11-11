@@ -19,8 +19,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// PR fixtures model their preceding successful Push step explicitly. Other
-// pipeline-step fixtures retain their original unpublished state.
 func newPRTestContext(t *testing.T, ag agent.Agent, dir, base, head string, cmds config.Commands, branches ...string) *pipeline.StepContext {
 	t.Helper()
 	sctx := newTestContext(t, ag, dir, base, head, cmds)
@@ -152,8 +150,6 @@ func TestVerifyPublishedPR_ProviderWithoutProofKeepsPriorBehavior(t *testing.T) 
 	}
 }
 
-// The oracle is issue #1433's successful-push contract. Real commits and the
-// durable SQLite push binding are independent of the synthetic forge response.
 func TestPRStep_ExactPushedHeadPostcondition(t *testing.T) {
 	for _, route := range []string{"create", "update", "persisted"} {
 		for _, fault := range []string{"", "wrong_sha", "moved_head", "missing_sha", "wrong_repository", "wrong_source_repository", "wrong_owner", "wrong_branch", "closed", "merged", "unreadable", "lookup_failed", "missing_push", "active_push", "wrong_push_target", "wrong_push_ref"} {

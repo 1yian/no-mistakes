@@ -1,10 +1,5 @@
 //go:build ignore
 
-// Command: go run ./internal/e2edaemon/reapmain.go
-//
-// Suite-wrapper reaper entrypoint. Invoked from scripts/e2e.sh on EXIT/INT/TERM.
-// Does not claim to survive SIGKILL of the wrapper shell itself; next-run
-// recovery (TestMain + pre-reap) covers that case via the on-disk inventory.
 package main
 
 import (

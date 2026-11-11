@@ -35,19 +35,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// triggerWaitTimeout bounds how long we wait for the daemon to register a run
-// after pushing to the gate before falling back to a rerun.
 const triggerWaitTimeout = 5 * time.Second
 
-// abortStateWaitTimeout bounds the post-cancel wait for the executor to
-// persist its terminal state before AXI renders refreshed custody guidance.
-// It is a variable only so regression tests can shorten the bounded wait;
-// production always uses the default.
 var abortStateWaitTimeout = 10 * time.Second
 
-// defaultAxiWait is the hold cap for axi run/respond. It sits under a typical
-// 10-minute agent tool budget so the command returns with a reattach error
-// instead of hanging until the harness kills it.
 const defaultAxiWait = 8 * time.Minute
 
 func bindAxiWaitFlag(cmd *cobra.Command, wait *time.Duration) {
@@ -76,16 +67,10 @@ func isAxiWaitElapsed(parent, drive context.Context, err error) bool {
 	return deadlinePassed(drive)
 }
 
-// emitAxiWaitElapsed reports a bounded hold ending without an outcome. Lead
-// fields open the document, so a call that recorded something first (a respond
-// echoing its dispositions, an answer echoing its own) still reports it.
 func emitAxiWaitElapsed(cmd *cobra.Command, wait time.Duration, reattach string, lead ...toon.Field) error {
 	return emitAxiWaitElapsedForRun(cmd, wait, "", reattach, lead...)
 }
 
-// emitAxiWaitElapsedForRun is emitAxiWaitElapsed for a call that selected its
-// run by id: status carries --run, and a reattach command without a --run form
-// is named as one that must run in the clone of that run.
 func emitAxiWaitElapsedForRun(cmd *cobra.Command, wait time.Duration, runID, reattach string, lead ...toon.Field) error {
 	if wait != defaultAxiWait {
 		reattach += " --wait " + wait.String()
@@ -107,12 +92,10 @@ func emitAxiWaitElapsedForRun(cmd *cobra.Command, wait time.Duration, runID, rea
 	return &exitError{code: 1}
 }
 
-// terminalStatus reports whether a run has reached a final state.
 func terminalStatus(status string) bool {
 	return types.RunStatus(status).Terminal()
 }
 
-// outcomeFor maps a terminal run status onto an agent-facing outcome word.
 func outcomeFor(status string) string {
 	switch types.RunStatus(status) {
 	case types.RunCompleted:
@@ -136,9 +119,6 @@ func outcomeFor(status string) string {
 	}
 }
 
-// outcomeForRun qualifies successful terminal runs whose external checks were overridden
-// or whose publication/verification automatically skipped. Explicit per-run
-// skips carry no automatic cause and retain their existing outcome.
 func outcomeForRun(rv runView) string {
 	return qualifyOutcome(outcomeFor(rv.Status), rv)
 }
@@ -305,8 +285,6 @@ func runAxiRunWithLaunchProof(cmd *cobra.Command, autoYes bool, skipSteps []type
 	return runAxiRunWithPRText(cmd, autoYes, skipSteps, intent, baseBranch, omitIntent, launchNonce, validationGeneration, wait, db.RunPRText{}, profiles...)
 }
 
-// runAxiRunWithPRText is runAxiRunWithLaunchProof with the caller-supplied PR
-// text already read and validated by resolvePRTextFlags.
 func runAxiRunWithPRText(cmd *cobra.Command, autoYes bool, skipSteps []types.StepName, intent, baseBranch string, omitIntent bool, launchNonce, validationGeneration string, wait time.Duration, prText db.RunPRText, profiles ...agentcfg.RunSelection) error {
 	profile := agentcfg.OptionalPiProfile(profiles)
 	reviewer := agentcfg.OptionalReviewerProfile(profiles)
@@ -552,8 +530,6 @@ func digestLaunchIntent(intent string) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-// closingIssueRefsFromFlags reads and canonicalizes --closes. A command
-// without the flag (tests driving runAxiRunWithLaunchProof directly) has none.
 func closingIssueRefsFromFlags(cmd *cobra.Command) ([]string, error) {
 	if cmd.Flags().Lookup("closes") == nil {
 		return nil, nil
@@ -565,11 +541,6 @@ func closingIssueRefsFromFlags(cmd *cobra.Command) ([]string, error) {
 	return normalizeClosingIssueRefs(values)
 }
 
-// requireDaemonHonorsClosingIssueRefs refuses --closes before any push when
-// the running daemon predates it. Daemon requests decode JSON permissively, so
-// an older daemon would drop closing_issue_refs from the push and still open
-// the PR; it does refuse the unknown update method, which is the probe. An
-// empty update is a no-op for a daemon that knows the method.
 func requireDaemonHonorsClosingIssueRefs(client closingIssueRefsUpdateClient, refs []string) error {
 	if len(refs) == 0 {
 		return nil
@@ -620,8 +591,6 @@ func forwardClosingIssueRefsToActiveRun(client closingIssueRefsUpdateClient, run
 	return nil
 }
 
-// errClosingIssueRefsPRBodyComposed reports that the run's PR body was already
-// composed, so --closes could not reach its Issues section. Retrying cannot help.
 var errClosingIssueRefsPRBodyComposed = errors.New(
 	"forward closing issue references to active run: the PR body was already composed, so --closes could not be applied")
 
@@ -643,9 +612,6 @@ func validateAxiRunBaseBranch(ctx context.Context, baseBranch string) error {
 	return steps.VerifyRemoteBranchExists(ctx, ".", normalized)
 }
 
-// conflictingActiveRunPRBaseBranch reports when --base-branch would be
-// discarded by reattaching to an in-flight run that already has a different
-// (or empty) per-run PR target.
 func conflictingActiveRunPRBaseBranch(run *ipc.RunInfo, requested string) error {
 	requested = strings.TrimSpace(requested)
 	if requested == "" || run == nil {
@@ -692,11 +658,6 @@ func activeRunInfoForHead(run *ipc.RunInfo, headSHA string) *ipc.RunInfo {
 	return run
 }
 
-// preflightGuard returns an emitter for the first unmet pre-flight condition
-// when starting a new run, or nil when the branch is ready to validate. It
-// mirrors the wizard's branch/commit hygiene as detect-and-guide: refuse the
-// default branch, and refuse an uncommitted working tree, each with the
-// command the agent should run.
 func preflightGuard(ctx context.Context, env *axiEnv, branch string) func(*cobra.Command) error {
 	if env.repo.DefaultBranch != "" && branch == env.repo.DefaultBranch {
 		return func(cmd *cobra.Command) error {
@@ -726,9 +687,6 @@ func preflightGuard(ctx context.Context, env *axiEnv, branch string) func(*cobra
 	return nil
 }
 
-// untrackedHint renders the untracked paths named in the dirty-worktree error,
-// bounded so a large untracked tree cannot bloat the error document. Paths stay
-// in git's order and the hint states how many were left out.
 func untrackedHint(untracked []string) string {
 	const maxUntrackedPaths = 5
 	const sep = ", "
@@ -754,9 +712,6 @@ func displayUntrackedPath(path string) string {
 	return path
 }
 
-// branchOwnershipError carries the shared branch-sync classification that
-// blocked a fresh trigger. Keeping the state intact lets AXI render the exact
-// structured next action instead of reducing the refusal to a Git push error.
 type branchOwnershipError struct {
 	state branchsync.State
 }
@@ -817,16 +772,10 @@ func freshRunBranchOwnershipState(ctx context.Context, env *axiEnv) *branchsync.
 	}
 }
 
-// triggerRun starts a fresh run for branch: it pushes the current HEAD through
-// the gate to trigger a pipeline, and falls back to a rerun when the push was a
-// no-op (the gate already had this commit). Callers must check for an existing
-// active run first (see activeRunID) and apply pre-flight guards.
 func triggerRun(ctx context.Context, env *axiEnv, branch string, skipSteps []types.StepName, intent, baseBranch string, omitIntent bool, planID string, closesIssues []string, profiles ...agentcfg.RunSelection) (string, error) {
 	return triggerRunWithPRText(ctx, env, branch, skipSteps, intent, baseBranch, omitIntent, planID, closesIssues, db.RunPRText{}, profiles...)
 }
 
-// triggerRunWithPRText is triggerRun carrying caller-supplied PR text on the
-// push and on the rerun fallback.
 func triggerRunWithPRText(ctx context.Context, env *axiEnv, branch string, skipSteps []types.StepName, intent, baseBranch string, omitIntent bool, planID string, closesIssues []string, prText db.RunPRText, profiles ...agentcfg.RunSelection) (string, error) {
 	if err := env.client.RequireTranscriptHomes(); err != nil {
 		return "", err
@@ -927,8 +876,6 @@ func triggerRunWithPRText(ctx context.Context, env *axiEnv, branch string, skipS
 		return "", fmt.Errorf("push %q to gate: %v", branch, pushErr)
 	}
 
-	// No run appeared: the push was likely up-to-date. Refresh the caller's
-	// clean-head evidence because it may have changed while waiting above.
 	var rr ipc.RerunResult
 	params := rerunParams(env.repo.ID, branch, skipSteps, intent, baseBranch)
 	params.TranscriptHomes = homes
@@ -1021,9 +968,6 @@ func claimLaunchReceipt(client *ipc.Client, repoID, branch, launchNonce, submitt
 	return result.Receipt, nil
 }
 
-// triggerProofRun captures the immutable submitted commit and waits only for
-// the matching nonce-bound receipt. Ordinary active-run heuristics never prove
-// strict launch identity.
 func triggerProofRun(ctx context.Context, env *axiEnv, branch, headSHA string, skipSteps []types.StepName, intent, baseBranch string, omitIntent bool, launchNonce, validationGeneration, planID string, closesIssues []string, prText db.RunPRText, profiles ...agentcfg.RunSelection) (*ipc.LaunchReceipt, error) {
 	if err := env.client.RequireTranscriptHomes(); err != nil {
 		return nil, err
@@ -1103,11 +1047,6 @@ func waitForLaunchReceipt(ctx context.Context, client *ipc.Client, repoID, branc
 	}
 }
 
-// runIDsForHead snapshots the run IDs already present for a repo's exact branch
-// and head SHA before a push, so waitForTriggeredRunForHead can tell a run this
-// push created apart from a terminal run an earlier push left behind. Scoping to
-// the head keeps this lookup, and the poll that reuses the same method, bounded
-// to the handful of runs for one head rather than the repo's whole history.
 func runIDsForHead(client *ipc.Client, repoID, branch, headSHA string) (map[string]struct{}, error) {
 	runs, err := runsForHead(client, repoID, branch, headSHA)
 	if err != nil {
@@ -1128,10 +1067,6 @@ func runsForHead(client *ipc.Client, repoID, branch, headSHA string) ([]ipc.RunI
 	return result.Runs, nil
 }
 
-// waitForTriggeredRunForHead waits for the run created by this trigger. The
-// active-run lookup handles normal execution; the head lookup catches a run
-// that fails before it can be observed as active. priorRunIDs prevents an
-// up-to-date push from attaching to a terminal run created by an earlier one.
 func waitForTriggeredRunForHead(ctx context.Context, client *ipc.Client, repoID, branch, headSHA string, priorRunIDs map[string]struct{}, timeout time.Duration) (*ipc.RunInfo, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -1185,10 +1120,6 @@ func rerunParams(repoID, branch string, skipSteps []types.StepName, intent, base
 	return &ipc.RerunParams{RepoID: repoID, Branch: branch, SkipSteps: skipSteps, Intent: intent, PRBaseBranch: baseBranch}
 }
 
-// conflictingActiveRunOmitIntent reports when --no-publish-intent would be
-// discarded by reattaching to an in-flight run that was started without it,
-// so the driving agent cannot believe the run omits the public Intent
-// section while the active run will actually publish it.
 func conflictingActiveRunOmitIntent(run *ipc.RunInfo, requested bool) error {
 	if !requested || run == nil {
 		return nil
@@ -1199,8 +1130,6 @@ func conflictingActiveRunOmitIntent(run *ipc.RunInfo, requested bool) error {
 	return fmt.Errorf("active run %s is already in progress without --no-publish-intent", run.ID)
 }
 
-// emitLaunchReceipt writes the proof before driveRun subscribes, so callers
-// retain the daemon-authored binding even if later driving blocks or fails.
 func emitLaunchReceipt(cmd *cobra.Command, receipt ipc.LaunchReceipt) {
 	fields := []toon.Field{
 		toon.Field{Key: "run_id", Value: receipt.RunID},
@@ -1222,37 +1151,10 @@ func emitLaunchReceipt(cmd *cobra.Command, receipt ipc.LaunchReceipt) {
 	emitDoc(cmd, toon.Field{Key: "launch_receipt", Value: toon.NewObject(fields...)})
 }
 
-// driveRun subscribes to a run and reconciles authoritative state on transition
-// events until it reaches an approval gate, a terminal state, or CI checks
-// pass, streaming step transitions to progress (stderr). When
-// autoApprove is set it resolves each gate and continues; otherwise it returns
-// at the first gate so the caller can surface it for a human/agent decision.
-//
-// Auto-resolution means "agree to fix every finding": a gate with actionable
-// findings is fixed (every finding selected), and the resulting fix_review is
-// accepted; gates with only non-actionable findings are approved. Each step is
-// fixed at most once so a finding the fix cannot clear converges to an approval
-// instead of looping forever. Protected-path and Test unvalidated-work refusals
-// always return their gate for an explicit response, including under --yes, as
-// does a gate holding an open review question or an unreadable question history
-// (pipeline.HasUnansweredReviewQuestion / HasUnreadableReviewQuestionHistory).
-//
-// The CI step keeps monitoring an open PR until a human merges or closes it, or
-// explicitly hands it off (a live status the TUI shows), so it never reaches a
-// terminal state on its own by default. An agent driving the run must not block
-// on that human action, so
-// once CI checks pass driveRun returns with ciReady=true: the change is
-// validated and the PR is ready for a human to merge. The daemon keeps
-// monitoring in the background. Under the opt-in ci.release_after_checks_pass
-// the step finishes there instead and the run completes, so driveRun returns
-// the terminal checks-passed outcome.
 func driveRun(ctx context.Context, progress io.Writer, client *ipc.Client, socketPath, runID string, autoApprove bool) (run *ipc.RunInfo, ciReady bool, err error) {
 	return driveRunSelected(ctx, progress, client, socketPath, runID, autoApprove, false)
 }
 
-// driveRunSelected is driveRun for a caller that may have selected its run by
-// id, whose progress lines then name the run's clone for commands without a
-// --run form.
 func driveRunSelected(ctx context.Context, progress io.Writer, client *ipc.Client, socketPath, runID string, autoApprove, explicitRun bool) (run *ipc.RunInfo, ciReady bool, err error) {
 	reconciler := newRunReconciler(&ipcRunStateSource{socketPath: socketPath}, runID)
 	defer reconciler.Close()
@@ -1353,8 +1255,6 @@ func driveRunScoped(ctx context.Context, progress io.Writer, client *ipc.Client,
 	}
 }
 
-// ciReadyToMerge reports whether the CI step is actively monitoring and the
-// daemon has persisted checks-passed readiness.
 func ciReadyToMerge(rv runView) bool {
 	activity := cimonitor.FromAuthoritative(rv.CIReady, rv.CIReadyNoCI, nil)
 	for _, s := range rv.Steps {
@@ -1365,13 +1265,6 @@ func ciReadyToMerge(rv runView) bool {
 	return false
 }
 
-// gateResolution decides how --yes answers an approval gate. A gate with
-// actionable findings (anything other than purely informational "no-op") is
-// fixed with every finding selected, unless this step was already fixed once -
-// in which case the gate is approved so the run converges instead of looping on
-// a finding the fix cannot clear. Gates with only non-actionable findings, no
-// findings, or actionable findings that carry no IDs (which a fix would resolve
-// to zero selections) are approved.
 func gateResolution(gate stepView, alreadyFixed bool) (types.ApprovalAction, []string) {
 	if alreadyFixed || gate.Status == string(types.StepStatusFixReview) {
 		return types.ActionApprove, nil
@@ -1392,13 +1285,6 @@ func gateResolution(gate stepView, alreadyFixed bool) (types.ApprovalAction, []s
 	return types.ActionFix, ids
 }
 
-// gateIdentity identifies the exact park a wait is leaving: the parked step's
-// status and the round it parked at. The status alone cannot tell a re-park
-// apart from the park just answered, since the next round can park at the same
-// status before any wait observes the intervening running state. Every
-// execution round is persisted before the step parks again (InsertStepRound),
-// so a re-park always carries a higher round count. A daemon that reports no
-// round count leaves both sides zero and degrades to the status-only check.
 type gateIdentity struct {
 	status string
 	round  int
@@ -1408,10 +1294,6 @@ func (s stepView) identity() gateIdentity {
 	return gateIdentity{status: s.Status, round: s.RoundCount}
 }
 
-// waitStepLeavesGate blocks until the named step leaves the gate we just
-// answered, or the run terminates. This prevents a double-approve race:
-// respond is asynchronous, so without waiting the next event reconciliation
-// could still observe the same gate and approve it twice.
 func waitStepLeavesGate(ctx context.Context, socketPath, runID, step string, gate gateIdentity) error {
 	reconciler := newRunReconciler(&ipcRunStateSource{socketPath: socketPath}, runID)
 	defer reconciler.Close()
@@ -1438,10 +1320,6 @@ func getRunInfo(ctx context.Context, socketPath, runID string) (*ipc.RunInfo, er
 	return (&ipcRunStateSource{socketPath: socketPath}).Reconcile(ctx, runID)
 }
 
-// sendRespond issues an approval action to the daemon for a step and returns
-// what it recorded. A response the daemon refused is returned as a
-// *respondRefusalError - the gate is still parked and the response can be
-// corrected.
 func sendRespond(client *ipc.Client, runID string, step types.StepName, action types.ApprovalAction, findingIDs, ignoreFindingIDs []string, instructions map[string]string, added []types.Finding, approvalReason string, origin types.ResponseOrigin, coverage ...*ipc.CoverageBinding) (ipc.RespondResult, error) {
 	params := &ipc.RespondParams{
 		Origin:           origin,
@@ -1473,8 +1351,6 @@ func sendRespond(client *ipc.Client, runID string, step types.StepName, action t
 	return result, nil
 }
 
-// respondRefusalError carries a refusal the daemon reported for a response that
-// left the gate parked.
 type respondRefusalError struct {
 	refusal string
 	missing []string
@@ -1483,9 +1359,6 @@ type respondRefusalError struct {
 
 func (e *respondRefusalError) Error() string { return e.refusal }
 
-// helpLines renders the refusal as the structured error's help entries: the
-// daemon's own next action plus the missing pending IDs the response has to
-// cover.
 func (e *respondRefusalError) helpLines(runID string) []string {
 	var help []string
 	if len(e.missing) > 0 {
@@ -1505,9 +1378,6 @@ func (e *respondRefusalError) helpLines(runID string) []string {
 	return help
 }
 
-// respondDispositionFields renders what a response recorded for its gate. It is
-// empty for actions that record no finding-level decision, so only a fix
-// response is echoed.
 func respondDispositionFields(result ipc.RespondResult) []toon.Field {
 	if !result.OK || (result.Fixed == nil && result.Ignored == nil && result.Kept == nil) {
 		return nil
@@ -1529,21 +1399,10 @@ func respondDispositionFields(result ipc.RespondResult) []toon.Field {
 	)}}
 }
 
-// renderDriveResult prints the run snapshot plus one of: the active gate (exit
-// 0, a normal decision point), a checks-passed outcome (exit 0, CI readiness is
-// established by green checks or the trusted no_ci declaration and the PR is
-// ready for a human to merge), or the terminal outcome (exit 0 when passed or
-// handed off, exit 1 when blocked, failed, or cancelled). Successful outcomes also carry
-// the fixes the pipeline applied and reporting instructions, so the agent
-// closes the loop with the user instead of stopping at "it passed". lead
-// fields, when given, open the document ahead of the run object, so a command
-// that did something before driving (axi answer) reports it in the same return.
 func renderDriveResult(cmd *cobra.Command, run *ipc.RunInfo, ciReady bool, lead ...toon.Field) error {
 	return renderDriveResultForRun(cmd, run, ciReady, "", lead...)
 }
 
-// renderDriveResultForRun is renderDriveResult for a call that selected its run
-// by id: the gate's follow-up commands carry that id.
 func renderDriveResultForRun(cmd *cobra.Command, run *ipc.RunInfo, ciReady bool, runID string, lead ...toon.Field) error {
 	rv := runViewFromIPC(run)
 	fields := append(append([]toon.Field{}, lead...), runObjectField(rv))
@@ -1673,9 +1532,6 @@ func renderDriveResultForRun(cmd *cobra.Command, run *ipc.RunInfo, ciReady bool,
 	return &exitError{code: 1}
 }
 
-// checksPassedMergeLine is the shared "checks passed, the PR is ready for a
-// human to merge" sentence, used both at the opt-in monitor's stopping point
-// and by a run that reached its validation verdict and released the lane.
 func checksPassedMergeLine(rv runView, activity cimonitor.Activity) string {
 	merge := "CI checks passed - the PR is ready. Ask the user to review and merge it."
 	if activity.DeclaredNoCI {
@@ -1687,7 +1543,6 @@ func checksPassedMergeLine(rv runView, activity cimonitor.Activity) string {
 	return merge
 }
 
-// appendFixesField adds a fixes table when the pipeline applied any fixes.
 func appendFixesField(fields []toon.Field, fixes []fixRow) []toon.Field {
 	if len(fixes) == 0 {
 		return fields
@@ -1695,9 +1550,6 @@ func appendFixesField(fields []toon.Field, fixes []fixRow) []toon.Field {
 	return append(fields, toon.Field{Key: "fixes", Value: fixes})
 }
 
-// successReportHelp returns the reporting instructions for a successful
-// outcome: always summarize the run for the user, and when the pipeline
-// applied fixes, own the misses and list every fix for the user's review.
 func successReportHelp(fixes []fixRow) []string {
 	help := []string{"Summarize this pipeline run for the user in a concise, easily readable format: what was validated and what was found."}
 	if len(fixes) > 0 {
@@ -1707,9 +1559,6 @@ func successReportHelp(fixes []fixRow) []string {
 	return help
 }
 
-// legacyApprovalReasonRefusal is what a daemon that predates `--action abort`
-// answers to the reason an abort carries: it only accepted one for a Test
-// approval. It refused before recording anything, so the gate stays parked.
 const legacyApprovalReasonRefusal = "an approval reason applies only to Test approval"
 
 func newAxiRespondCmd() *cobra.Command {
@@ -2030,9 +1879,6 @@ func runAxiRespond(cmd *cobra.Command, ra respondArgs) error {
 	return renderDriveResultForRun(cmd, final, ciReady, ra.runID, lead...)
 }
 
-// gateIdentityFor returns the identity of step's current park in rv, defaulting
-// to the awaiting-approval status so the post-respond wait still functions if
-// the step was not found.
 func gateIdentityFor(rv runView, step string) gateIdentity {
 	for _, s := range rv.Steps {
 		if s.Name == step {
@@ -2149,13 +1995,6 @@ func runAxiAbort(cmd *cobra.Command, runID string) error {
 	return nil
 }
 
-// waitForTerminalRun polls until the exact run reports a terminal status.
-// confirmed is true only when a fresh read positively proved terminal
-// quiescence; a cancelled context, an exhausted bounded wait, or a failed
-// status read returns the last observed run state (possibly nil) with
-// confirmed false and a reason naming what prevented confirmation. Callers
-// must never present a completed abort or authoritative final ownership
-// guidance without confirmed true.
 func waitForTerminalRun(ctx context.Context, client *ipc.Client, runID string, timeout time.Duration) (run *ipc.RunInfo, confirmed bool, reason string) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -2208,13 +2047,6 @@ func waitForTerminalRun(ctx context.Context, client *ipc.Client, runID string, t
 	}
 }
 
-// emitUnconfirmedAbort reports the accepted not-yet-quiescent abort contract:
-// terminal quiescence is unconfirmed, so the command exits nonzero, includes
-// the last structured run state when one is available, and presents no
-// completed-abort claim and no authoritative user-owned or recoverable
-// ownership guidance. requested records whether a cancellation request
-// actually reached the daemon; a daemon-unavailable path never requested one
-// and must not claim it did.
 func emitUnconfirmedAbort(cmd *cobra.Command, runID, branch, reason string, last *runView, requested bool) error {
 	message := fmt.Sprintf("cancellation was requested for run %s, but terminal quiescence is unconfirmed: %s", runID, reason)
 	if !requested {
@@ -2241,13 +2073,6 @@ func emitUnconfirmedAbort(cmd *cobra.Command, runID, branch, reason string, last
 	return &exitError{code: 1}
 }
 
-// runAxiAbortByRunID cancels a run by its id directly via the daemon, without
-// resolving a repo, branch, or worktree. This is how an orphaned monitor run -
-// one whose worktree was torn down before the PR merged - gets reaped from
-// outside. A stopped daemon is never started: the durable database record then
-// decides whether the exact run is terminal, still nonterminal, or unknown.
-// Likewise, a daemon's no-active-run response is resolved through one bounded
-// durable-state read before this command reports success.
 func runAxiAbortByRunID(cmd *cobra.Command, runID string) error {
 	p, err := paths.New()
 	if err != nil {
@@ -2294,8 +2119,6 @@ func runAxiAbortByRunID(cmd *cobra.Command, runID string) error {
 	return nil
 }
 
-// runViewPtrFromIPC adapts an optional IPC run snapshot for the unconfirmed
-// abort emission, which renders whatever last structured state is available.
 func runViewPtrFromIPC(run *ipc.RunInfo) *runView {
 	if run == nil {
 		return nil
@@ -2304,13 +2127,6 @@ func runViewPtrFromIPC(run *ipc.RunInfo) *runView {
 	return &view
 }
 
-// resolveInactiveAbortTruth decides what a cancel_run "no active run" result
-// actually means by resolving the exact run's durable state through one
-// bounded, cancellation-aware get_run read: an already-terminal run is an
-// idempotent success carrying its terminal run_status (no new cancellation is
-// fabricated), a positively proven unknown id keeps the documented no-op, and
-// a still-nonterminal or unreadable run is the nonzero terminal-unconfirmed
-// contract.
 func resolveInactiveAbortTruth(cmd *cobra.Command, client *ipc.Client, runID string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), abortStateWaitTimeout)
 	defer cancel()
@@ -2348,12 +2164,6 @@ func resolveInactiveAbortTruth(cmd *cobra.Command, client *ipc.Client, runID str
 	return emitUnconfirmedAbort(cmd, runID, run.Branch, fmt.Sprintf("the daemon reported no active run, but the exact run's durable state is still %s", run.Status), runViewPtrFromIPC(run), true)
 }
 
-// resolveDaemonDownAbortTruth is the consistent daemon-unavailable treatment:
-// nothing can be cancelled without a daemon, so the durable run record alone
-// decides. A recorded terminal run resolves idempotently with its terminal
-// status, an id with no durable record keeps the documented no-op, and a
-// recorded nonterminal or unreadable run is the nonzero terminal-unconfirmed
-// contract - never a claimed cancellation and never a started daemon.
 func resolveDaemonDownAbortTruth(cmd *cobra.Command, p *paths.Paths, runID string) error {
 	database, err := db.Open(p.DB())
 	if err != nil {

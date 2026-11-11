@@ -7,9 +7,6 @@ import (
 	"syscall"
 )
 
-// isTransientPIDOpenError reports whether err is the brief Windows sharing
-// collision that can surface while the writer's MoveFileEx swaps a fresh
-// PID file into place.
 func isTransientPIDOpenError(err error) bool {
 	if err == nil {
 		return false
@@ -25,9 +22,6 @@ func isTransientPIDOpenError(err error) bool {
 	return false
 }
 
-// isTransientPIDReplaceError reports whether err is the brief Windows rename
-// collision that can surface while another process still has the destination
-// PID file open.
 func isTransientPIDReplaceError(err error) bool {
 	if err == nil {
 		return false

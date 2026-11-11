@@ -193,16 +193,6 @@ func TestRecordReviewAnswerRequiresItsKey(t *testing.T) {
 	}
 }
 
-// TestGetPreviousRunReviewRoundsDoesNotDeadlockTheSingleConnection is a real
-// regression: the first version of this query held an open *sql.Rows while
-// calling GetRoundsByStep, and this pool is SetMaxOpenConns(1), so the nested
-// query waited forever for the connection its own caller held. It presented as
-// a pipeline run wedged at the review step with no error anywhere - one
-// `internal/daemon` test hit its 10-minute package timeout with the goroutine
-// parked in database/sql's connection wait.
-//
-// The bound makes the assertion real rather than decorative: on the old code
-// this test never returns, so it fails by timeout instead of passing quietly.
 func TestGetPreviousRunReviewRoundsDoesNotDeadlockTheSingleConnection(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/work/repo", "https://example.com/repo.git", "main")
@@ -249,9 +239,6 @@ func TestGetPreviousRunReviewRoundsDoesNotDeadlockTheSingleConnection(t *testing
 	}
 }
 
-// No previous run, and a previous run whose review recorded no round, both read
-// as "nothing to carry forward" rather than an error, so an ordinary first run
-// on a branch is unaffected.
 func TestGetPreviousRunReviewRoundsReportsNothingToCarryForward(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/work/repo", "https://example.com/repo.git", "main")
@@ -281,11 +268,6 @@ func TestGetPreviousRunReviewRoundsReportsNothingToCarryForward(t *testing.T) {
 	}
 }
 
-// TestReviewAnswersAreKeyedPerAskWithinOneRun is the store half of the
-// re-used-id defect: within ONE run a re-asked id used to overwrite the earlier
-// row, so the first human decision vanished from the do-not-re-raise set and
-// from the PR body with nothing erroring - and the design doc promises nothing
-// deletes these rows.
 func TestReviewAnswersAreKeyedPerAskWithinOneRun(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/work/repo", "https://example.com/repo.git", "main")

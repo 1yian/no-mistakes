@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// TestCIReleaseAfterChecksPassDefaultsOffAndResolvesFromTrustedConfig is the
-// regression for the CI step's opt-in release verdict.
-//
-// The default is what the step has always done: monitor the pull request until
-// it is merged or closed. Finishing at the checks verdict is an explicit opt-in,
-// never an assumed consent (VISION.md), and a trusted repository config may set
-// it for its own workflow while a pushed branch cannot.
 func TestCIReleaseAfterChecksPassDefaultsOffAndResolvesFromTrustedConfig(t *testing.T) {
 	dir := t.TempDir()
 	repoPath := filepath.Join(dir, ".no-mistakes.yaml")

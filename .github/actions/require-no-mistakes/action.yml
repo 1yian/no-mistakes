@@ -60,7 +60,7 @@ inputs:
     description: >-
       Token used to read the PR's live body and head SHA from the GitHub API,
       so a rerun of an old job can't resurrect a stale attestation verdict with
-      a fresh timestamp (see verify.py's module docstring). Defaults to the
+      a fresh timestamp (see this action's README). Defaults to the
       job's own ambient token; forwarding it does not by itself grant any
       permission. Requires the caller's `permissions:` to include
       `pull-requests: read` unless explicit pr-body/pr-head-sha inputs are

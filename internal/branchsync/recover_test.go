@@ -60,10 +60,6 @@ func (s *cancellationRaceStep) Execute(sctx *pipelinepkg.StepContext) (*pipeline
 	return nil, context.Cause(sctx.Ctx)
 }
 
-// recoverFixture reproduces the stranded custody state from the v1.38.1
-// dogfood report: a run went terminal at the pre_push phase, so its pipeline
-// fix commits exist only in the local gate's bare branch while the registered
-// operator worktree still sits at the submitted head with no push binding.
 type recoverFixture struct {
 	t         *testing.T
 	ctx       context.Context
@@ -79,10 +75,6 @@ type recoverFixture struct {
 	preserved string
 }
 
-// newRecoverFixture builds an operator repo on feature/recover at the
-// submitted head, a bare gate whose feature/recover branch carries two extra
-// pipeline fix commits (the preserved head), and a run row that is terminal
-// with head_sha at the preserved head and no push provenance.
 func newRecoverFixture(t *testing.T, status types.RunStatus) *recoverFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -274,11 +266,6 @@ func assertManualReconciliationOffer(t *testing.T, state State) {
 	}
 }
 
-// TestTerminalPrePushRunSurfacesGuardedCustodyRecovery is the regression test
-// for the stranded state itself (dogfood run 01KXN8YJ6DWF8XPP582DWQC3HV): a
-// terminal run at the pre_push phase must not be a dead end. The state stays
-// pipeline_owned, but safety identifies it as recoverable, exposes the run's
-// terminal status, and offers the guarded custody-return action.
 func TestTerminalPrePushRunSurfacesGuardedCustodyRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -303,9 +290,6 @@ func TestTerminalPrePushRunSurfacesGuardedCustodyRecovery(t *testing.T) {
 	}
 }
 
-// TestActivePrePushRunStaysBlockedWithoutRecovery pins the other half of the
-// class split: while the run is still active the pre-push block is correct and
-// no custody-return action may be offered.
 func TestActivePrePushRunStaysBlockedWithoutRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -332,11 +316,6 @@ func TestActivePrePushRunStaysBlockedWithoutRecovery(t *testing.T) {
 	}
 }
 
-// TestRecoverCleanBehindFastForwardsAndReturnsCustody is the primary recovery
-// journey: terminal cancelled pre-push, clean worktree at the submitted head.
-// Recovery must anchor the preserved commits locally, fast-forward the branch
-// to the preserved head, stamp custody returned, and leave the branch free for
-// a fresh run.
 func TestRecoverCleanBehindFastForwardsAndReturnsCustody(t *testing.T) {
 	t.Parallel()
 
@@ -430,7 +409,6 @@ func TestRecoverReportsDirtyFinalStateWhenPostMergeHookMutatesWorktree(t *testin
 	}
 }
 
-// TestRecoverIdempotentAfterSuccess proves a repeated recover is a safe no-op.
 func TestRecoverIdempotentAfterSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -444,8 +422,6 @@ func TestRecoverIdempotentAfterSuccess(t *testing.T) {
 	}
 }
 
-// TestRecoverWorktreeAlreadyAtPreservedHeadReturnsCustodyWithoutMutation
-// covers the equal cell: nothing to reconcile, custody return only.
 func TestRecoverWorktreeAlreadyAtPreservedHeadReturnsCustodyWithoutMutation(t *testing.T) {
 	t.Parallel()
 
@@ -471,8 +447,6 @@ func TestRecoverWorktreeAlreadyAtPreservedHeadReturnsCustodyWithoutMutation(t *t
 	}
 }
 
-// TestRecoverLocalAheadOfPreservedHeadReturnsCustodyWithoutMutation covers the
-// ahead cell: the preserved commits are already incorporated locally.
 func TestRecoverLocalAheadOfPreservedHeadReturnsCustodyWithoutMutation(t *testing.T) {
 	t.Parallel()
 
@@ -502,8 +476,6 @@ func TestRecoverLocalAheadOfPreservedHeadReturnsCustodyWithoutMutation(t *testin
 	}
 }
 
-// TestRecoverDirtyWorktreeRefusesWithoutMutation covers the behind+dirty cell:
-// never fast-forward over uncommitted changes; refuse with actionable options.
 func TestRecoverDirtyWorktreeRefusesWithoutMutation(t *testing.T) {
 	t.Parallel()
 
@@ -529,10 +501,6 @@ func TestRecoverDirtyWorktreeRefusesWithoutMutation(t *testing.T) {
 	}
 }
 
-// TestRecoverDivergedRefusesButKeepLocalReturnsCustody covers the diverged
-// cells: the default refuses with the anchor named, and --keep-local performs
-// the explicit choice - custody at the local head, gate reset to it atomically,
-// preserved commits still reachable through the anchor ref.
 func TestRecoverDivergedRefusesButKeepLocalReturnsCustody(t *testing.T) {
 	t.Parallel()
 
@@ -789,9 +757,6 @@ func TestBoundArchiveProofMatrixFailsClosedWithoutGitMutation(t *testing.T) {
 	})
 }
 
-// TestRecoverKeepLocalDirtyBehindReturnsCustodyWithoutTouchingWorktree covers
-// the explicit keep-local choice on a dirty worktree: no worktree mutation is
-// needed, so dirtiness must not block it, and the gate follows the kept head.
 func TestRecoverKeepLocalDirtyBehindReturnsCustodyWithoutTouchingWorktree(t *testing.T) {
 	t.Parallel()
 
@@ -815,9 +780,6 @@ func TestRecoverKeepLocalDirtyBehindReturnsCustodyWithoutTouchingWorktree(t *tes
 	}
 }
 
-// TestRecoverGateDivergenceAndUnavailabilityFailClosed: an independently moved
-// gate no longer hides a separately anchored preserved head, while deleted or
-// unavailable preservation still refuses.
 func TestRecoverGateDivergenceAndUnavailabilityFailClosed(t *testing.T) {
 	t.Parallel()
 
@@ -964,11 +926,6 @@ func TestRecoverKeepLocalAnchorsIndependentlyMovedGateHead(t *testing.T) {
 	}
 }
 
-// TestRecoverTerminalPostPushRunWithMovedHead covers the post-push class cell:
-// a run that pushed successfully, then went terminal with additional
-// unpublished pipeline commits. Recovery fast-forwards to the preserved head
-// and the branch classifies as local_ahead against the pushed binding, whose
-// existing run_pipeline guidance publishes the recovered commits.
 func TestRecoverTerminalPostPushRunWithMovedHead(t *testing.T) {
 	t.Parallel()
 
@@ -1004,8 +961,6 @@ func TestRecoverTerminalPostPushRunWithMovedHead(t *testing.T) {
 	}
 }
 
-// TestRecoverRefusesWhenNothingIsStranded pins the not-applicable guard: a
-// healthy behind state (successful push binding) must not be recoverable.
 func TestRecoverRefusesWhenNothingIsStranded(t *testing.T) {
 	t.Parallel()
 
@@ -1019,13 +974,6 @@ func TestRecoverRefusesWhenNothingIsStranded(t *testing.T) {
 	}
 }
 
-// newUnmovedRecoverFixture models the released cancellation shape: a run
-// cancelled through the supported abort before the pipeline changed anything
-// (for example because delivery switched to a direct PR mid-validation). The
-// gate branch and the run's head_sha still equal the submitted head, and the
-// run carries no push provenance and no custody stamp. Cancellation releases
-// ownership of this shape: it must classify user_owned, never wrong-branch
-// ambiguity and never recoverable pipeline custody.
 func buildUnmovedRecoverRepositories(t *testing.T, root string) recoverHeads {
 	t.Helper()
 	remote := filepath.Join(root, "upstream.git")
@@ -1776,12 +1724,6 @@ func TestLegacyTerminalUnmovedRunKeepsRecoverableCustody(t *testing.T) {
 	}
 }
 
-// TestTerminalUnmovedPrePushRunReportsUserOwnedRelease is the regression test
-// for the pre-push abort taken to switch delivery away from the pipeline: a
-// terminal run whose head never moved must be selected and reported as
-// user-owned with the exact branch/head ownership facts - never wrong-branch
-// ambiguity, and never recoverable pipeline custody (cancellation releases
-// ownership; there is nothing pipeline-created to recover).
 func TestTerminalUnmovedPrePushRunReportsUserOwnedRelease(t *testing.T) {
 	t.Parallel()
 
@@ -1815,9 +1757,6 @@ func TestTerminalUnmovedPrePushRunReportsUserOwnedRelease(t *testing.T) {
 	}
 }
 
-// TestActiveUnmovedRunBlocksAsPipelineOwnedWithoutRecovery pins the active half
-// of the unmoved shape: while the run is active the branch is pipeline-owned
-// with a precise reason, recovery refuses as run-active, and nothing mutates.
 func TestActiveUnmovedRunBlocksAsPipelineOwnedWithoutRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -1841,10 +1780,6 @@ func TestActiveUnmovedRunBlocksAsPipelineOwnedWithoutRecovery(t *testing.T) {
 	}
 }
 
-// assertReleasedNoOpRecover runs Recover on a released (user_owned) branch and
-// proves the contract: idempotent no-op success that mutates no file, ref, or
-// database row - no worktree move, no anchor ref, no custody stamp, no gate
-// rewrite.
 func assertReleasedNoOpRecover(t *testing.T, f *recoverFixture, keepLocal bool, wantHead string) {
 	t.Helper()
 	gateHead, gateErr := gitpkg.Run(f.ctx, f.gate, "rev-parse", "refs/heads/feature/recover")
@@ -1868,8 +1803,6 @@ func assertReleasedNoOpRecover(t *testing.T, f *recoverFixture, keepLocal bool, 
 	}
 }
 
-// TestRecoverOnReleasedBranchIsIdempotentNoOp: cancellation already released
-// the branch, so recovery has nothing to do and repeating it changes nothing.
 func TestRecoverOnReleasedBranchIsIdempotentNoOp(t *testing.T) {
 	t.Parallel()
 
@@ -1878,10 +1811,6 @@ func TestRecoverOnReleasedBranchIsIdempotentNoOp(t *testing.T) {
 	assertReleasedNoOpRecover(t, f, false, f.submitted)
 }
 
-// TestReleasedBranchWithDirtyDirectPRWorkStaysUserOwnedUntouched: in-progress
-// direct-PR edits are the operator's own work on their own branch; status
-// stays user_owned with the dirt exposed as a fact, and recovery leaves every
-// byte alone.
 func TestReleasedBranchWithDirtyDirectPRWorkStaysUserOwnedUntouched(t *testing.T) {
 	t.Parallel()
 
@@ -1897,10 +1826,6 @@ func TestReleasedBranchWithDirtyDirectPRWorkStaysUserOwnedUntouched(t *testing.T
 	}
 }
 
-// TestReleasedBranchIgnoresHiddenManagedCopyTip pins that the release binds to
-// the run's recorded head, not whatever tip the managed gate copy happens to
-// hold: an out-of-band gate mutation neither leaks into the worktree nor gets
-// rewritten, and the branch stays user-owned.
 func TestReleasedBranchIgnoresHiddenManagedCopyTip(t *testing.T) {
 	t.Parallel()
 
@@ -1924,10 +1849,6 @@ func TestReleasedBranchIgnoresHiddenManagedCopyTip(t *testing.T) {
 	}
 }
 
-// TestReleasedBranchAfterUserResetOrDivergenceStaysUserOwned: once released,
-// the branch is the operator's - resetting behind the submitted head or
-// rewriting it is their own action, and no recovery path may "correct" it by
-// moving the worktree or the gate, clean, dirty, or with --keep-local.
 func TestReleasedBranchAfterUserResetOrDivergenceStaysUserOwned(t *testing.T) {
 	t.Parallel()
 
@@ -1964,10 +1885,6 @@ func TestReleasedBranchAfterUserResetOrDivergenceStaysUserOwned(t *testing.T) {
 	})
 }
 
-// TestUnmovedRunSelectionPrefersNewerAuthoritativeRuns pins multi-run
-// disambiguation on one branch: a newer active run or a newer exact pushed
-// binding governs, and the stranded older run can never steal selection or be
-// recovered underneath them.
 func TestUnmovedRunSelectionPrefersNewerAuthoritativeRuns(t *testing.T) {
 	t.Parallel()
 
@@ -2018,9 +1935,6 @@ func TestUnmovedRunSelectionPrefersNewerAuthoritativeRuns(t *testing.T) {
 	})
 }
 
-// TestUnmovedRunWrongContextsStayRefusedWithoutStamp: a different checked-out
-// branch and a detached HEAD keep their precise refusals, and neither path can
-// stamp custody on the stranded run.
 func TestUnmovedRunWrongContextsStayRefusedWithoutStamp(t *testing.T) {
 	t.Parallel()
 
@@ -2058,9 +1972,6 @@ func TestUnmovedRunWrongContextsStayRefusedWithoutStamp(t *testing.T) {
 	})
 }
 
-// TestRecoverConcurrentGatePushLosesCleanly: the keep-local gate reset is an
-// atomic compare-and-swap, so a racing push to the gate wins and recovery
-// refuses instead of clobbering the newer gate head.
 func TestRecoverConcurrentGatePushLosesCleanly(t *testing.T) {
 	t.Parallel()
 
@@ -2147,13 +2058,6 @@ func TestRecoverRetryDoesNotOverwriteIndependentGateAnchor(t *testing.T) {
 	}
 }
 
-// newRebasedRecoverFixture reproduces the reported cancelled-validation custody
-// state: the default branch advanced after the branch was submitted, so the
-// pipeline's rebase replayed the operator's commits onto the newer base (new
-// SHAs, identical content) before the run was cancelled. No local commit is an
-// ancestor of the preserved head and no preserved commit is an ancestor of the
-// local head, so a plain equality/ancestry test sees only "diverged" even
-// though the preserved head carries every local change.
 func newRebasedRecoverFixture(t *testing.T, status types.RunStatus) *recoverFixture {
 	t.Helper()
 	root, heads := copyGitFixture(t, "rebased-recover", func(t *testing.T, root string) recoverHeads {
@@ -2162,9 +2066,6 @@ func newRebasedRecoverFixture(t *testing.T, status types.RunStatus) *recoverFixt
 	return newRebasedRecoverRun(t, root, heads, status)
 }
 
-// newRebasedRecoverFixtureWithPipelineWork builds the same rebase state and
-// then lets pipelineWork commit further pipeline changes on the gate branch,
-// modelling the fix rounds a cancelled run may have produced.
 func newRebasedRecoverFixtureWithPipelineWork(t *testing.T, status types.RunStatus, pipelineWork func(t *testing.T, pipelineDir string)) *recoverFixture {
 	t.Helper()
 	root := t.TempDir()
@@ -2524,12 +2425,6 @@ func TestRecoverTerminalUnverifiedRewriteNegativeControls(t *testing.T) {
 	})
 }
 
-// TestRecoverRebasedPreservedHeadAdoptsWithoutEscalating is the regression for
-// the over-escalating custody return: a cancelled validation whose preserved
-// pipeline head is the operator's own work rebased onto a newer base loses
-// nothing by adopting it, so recovery must succeed instead of refusing as
-// diverged. The relationship is invisible to equality and ancestry alone, which
-// is exactly what made the old decision escalate.
 func TestRecoverRebasedPreservedHeadAdoptsWithoutEscalating(t *testing.T) {
 	t.Parallel()
 
@@ -2575,10 +2470,6 @@ func TestRecoverRebasedPreservedHeadAdoptsWithoutEscalating(t *testing.T) {
 	}
 }
 
-// TestRecoverRebasedPreservedHeadStillEscalatesForUniqueLocalWork is the
-// disconfirming counterfactual: one genuinely unique local commit whose content
-// the preserved head does not carry must keep escalating, because adopting the
-// preserved head would silently discard unlanded work.
 func TestRecoverRebasedPreservedHeadStillEscalatesForUniqueLocalWork(t *testing.T) {
 	t.Parallel()
 
@@ -2606,13 +2497,6 @@ func TestRecoverRebasedPreservedHeadStillEscalatesForUniqueLocalWork(t *testing.
 	}
 }
 
-// TestRecoverRebasedPreservedHeadEscalatesWhenFixRoundsRewroteOperatorLines
-// pins the deliberate boundary of the narrowed contract. When the pipeline both
-// rebased the branch and superseded the operator's own lines, the operator's
-// content is genuinely absent from the preserved head and nothing available to
-// recovery distinguishes a deliberate fix from a dropped change. No-data-loss
-// wins: the ambiguous case escalates for an operator decision rather than being
-// adopted on a patch-identity guess.
 func TestRecoverRebasedPreservedHeadEscalatesWhenFixRoundsRewroteOperatorLines(t *testing.T) {
 	t.Parallel()
 
@@ -2691,11 +2575,6 @@ func TestUnverifiedTerminalHeadGetsNoRecoveryOffer(t *testing.T) {
 	}
 }
 
-// TestRecoverRebasedPreservedHeadRefusesConcurrentCommitWithoutLosingIt is the
-// no-data-loss-under-concurrency regression. A commit landing after every
-// precondition was observed and after containment was proven must not be
-// destroyed: the branch move is an atomic compare-and-swap against the observed
-// head, so it refuses and the concurrent commit survives untouched.
 func TestRecoverRebasedPreservedHeadRefusesConcurrentCommitWithoutLosingIt(t *testing.T) {
 	t.Parallel()
 
@@ -2756,10 +2635,6 @@ func TestRecoverRebasedPreservedHeadRollsBackAfterConcurrentCheckout(t *testing.
 	}
 }
 
-// TestRecoverRebasedPreservedHeadRefusesConcurrentWorktreeEditWithoutLosingIt
-// is the other concurrency axis: an uncommitted edit to a file the move would
-// rewrite must abort the move inside Git itself rather than being overwritten,
-// and the branch must be restored to where it started.
 func TestRecoverRebasedPreservedHeadRefusesConcurrentWorktreeEditWithoutLosingIt(t *testing.T) {
 	t.Parallel()
 
@@ -2788,10 +2663,6 @@ func TestRecoverRebasedPreservedHeadRefusesConcurrentWorktreeEditWithoutLosingIt
 	}
 }
 
-// TestRecoverRebasedPreservedHeadRefusesDirtyWorktree keeps the ordinary
-// uncommitted-work protection intact: a worktree that is already dirty when
-// recovery starts refuses outright, and --keep-local remains the exit that
-// never touches the worktree.
 func TestRecoverRebasedPreservedHeadRefusesDirtyWorktree(t *testing.T) {
 	t.Parallel()
 
@@ -2850,8 +2721,6 @@ func TestRecoverIncompleteAdoptionDoesNotStampStaleWorktree(t *testing.T) {
 	}
 }
 
-// TestRecoverRebasedPreservedHeadKeepLocalStillKeepsTheLocalHead pins that the
-// explicit keep-local choice still wins over the new adoption path.
 func TestRecoverRebasedPreservedHeadKeepLocalStillKeepsTheLocalHead(t *testing.T) {
 	t.Parallel()
 
@@ -2871,8 +2740,6 @@ func TestRecoverRebasedPreservedHeadKeepLocalStillKeepsTheLocalHead(t *testing.T
 	}
 }
 
-// TestRecoverRebasedPreservedHeadRechecksAfterAnchoringLocalHead proves the
-// pre-move guard still catches a branch switch that happens before the move.
 func TestRecoverRebasedPreservedHeadRechecksAfterAnchoringLocalHead(t *testing.T) {
 	t.Parallel()
 
@@ -2892,10 +2759,6 @@ func TestRecoverRebasedPreservedHeadRechecksAfterAnchoringLocalHead(t *testing.T
 	}
 }
 
-// TestRecoverSquashedEquivalentPreservedHeadAdopts covers the same containment
-// proof for a fix round that AMENDS or squashes the operator's commits: no
-// commit-level correspondence survives, but the preserved head still carries
-// the operator's exact content, so adopting it loses nothing.
 func TestRecoverSquashedEquivalentPreservedHeadAdopts(t *testing.T) {
 	t.Parallel()
 
@@ -2929,10 +2792,6 @@ func TestRecoverSquashedEquivalentPreservedHeadAdopts(t *testing.T) {
 	}
 }
 
-// TestRecoverSquashedPreservedHeadStillEscalatesForDroppedLocalWork is the
-// counterfactual for that proof: when the squash DROPS one of the operator's
-// changes, the preserved head no longer contains it and recovery must escalate
-// rather than silently discard it.
 func TestRecoverSquashedPreservedHeadStillEscalatesForDroppedLocalWork(t *testing.T) {
 	t.Parallel()
 
@@ -2969,10 +2828,6 @@ func TestRecoverSquashedPreservedHeadStillEscalatesForDroppedLocalWork(t *testin
 	}
 }
 
-// publishedRebaseAfterCustody recreates the lane-staleness shape AdoptPublished
-// recovers: custody is returned, the branch is published, rebased onto a newer
-// main with a follow-up commit, then force-with-lease pushed to the registered
-// target while the gate lane still names the pre-rebase head.
 func publishedRebaseAfterCustody(t *testing.T, f *recoverFixture) string {
 	t.Helper()
 	if state := f.service.Recover(f.ctx, false); !state.Recovered {
@@ -2998,13 +2853,6 @@ func publishedRebaseAfterCustody(t *testing.T, f *recoverFixture) string {
 	return rebased
 }
 
-// TestAdoptPublishedFetchHonorsTheRemoteTimeout proves the import of the
-// verified published object is bounded by branch_sync_remote_timeout like every
-// other network call in AdoptPublished. The ls-remote checks are stubbed to
-// answer instantly and ignore their own budget, so the only operation the tiny
-// timeout can reach is the fetch; had that fetch kept the caller's unbounded
-// context it would have succeeded against this local remote and the lane would
-// have been adopted instead of refusing.
 func TestAdoptPublishedFetchHonorsTheRemoteTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -3028,29 +2876,6 @@ func TestAdoptPublishedFetchHonorsTheRemoteTimeout(t *testing.T) {
 	}
 }
 
-// TestAdoptPublishedFetchSucceedsWithinItsOwnBudget guards the other side: the
-// bound must be a real per-operation budget, not a cap that makes an ordinary
-// adoption fail. Both ls-remote calls burn most of a generous timeout, and the
-// fetch still gets its own fresh budget and completes.
-//
-// The budget has to clear the cost of the one real network operation left in
-// the path: FetchRemoteRef spawns `git fetch` and then `git rev-parse`. That
-// pair costs ~50ms on Linux and macOS but roughly 10x that on the Windows leg,
-// which is process-spawn bound rather than compute bound (see
-// .agents/skills/testing-conventions/SKILL.md). A
-// sub-second budget sits on top of the Windows cost with no margin and fails
-// there as soon as anything perturbs spawn latency, so the budget is kept a
-// whole multiple of the slowest platform's cost.
-//
-// The stub honors its own context rather than sleeping through it, which is
-// what gives this test teeth on every platform. A stub that always succeeds can
-// only report a shared deadline by way of the fetch being starved, and how much
-// of the budget is left for that fetch has to be read against a per-platform
-// spawn cost - so such a stub silently stops detecting the regression wherever
-// the fetch happens to be quick enough to squeeze in. Honoring the context
-// instead makes the SECOND ls-remote the witness: on one shared deadline the
-// first call consumes most of it and the second is left with far less than it
-// needs, failing the adoption regardless of how fast git is on the platform.
 func TestAdoptPublishedFetchSucceedsWithinItsOwnBudget(t *testing.T) {
 	f := newRecoverFixture(t, types.RunCancelled)
 	rebased := publishedRebaseAfterCustody(t, f)

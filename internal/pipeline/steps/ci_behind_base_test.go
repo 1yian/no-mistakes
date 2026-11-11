@@ -16,8 +16,6 @@ import (
 
 const behindBaseGreenChecks = `[{"name":"build","state":"SUCCESS","bucket":"pass"},{"name":"test","state":"SUCCESS","bucket":"pass"}]`
 
-// behindBaseContext is a GitHub PR with green checks whose mergeability is
-// the given `<mergeable> <mergeStateStatus>` answer, with ci.rebase_behind on.
 func behindBaseContext(t *testing.T, ag *mockAgent, mergeable string) (*pipeline.StepContext, *[]string) {
 	t.Helper()
 	upstream := t.TempDir()
@@ -71,9 +69,6 @@ func countLogs(logs []string, line string) int {
 	return n
 }
 
-// A green PR GitHub reports BEHIND is refused by a base that requires
-// up-to-date branches, so the monitor takes the merge-conflict rebase repair
-// once the base has held still for one poll, and only once (issue #1402).
 func TestCIStep_GreenBehindPRTakesTheRebaseRepairOnceAfterTheBaseSettles(t *testing.T) {
 	t.Parallel()
 	var prompts []string
@@ -158,8 +153,6 @@ func TestCIStep_GreenBehindPRTakesTheRebaseRepairOnceAfterTheBaseSettles(t *test
 	}
 }
 
-// The first BEHIND observation is a wait, the second at the same base tip is
-// one auto-fix finding the executor routes into the rebase repair.
 func TestCIStep_GreenBehindPRObservationIsOneBehindBaseFinding(t *testing.T) {
 	t.Parallel()
 	sctx, logs := behindBaseContext(t, &mockAgent{name: "test"}, "MERGEABLE BEHIND")
@@ -191,8 +184,6 @@ func TestCIStep_GreenBehindPRObservationIsOneBehindBaseFinding(t *testing.T) {
 	}
 }
 
-// A base that advances on every poll never settles, so the monitor keeps
-// waiting instead of rebasing a head that is stale again at once.
 func TestCIStep_GreenBehindPROnAMovingBaseIsNotRebased(t *testing.T) {
 	t.Parallel()
 	ag := &mockAgent{name: "test", runFn: func(context.Context, agent.RunOpts) (*agent.Result, error) {
@@ -225,8 +216,6 @@ func TestCIStep_GreenBehindPROnAMovingBaseIsNotRebased(t *testing.T) {
 	}
 }
 
-// A PR GitHub does not report BEHIND - including one that is behind a base
-// with no up-to-date rule, which GitHub reports CLEAN - is never rebased.
 func TestCIStep_GreenPRThatIsNotBehindIsNeverRebased(t *testing.T) {
 	t.Parallel()
 	for _, mergeable := range []string{"MERGEABLE CLEAN", "MERGEABLE BLOCKED", "MERGEABLE"} {
@@ -260,8 +249,6 @@ func TestCIStep_GreenPRThatIsNotBehindIsNeverRebased(t *testing.T) {
 	}
 }
 
-// With ci.rebase_behind unset (the default), a green BEHIND PR keeps today's
-// behavior: it reports checks-passed and is never rebased.
 func TestCIStep_GreenBehindPRReportsChecksPassedWhenRebaseBehindIsOff(t *testing.T) {
 	t.Parallel()
 	ag := &mockAgent{name: "test", runFn: func(context.Context, agent.RunOpts) (*agent.Result, error) {

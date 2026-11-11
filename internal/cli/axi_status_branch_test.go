@@ -14,9 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// statusDoc is the machine-readable shape a driving agent parses out of
-// `axi status`: a run it may treat as this worktree's under `run:`, and a run
-// that is provably not this worktree's under `other_branch_run:`.
 type statusDoc struct {
 	CurrentBranch string `toon:"current_branch"`
 	Run           struct {
@@ -52,12 +49,6 @@ func axiStatusOutput(t *testing.T, runID string) string {
 	return out.String()
 }
 
-// TestAxiStatusNeverReportsAnotherBranchesRunAsThisWorktrees is the regression
-// for the observed defect: several worktrees of one repository, each on its own
-// branch, all read back one unrelated branch's cancelled run under the plain
-// `run:` key, with nothing marking it as somebody else's. A supervising agent
-// judging validation by that read concludes the work failed while its real
-// pipeline is still in flight.
 func TestAxiStatusNeverReportsAnotherBranchesRunAsThisWorktrees(t *testing.T) {
 	repoDir, _, database, repo := setupAxiQueryRepo(t)
 	run(t, repoDir, "git", "checkout", "-b", "feature/mine")
@@ -93,8 +84,6 @@ func TestAxiStatusNeverReportsAnotherBranchesRunAsThisWorktrees(t *testing.T) {
 	}
 }
 
-// TestAxiStatusReportsThisBranchesOwnRun keeps the correct path intact: when
-// the worktree's branch does have a run, status reports it under `run:`.
 func TestAxiStatusReportsThisBranchesOwnRun(t *testing.T) {
 	repoDir, _, database, repo := setupAxiQueryRepo(t)
 	run(t, repoDir, "git", "checkout", "-b", "feature/mine")
@@ -125,9 +114,6 @@ func TestAxiStatusReportsThisBranchesOwnRun(t *testing.T) {
 	}
 }
 
-// TestAxiStatusExplicitRunIDStillInspectsAnotherBranchesRun keeps deliberate
-// inspection working, but under a key that tells a parser the run is not this
-// worktree's.
 func TestAxiStatusExplicitRunIDStillInspectsAnotherBranchesRun(t *testing.T) {
 	repoDir, _, database, repo := setupAxiQueryRepo(t)
 	run(t, repoDir, "git", "checkout", "-b", "feature/mine")
@@ -345,9 +331,6 @@ func TestAxiStatusExplicitRunWithUnknownCallerBranchCannotOfferMutationCommands(
 	}
 }
 
-// TestResolveRunDoesNotFallBackToAnotherBranch pins the cause at its owner:
-// with the caller's branch known and no run on it, resolution reports no run
-// rather than the repository's most recent run on some other branch.
 func TestResolveRunDoesNotFallBackToAnotherBranch(t *testing.T) {
 	database := openTestDB(t)
 	repo, err := database.InsertRepo(t.TempDir(), "origin", "main")
@@ -371,8 +354,6 @@ func TestResolveRunDoesNotFallBackToAnotherBranch(t *testing.T) {
 	}
 }
 
-// TestAxiLogsDoesNotReadAnotherBranchesRunLogs covers the second consumer of
-// the same resolution: reading a foreign run's step log is the same misreport.
 func TestAxiLogsDoesNotReadAnotherBranchesRunLogs(t *testing.T) {
 	repoDir, _, database, repo := setupAxiQueryRepo(t)
 	run(t, repoDir, "git", "checkout", "-b", "feature/mine")

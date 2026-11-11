@@ -9,10 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/conventional"
 )
 
-// branchNameRules and commitSubjectRules are shared between the single-purpose
-// prompts and the combined prompt so behavior stays in lock-step. The commit
-// rules mirror the PR title rules in internal/pipeline/steps/pr.go so a commit
-// made through the wizard and the PR title generated later feel consistent.
 const branchNameRules = `- Use kebab-case.
 - Prefer a conventional prefix: "feat/", "fix/", "chore/", "refactor/", "docs/", or "test/".
 - Keep it under 40 characters.`
@@ -90,9 +86,6 @@ type branchAndCommitSuggestion struct {
 	Subject string `json:"subject"`
 }
 
-// SuggestBranchName asks the agent to propose a short git branch name for the
-// current working-tree state in dir. The suggestion is sanitized so it's safe
-// to pass to `git checkout -b`.
 func SuggestBranchName(ctx context.Context, ag Agent, dir string) (string, error) {
 	result, err := ag.Run(ctx, RunOpts{
 		Prompt:     branchNamePrompt,
@@ -113,15 +106,6 @@ func SuggestBranchName(ctx context.Context, ag Agent, dir string) (string, error
 	return name, nil
 }
 
-// SuggestBranchAndCommit asks the agent to propose both a git branch name and
-// a conventional commit subject for the current working-tree state in a
-// single call. Combining the two saves one full agent round-trip when the
-// wizard needs both (new branch + dirty tree).
-//
-// The branch name must be present and sanitizes to a valid git ref; otherwise
-// an error is returned. The commit subject is best-effort: if the agent
-// returns an empty subject, this function returns an empty string with no
-// error so the caller can fall back to SuggestCommitMessage.
 func SuggestBranchAndCommit(ctx context.Context, ag Agent, dir string) (branch, subject string, err error) {
 	result, err := ag.Run(ctx, RunOpts{
 		Prompt:     branchAndCommitPrompt,
@@ -143,8 +127,6 @@ func SuggestBranchAndCommit(ctx context.Context, ag Agent, dir string) (branch, 
 	return branch, subject, nil
 }
 
-// SuggestCommitMessage asks the agent to propose a single-line commit subject
-// summarizing the current working-tree state at dir.
 func SuggestCommitMessage(ctx context.Context, ag Agent, dir string) (string, error) {
 	result, err := ag.Run(ctx, RunOpts{
 		Prompt:     commitSubjectPrompt,
@@ -178,8 +160,6 @@ func unmarshalSuggestion(result *Result, v any) error {
 	return fmt.Errorf("agent returned no output")
 }
 
-// sanitizeBranchName normalizes an agent-suggested branch name: lowercase,
-// ASCII-only, alphanumerics plus - / . separators, length-capped.
 func sanitizeBranchName(raw string) string {
 	s := strings.TrimSpace(strings.Trim(raw, "\"'"))
 	s = strings.ToLower(s)
@@ -242,7 +222,6 @@ func isValidBranchName(name string) bool {
 	return true
 }
 
-// sanitizeCommitSubject trims whitespace and keeps only the first line.
 func sanitizeCommitSubject(raw string) string {
 	s := strings.TrimSpace(raw)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

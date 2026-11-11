@@ -53,9 +53,6 @@ func TestCaptureLeavesAutoFixClosedUnlabeled(t *testing.T) {
 	assertCaptureUnlabeled(t, ctx, p, sourceDB, run.ID)
 }
 
-// A fix that was reverted (the same issue is raised again by a later round)
-// does not unmake the human's recorded decision to fix it on a run that merged:
-// the finding is still gold-standard evidence of a real issue.
 func TestCaptureLabelsSelectedAutoFixAsTruePositiveEvenWhenLaterRoundReRaisesIt(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, firstRound := setupCapturedRun(t, ctx)
@@ -93,8 +90,6 @@ func TestCaptureLabelsSelectedAutoFixAsTruePositiveEvenWhenLaterRoundReRaisesIt(
 	}
 }
 
-// Each round carries its own recorded decision, so a later round that rewrites
-// the finding under a new id does not retroactively unlabel the earlier one.
 func TestCaptureLabelsBothRoundsOfASupersededAutoFix(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, firstRound := setupCapturedRun(t, ctx)
@@ -157,9 +152,6 @@ func TestCaptureWritesShippedUnfixedAsFalsePositive(t *testing.T) {
 	}
 }
 
-// The human resolved this round without selecting the finding and the run
-// merged, so it is shipped-unfixed false-positive gold. A later round raising a
-// different issue does not change what was decided about this one.
 func TestCaptureLabelsUnselectedFindingAsFalsePositiveEvenWhenALaterRoundDropsIt(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, firstRound := setupCapturedRun(t, ctx)
@@ -367,9 +359,6 @@ func TestRelabelDoesNotClobberAdjudicatedLabels(t *testing.T) {
 	}
 }
 
-// Round presence used to veto this label: the finding survived into round 2 but
-// was gone by the final round, so the earlier rounds stayed unlabeled. Labeling
-// now keys off each round's own recorded decision, which said "ship it".
 func TestCaptureWritesShippedUnfixedEvenWhenTheFinalRoundNoLongerRaisesIt(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, firstRound := setupCapturedRun(t, ctx)
@@ -407,9 +396,6 @@ func TestCaptureWritesShippedUnfixedEvenWhenTheFinalRoundNoLongerRaisesIt(t *tes
 	}
 }
 
-// Derived merge gold is recomputed, not appended: once the round records that
-// the human selected the finding for Fix, the earlier shipped-unfixed FP is gone
-// rather than kept alongside the true-positive label.
 func TestRelabelReplacesShippedUnfixedWhenTheRoundLaterRecordsAFixDecision(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, firstRound := setupCapturedRun(t, ctx)
@@ -556,9 +542,6 @@ func TestRelabelClearsStoredShippedUnfixedFPWhenRecomputedUnlabeled(t *testing.T
 	}
 }
 
-// TestGoldFromRoundLabelsByRecordedDecision pins the labeling contract itself:
-// what a finding is labeled follows from the round's recorded fix-vs-skip
-// decision plus the source run's merge state, and from nothing else.
 func TestGoldFromRoundLabelsByRecordedDecision(t *testing.T) {
 	raised := findingsJSON(findingSpec{ID: "real-bug", Severity: "error", File: "main.go", Line: 3, Description: "bug", Action: "auto-fix"})
 	informational := findingsJSON(findingSpec{ID: "note", Severity: "info", File: "main.go", Line: 3, Description: "style note", Action: "no-op"})

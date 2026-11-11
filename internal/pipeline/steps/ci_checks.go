@@ -19,8 +19,6 @@ type lastFixedIssues struct {
 	ConflictBaseSHA string            `json:"conflictBaseSHA,omitempty"`
 }
 
-// pollInterval returns the polling interval based on elapsed time since CI monitoring started.
-// 30s for first 5min, 60s for 5-15min, 120s after.
 func pollInterval(elapsed time.Duration) time.Duration {
 	switch {
 	case elapsed < 5*time.Minute:
@@ -32,7 +30,6 @@ func pollInterval(elapsed time.Duration) time.Duration {
 	}
 }
 
-// hasFailingChecks returns true if any CI check is in the fail bucket.
 func hasFailingChecks(checks []scm.Check) bool {
 	for _, c := range checks {
 		if c.Failing() {
@@ -42,7 +39,6 @@ func hasFailingChecks(checks []scm.Check) bool {
 	return false
 }
 
-// hasPendingChecks returns true if any CI check is still running or queued.
 func hasPendingChecks(checks []scm.Check) bool {
 	for _, c := range checks {
 		if c.Pending() {
@@ -52,12 +48,6 @@ func hasPendingChecks(checks []scm.Check) bool {
 	return false
 }
 
-// hasExecutingPendingChecks returns true if any CI check is still running or
-// queued on its own. A check the provider holds for a person - a maintainer
-// approval or a blocking manual job - is pending but will not finish without
-// that person, so it never defers escalation of a failure it is observed
-// alongside. Jobs GitLab left in `created` behind a blocked stage are ordinary
-// pending checks, so a failure there still waits for them, exactly as before.
 func hasExecutingPendingChecks(checks []scm.Check) bool {
 	for _, c := range checks {
 		if c.Pending() && !c.HeldForHuman() {
@@ -108,7 +98,6 @@ func allChecksPassed(checks []scm.Check) bool {
 	return true
 }
 
-// failingCheckNames returns the names of failing checks.
 func failingCheckNames(checks []scm.Check) []string {
 	var names []string
 	for _, c := range checks {
@@ -119,11 +108,6 @@ func failingCheckNames(checks []scm.Check) []string {
 	return names
 }
 
-// unresolvedCheckNames returns "name (bucket)" for every check that does not
-// count toward allChecksPassed - i.e. everything but CheckBucketPass and
-// CheckBucketSkip. Unlike failingCheckNames, this also surfaces pending,
-// cancelled, and any other non-terminal-pass bucket, so a caller reporting an
-// approval override can name pending/unknown checks, not just failing ones.
 func unresolvedCheckNames(checks []scm.Check) []string {
 	var names []string
 	for _, c := range checks {
@@ -135,14 +119,6 @@ func unresolvedCheckNames(checks []scm.Check) []string {
 	return names
 }
 
-// terminalFailureCompletionTimes snapshots when each terminally failed check
-// finished, so a later poll can tell that CI has re-run since the fix push.
-//
-// It covers the whole terminal-failure set rather than just the fail bucket
-// because a cancelled check can be a fix target too (see the CI step's
-// fixTargets). Keying the snapshot on the fail bucket alone would leave a
-// cancelled-only fix round with no completion evidence at all, and the step
-// would then have no way to notice its own re-run.
 type checkFreshness struct {
 	CompletedAt time.Time
 	ExecutionID string
@@ -262,15 +238,6 @@ func decodeLastFixedChecks(raw string) (lastFixedIssues, bool) {
 	return issues, true
 }
 
-// lastRepairStillUnverified reports whether every issue the last published
-// repair targeted is still terminally failed, meaning the provider has not
-// yet re-run those checks against the repaired head. The two clears that
-// prove a re-run happened - a newer completion (terminalFailureCompletedAfter)
-// and the fixed check observed pending (pendingCheckMatchesLastFixed) - empty
-// lastFixedChecks before this is asked, so an unverified repair is exactly
-// one whose targets are all still red as they were. A target that cleared, or
-// a conflict that resolved, is the provider acting on the repair and makes
-// the observation fresh.
 func (s *CIStep) lastRepairStillUnverified(checks []scm.Check, mergeConflict bool, conflictBaseSHA string) bool {
 	issues, ok := decodeLastFixedChecks(s.lastFixedChecks)
 	if !ok {
@@ -292,10 +259,6 @@ func (s *CIStep) lastRepairStillUnverified(checks []scm.Check, mergeConflict boo
 	return true
 }
 
-// checkTargetStillFailing reports whether a check matching target is in the
-// fail bucket. Unlike checkTargetFailedTerminally it does not accept a
-// cancelled check: the pre-repair refresh must only hand the fixer a failure
-// the provider still reports, never a cancellation of a re-run.
 func checkTargetStillFailing(checks []scm.Check, target scm.CheckTarget) bool {
 	for _, check := range checks {
 		if checkMatchesTarget(check, target) && check.Failing() {
@@ -332,9 +295,6 @@ func checkTargetTrackingKey(target scm.CheckTarget) string {
 	return target.Name
 }
 
-// ciFailureOutcome parks the step over issues that are still present when
-// the idle timeout ends monitoring. Nothing here is a fresh observation the
-// executor could act on, so every item is ask-user.
 func ciFailureOutcome(failing []scm.CheckTarget, mergeConflict bool, summary string) *pipeline.StepOutcome {
 	findings := Findings{Summary: summary}
 	for _, target := range failing {
@@ -362,15 +322,8 @@ func ciFailureOutcome(failing []scm.CheckTarget, mergeConflict bool, summary str
 	}
 }
 
-// consecutiveCheckErrorLimit bounds consecutive GetChecks failures before the
-// CI step parks at an ask-user gate. At the default 30s poll this is ~3 minutes
-// of a provider read that keeps failing, making a broken gh (e.g. < v2.50, which
-// rejects `gh pr checks --json`) an actionable stop instead of an invisible
-// spin to ci_timeout.
 const consecutiveCheckErrorLimit = 6
 
-// ConsecutiveCheckErrorLimit is the parked-after-N-failures bound. Tests in
-// other packages share this so they cannot drift from the monitor's gate.
 func ConsecutiveCheckErrorLimit() int { return consecutiveCheckErrorLimit }
 
 func terminalCheckTargetsForNames(checks []scm.Check, names []string) []scm.CheckTarget {
@@ -387,10 +340,6 @@ func terminalCheckTargetsForNames(checks []scm.Check, names []string) []scm.Chec
 	return targets
 }
 
-// ghChecksJSONUnsupported reports whether err looks like gh rejecting the
-// `--json` flag of `pr checks`, which is what a gh older than 2.50 does. Any
-// other check-read failure (auth, network, a missing PR, a parse failure) says
-// nothing about the gh version, so it must not be blamed on it.
 func ghChecksJSONUnsupported(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "gh pr checks:") && strings.Contains(msg, "unknown flag: --json")
@@ -416,21 +365,6 @@ func ciCheckReadFailureOutcome(err error) *pipeline.StepOutcome {
 	}
 }
 
-// ciFixAgentTimeoutOutcome parks the CI step for a decision after the auto-fix
-// agent burned its whole invocation budget without finishing.
-//
-// The previous behaviour downgraded this to a log warning and let the poll loop
-// issue the same request again on the next tick, up to auto_fix.ci attempts -
-// each one another full agent budget, all of it invisible except for warning
-// lines inside the CI step log, until ci_timeout ended the run hours later with
-// nothing to act on. That is the same invisible spin consecutiveCheckErrorLimit
-// exists to prevent, and repeating an invocation that has already proven it
-// cannot finish is a blind retry, not a recovery.
-//
-// Parking instead is bounded (one budget, then a decision), keeps the run and
-// its worktree alive rather than tearing them down, and leaves any further
-// attempt to the operator, who can respond with a fix selection to spend
-// another budget deliberately.
 func ciFixAgentTimeoutOutcome(issueDesc string, leftover string, err error) *pipeline.StepOutcome {
 	description := fmt.Sprintf(
 		"The CI auto-fix agent did not finish within its invocation budget while repairing: %s. "+

@@ -72,8 +72,6 @@ func TestBodyDocumentsTaskFirstFlow(t *testing.T) {
 	}
 }
 
-// These expectations pin the task-first writing contract, independently of
-// the shared constant used by the renderer. They do not test model behavior.
 func TestBodyDocumentsIndependentTestOracles(t *testing.T) {
 	md := strings.Join(strings.Fields(Markdown()), " ")
 	for _, want := range []string{
@@ -167,8 +165,6 @@ func TestInstallWritesBothPaths(t *testing.T) {
 	}
 }
 
-// TestInstallUserWritesUnderHome proves the init entry point resolves the
-// user's home directory and installs there, never into the working directory.
 func TestInstallUserWritesUnderHome(t *testing.T) {
 	home := t.TempDir()
 	// os.UserHomeDir reads HOME on Unix and USERPROFILE on Windows; set both
@@ -211,12 +207,6 @@ func TestInstallIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestInstallSymlinkLayouts covers home directories that consolidate the two
-// skill bases with a symlink. `.claude/skills` may link to `.agents/skills`,
-// the whole `.claude` dir may link to `.agents`, or the link may point the
-// other way. In every case Install must succeed and the skill must be
-// reachable via both logical bases - including when the symlink target dir
-// does not exist yet.
 func TestInstallSymlinkLayouts(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -297,9 +287,6 @@ func TestInstallSymlinkLayouts(t *testing.T) {
 	}
 }
 
-// TestInstallOverwritesStaleContent guards the upgrade path: an older SKILL.md
-// left by a previous binary version must be refreshed to current content when
-// Install runs again.
 func TestInstallOverwritesStaleContent(t *testing.T) {
 	root := t.TempDir()
 	stale := filepath.Join(root, ".claude", "skills", Name, "SKILL.md")
@@ -329,8 +316,6 @@ func TestInstallRejectsSymlinkCycle(t *testing.T) {
 	}
 }
 
-// TestVendored covers the legacy-detection helper init uses to tell users a
-// repo still carries a vendored skill copy from an older no-mistakes version.
 func TestVendored(t *testing.T) {
 	t.Run("clean_repo", func(t *testing.T) {
 		if got := Vendored(t.TempDir()); len(got) != 0 {

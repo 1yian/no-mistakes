@@ -823,10 +823,6 @@ func TestRunAgent_OperatorCancellationIsNotDressedUpAsAnAgentFault(t *testing.T)
 	}
 }
 
-// TestExecutor_DirectAgentRunUnderACallerDeadlineRefusesLateWork pins the
-// executor backstop for the one shape it exists to cover: a step that calls
-// Agent.Run itself, under a context whose deadline someone else owns. The
-// invocation must still not hand back work produced after that deadline.
 func TestExecutor_DirectAgentRunUnderACallerDeadlineRefusesLateWork(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	ag := &hangingAgent{
@@ -1113,17 +1109,8 @@ func TestRunAgent_LaunchedAgentWithoutAChildIsCutAtTheStallBudget(t *testing.T) 
 	}
 }
 
-// liveChildScript waits for the go signal, then runs a tool that outlives the
-// stall budget as a real child of the shell. The tool is backgrounded and
-// waited on because a shell that execs its final command (bash as /bin/sh
-// does) would otherwise replace itself with sleep and leave no child to see.
 const liveChildScript = "read go; sleep 2.5 & wait"
 
-// runLaunchedShell stands in for a native adapter: it launches script as the
-// agent subprocess, reports its start, runs drive while the script is alive
-// (drive may call started to send the script one line on stdin, or ready to
-// wait for one line from its stdout), and reports the exit when the script
-// ends.
 func runLaunchedShell(ctx context.Context, opts agent.RunOpts, script string, drive func(started, ready func())) (*agent.Result, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", script)
 	stdin, err := cmd.StdinPipe()

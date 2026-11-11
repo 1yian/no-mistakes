@@ -21,10 +21,6 @@ func mustJSON(t *testing.T, record *quotarouting.Record) string {
 
 var testTime = time.Unix(1792270231, 0)
 
-// TestRunQuotaRoutingMutableRecord pins the storage contract: unlike the
-// immutable pi_profile pin, the quota-routing record is written at run setup
-// and AMENDED by mid-run switches, read back through the run row, and a
-// pre-feature run's empty payload reads back as "".
 func TestRunQuotaRoutingMutableRecord(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo(t.TempDir(), "https://example.com/repo.git", "main")

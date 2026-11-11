@@ -5,9 +5,6 @@ import (
 	"strings"
 )
 
-// A provider rejecting the request's schema cannot be repaired by retrying the
-// analyzer or by parsing an unconstrained response. Keep the original error for
-// diagnostics, but make the route incompatibility and next action explicit.
 type codexSchemaIncompatibility struct{ err error }
 
 func (e *codexSchemaIncompatibility) Error() string {

@@ -1,5 +1,3 @@
-// Package gatecontext owns the authoritative classification of callers that
-// are executing inside an active no-mistakes validation step.
 package gatecontext
 
 import (
@@ -19,8 +17,6 @@ import (
 
 const ErrorCode = "nested_gate_context"
 
-// RefusalMessage is the stable, privacy-safe error contract used at daemon
-// ingress and non-AXI command boundaries.
 func RefusalMessage(result Result) string {
 	target := "an active no-mistakes validation step"
 	if result.RunID != "" && result.Phase != "" {
@@ -31,10 +27,6 @@ func RefusalMessage(result Result) string {
 	return fmt.Sprintf("%s: refusing pipeline control from %s; return control to the outer executor", ErrorCode, target)
 }
 
-// Request contains the independently observable signals for one caller.
-// MarkerPresent is diagnostic only. SkipManagedGit is reserved for managed Git
-// hooks, whose cwd is necessarily the gate itself and therefore cannot identify
-// the process that initiated the push.
 type Request struct {
 	CWD            string
 	PeerPID        int
@@ -43,8 +35,6 @@ type Request struct {
 	SkipManagedGit bool
 }
 
-// Result is safe to render to an agent. It intentionally carries no paths or
-// process details.
 type Result struct {
 	Nested           bool
 	ManagedGit       bool
@@ -55,17 +45,12 @@ type Result struct {
 	Phase            types.StepName
 }
 
-// Inspector combines canonical managed Git identity with authenticated IPC
-// peer ancestry. ParentPID exists for deterministic tests; production callers
-// leave it nil to use the platform process table.
 type Inspector struct {
 	DB        *db.DB
 	Paths     *paths.Paths
 	ParentPID func(int) (int, error)
 }
 
-// Inspect classifies a caller without mutating repositories, runs, refs,
-// remotes, worktrees, or the database.
 func (i Inspector) Inspect(ctx context.Context, req Request) (Result, error) {
 	result := Result{MarkerPresent: req.MarkerPresent}
 	if i.Paths == nil {
@@ -149,12 +134,8 @@ func (i Inspector) Inspect(ctx context.Context, req Request) (Result, error) {
 }
 
 type activeAgentStep struct {
-	runID  string
-	repoID string
-	// worktreeDir is the run's recorded worktree placement, empty for a run
-	// recorded before it was durable. It travels with the step so attribution
-	// compares against the directory the run was created in rather than the
-	// one current configuration would derive.
+	runID       string
+	repoID      string
 	worktreeDir string
 	phase       types.StepName
 	agentPID    int
@@ -256,8 +237,6 @@ func ancestry(pid int, parent func(int) (int, error)) (map[int]bool, error) {
 	return chain, nil
 }
 
-// canonicalPath is the shared worktree_roots canonicalization, so a path that
-// compares equal here compares equal everywhere placement is resolved.
 func canonicalPath(path string) string {
 	return worktrees.Canonical(path)
 }
@@ -266,8 +245,6 @@ func sameCanonicalPath(a, b string) bool {
 	return canonicalPath(a) == canonicalPath(b)
 }
 
-// MarkerPresent reports the coarse diagnostic marker emitted by adapters.
-// Classification never rejects on this signal alone.
 func MarkerPresent() bool {
 	_, ok := os.LookupEnv(agent.GateRoleEnvVar)
 	return ok

@@ -39,9 +39,6 @@ func TestNeutralizePRControls(t *testing.T) {
 	}
 }
 
-// TestNeutralizePRControlsIsAFixedPointOfGH enumerates short strings built from
-// every shape that interacts with gh's sanitizer and requires that what is
-// published reads back unchanged through a port of that sanitizer.
 func TestNeutralizePRControlsIsAFixedPointOfGH(t *testing.T) {
 	t.Parallel()
 	tokens := []string{"a", "\x1b", "\x1b[", "[31m", "\x1b]", "\x07", "\x00", "\x1c", "\u0085", "\u009b", "\\", "u001b", "u009B", "\\u001b", "^", "^[", "\n", "\t", "\v", "\x7f", "\"", "u00"}
@@ -167,8 +164,6 @@ func TestComposeOwnedPRContentControlByteCannotSpliceAMarker(t *testing.T) {
 	}
 }
 
-// legacyBodyWithRawControls is what an earlier version published: the digest is
-// stamped over an appendix that still carried raw control bytes.
 func legacyBodyWithRawControls(t *testing.T) string {
 	t.Helper()
 	_, appendix := ownedFixture(t)
@@ -226,8 +221,6 @@ func TestRebindRecoversAnAppendixGHRewroteTheEarlierWay(t *testing.T) {
 	}
 }
 
-// TestPRTemplateCreateWithEscapeBytesInEvidence drives the whole PR step
-// against a fake gh that reads bodies back through the port of gh's sanitizer.
 func TestPRTemplateCreateWithEscapeBytesInEvidence(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := templateTestContext(t)
@@ -259,8 +252,6 @@ func TestPRTemplateCreateWithEscapeBytesInEvidence(t *testing.T) {
 	}
 }
 
-// A terminal escape hidden inside generated syntax must be removed before the
-// syntax is escaped, or removing it at the publication boundary makes it live.
 func TestNeutralizeAttestationMarkersCleansControlsBeforeEscaping(t *testing.T) {
 	t.Parallel()
 	for name, in := range map[string]string{
@@ -278,8 +269,6 @@ func TestNeutralizeAttestationMarkersCleansControlsBeforeEscaping(t *testing.T) 
 	}
 }
 
-// A control character in a trusted override reason is JSON-escaped as \u00XX,
-// which the publication boundary would rewrite into invalid JSON.
 func TestAttestationOverrideReasonWithControlByteStaysValidJSON(t *testing.T) {
 	t.Parallel()
 	reason := "suite is red on purpose \x1b[31m"
@@ -301,8 +290,6 @@ func TestAttestationOverrideReasonWithControlByteStaysValidJSON(t *testing.T) {
 	}
 }
 
-// Cleaning is budgeted: a body fitted to the limit must not grow when the
-// publication boundary runs.
 func TestDraftBodyFittedToLimitDoesNotGrowAtThePublicationBoundary(t *testing.T) {
 	t.Parallel()
 	const limit = 3000
@@ -331,8 +318,6 @@ func TestParsePROwnedBodyRecoversLegacyAppendixWithLiteralCarets(t *testing.T) {
 	}
 }
 
-// Past the subset-search cap the all-restored reading must cover every pair,
-// not just the first 64 a uint64 mask can address.
 func TestParsePROwnedBodyRecoversLegacyAppendixWithManyControls(t *testing.T) {
 	t.Parallel()
 	_, appendix := ownedFixture(t)

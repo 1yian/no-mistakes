@@ -10,11 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// TestTestEvidenceDir_ReadsTheExecutorResolvedDirectory pins the step side of
-// the evidence path to whatever the executor resolved, rather than to a path
-// the step rebuilds for itself. Steps used to join os.TempDir() directly, which
-// on Linux is the shared /tmp - RAM-backed on current Ubuntu, and reaped by
-// nobody in this program.
 func TestTestEvidenceDir_ReadsTheExecutorResolvedDirectory(t *testing.T) {
 	t.Parallel()
 	want := filepath.Join(t.TempDir(), "evidence", "run-123")
@@ -24,9 +19,6 @@ func TestTestEvidenceDir_ReadsTheExecutorResolvedDirectory(t *testing.T) {
 	}
 }
 
-// TestTestEvidenceDir_DefaultResolutionStaysUnderTheAppRoot walks the exact
-// production path - app root to evidence directory - and asserts it lands under
-// NM_HOME and not in the shared system temp directory the old code used.
 func TestTestEvidenceDir_DefaultResolutionStaysUnderTheAppRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("NM_HOME", root)

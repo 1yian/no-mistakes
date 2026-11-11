@@ -1,24 +1,3 @@
-// Package origin implements scm.Host backed by the Cursor Origin CLI
-// (`origin`). Origin is Cursor's git forge (origin.cursor.com); it is not
-// GitHub-compatible, so mapping it through `gh` would talk to the wrong API.
-//
-// Traps, verified against origin 2026.08.24 and live Origin JSON:
-//
-//   - `origin pr create` defaults to `--status draft`. no-mistakes' other
-//     providers open ready PRs unless draft_pull_requests is set, so CreatePR
-//     always passes `--status` explicitly (open or draft).
-//   - `origin pr create` has no `--json` flag. CreatePR takes the PR URL the
-//     CLI prints on create, and only without one re-lists by head branch and
-//     picks the newest live PR.
-//   - Origin treats drafts as status=draft, not open. FindPR lists
-//     `--state open` and `--state draft` separately (closed PR history cannot
-//     hide a live PR) and accepts open or draft so a draft opened by a previous
-//     run is updated instead of duplicated.
-//   - The daemon's detached bare-gate repo has no Origin remote, so every
-//     invocation carries `--repo owner/repo` (the same reason gh/tea do).
-//   - Git remotes are `https://origin.cursor.com/{owner}/{repo}.git`. The web
-//     PR URL is `https://cursor.com/codebase/{owner}/{repo}/pull/{n}`. RepoSlug
-//     strips the `/codebase/` prefix so both forms yield the same -R slug.
 package origin
 
 import (
@@ -37,7 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// CmdFactory builds an exec.Cmd in the caller's workdir with the caller's env.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
 const (
@@ -53,7 +31,6 @@ var (
 	_ scm.PRContentReader    = (*Host)(nil)
 )
 
-// Host talks to Cursor Origin through the origin CLI.
 type Host struct {
 	cmd          CmdFactory
 	cliAvailable func() bool
@@ -61,10 +38,6 @@ type Host struct {
 	draft        bool   // open created PRs as Origin drafts (--status draft)
 }
 
-// New builds a Host. cliAvailable reports whether the origin binary is
-// resolvable on the caller's PATH. repo is the "owner/name" slug passed via
-// --repo so commands resolve the right repository from the daemon's
-// non-repo working directory. draft opens created PRs as Origin drafts.
 func New(cmd CmdFactory, cliAvailable func() bool, repo string, draft bool) *Host {
 	return &Host{
 		cmd:          cmd,
@@ -74,10 +47,6 @@ func New(cmd CmdFactory, cliAvailable func() bool, repo string, draft bool) *Hos
 	}
 }
 
-// RepoSlug extracts the "owner/name" identifier from an Origin git remote
-// (`https://origin.cursor.com/owner/name.git`) or web PR URL
-// (`https://cursor.com/codebase/owner/name/pull/N`). The `/codebase/` prefix
-// on web URLs is not part of the CLI's -R slug.
 func RepoSlug(remoteURL string) string {
 	parts := strings.Split(scm.RepoPath(remoteURL), "/")
 	if len(parts) > 0 && strings.EqualFold(parts[0], "codebase") {
@@ -167,9 +136,6 @@ type originPR struct {
 	Mergeability originMergeability `json:"mergeability"`
 }
 
-// originMergeability mirrors the live `pr view --json mergeability` shape:
-// the ruleset verdict is nested one level down under mergeability.mergeability,
-// next to the top-level mergeable/hasMergeConflicts booleans.
 type originMergeability struct {
 	Mergeable         *bool    `json:"mergeable"`
 	HasMergeConflicts *bool    `json:"hasMergeConflicts"`
@@ -218,8 +184,6 @@ func originPRLive(status string) bool {
 
 func (h *Host) FindPR(ctx context.Context, branch, base string) (*scm.PR, error) {
 	base = strings.TrimSpace(base)
-	// Listing each live state separately keeps a branch's closed and merged
-	// PR history from crowding a live PR out of the --limit window.
 	var newest *scm.PR
 	for _, state := range []string{"open", "draft"} {
 		items, err := h.listPRs(ctx, branch, state)
@@ -390,8 +354,6 @@ func (h *Host) GetPRBaseBranch(ctx context.Context, pr *scm.PR) (string, error) 
 	return strings.TrimSpace(view.BaseRef), nil
 }
 
-// GetPRContent reads the raw markdown description from `origin pr view
-// --json`. A missing or null description is unproven, not an empty body.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	view, err := h.viewPR(ctx, pr)
 	if err != nil {

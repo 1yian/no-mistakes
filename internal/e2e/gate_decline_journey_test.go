@@ -9,17 +9,6 @@ import (
 	"testing"
 )
 
-// A human driving a review gate asks for every finding in round 1, then asks
-// for only the NEW findings in round 2 - the partial selection a real run made,
-// where the driving agent listed the eight ids it meant to fix and silently
-// dropped the five the reviewer carried forward. The record must keep the
-// round-1 fix decisions instead of reading that omission as a decline, which is
-// what told a later review round to undo work the same person had asked for.
-//
-// The gate shape is produced the way a real run produces it: the reviewer's
-// rereview reports two more findings and claims no coverage of the earlier
-// files, so the five round-1 findings stay outstanding and reappear in the
-// round-2 gate next to the new ones.
 func TestGateDeclineJourney_PartialSelectionKeepsEarlierFixes(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "agent.yaml")
 	// Actions are matched in order against the prompt, so the rereview (which
@@ -232,9 +221,6 @@ git add snapshot.tar.gz
 	t.Logf("journey: %d agent turns; the round-2 gate carried r1-r5 and the partial response kept them", len(h.AgentInvocations()))
 }
 
-// recordedDispositionsBlock returns the echo's recorded: section - the part of
-// the output that reports what the response actually recorded - so an assertion
-// cannot be satisfied by the gate table printed above it.
 func recordedDispositionsBlock(out string) string {
 	lines := strings.Split(out, "\n")
 	start := -1

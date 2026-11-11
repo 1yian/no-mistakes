@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// reviewPromptFor builds the Context block the pipeline's review prompt
-// carries, which is all the coverage derivation reads.
 func reviewPromptFor(base, ignore string) string {
 	return strings.Join([]string{
 		reviewPromptMarker + " with a risk assessment.",

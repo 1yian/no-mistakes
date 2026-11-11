@@ -12,9 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// verifyPublishedPR is the shared publication postcondition. Read the durable
-// successful-push binding, never the executor's potentially stale in-memory run
-// or mutable Git HEAD. Refusal leaves that binding and custody evidence intact.
 func verifyPublishedPR(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR) error {
 	run, err := publishedPRPushBinding(sctx, host)
 	if err != nil || run == nil {

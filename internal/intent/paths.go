@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/winproc"
 )
 
-// resolveHome returns the home directory to use, preferring an explicit
-// override (used in tests) over the OS-reported value.
 func resolveHome(override string) (string, error) {
 	if override != "" {
 		return override, nil
@@ -20,10 +18,6 @@ func resolveHome(override string) (string, error) {
 	return os.UserHomeDir()
 }
 
-// canonicalPath returns the path with symlinks evaluated and cleaned. It
-// silently falls back to filepath.Clean(abs) if EvalSymlinks fails (e.g.
-// the path does not exist), since both sides of the comparison receive
-// the same fallback treatment.
 func canonicalPath(p string) string {
 	if p == "" {
 		return ""
@@ -38,7 +32,6 @@ func canonicalPath(p string) string {
 	return filepath.Clean(abs)
 }
 
-// pathsEqual compares two paths after canonicalization.
 func pathsEqual(a, b string) bool {
 	return canonicalPath(a) == canonicalPath(b)
 }

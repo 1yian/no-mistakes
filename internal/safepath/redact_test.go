@@ -216,15 +216,6 @@ func TestRedactText_LeavesUnrelatedTextIntact(t *testing.T) {
 	}
 }
 
-// TestRedactText_UnconventionalHomeFromEnvironment covers the account whose
-// home is not under /home or /Users - a root daemon, a container, a relocated
-// or redirected home. Only the process's own home directory can catch those,
-// and the same is true of an own-home path embedded in an http(s) URL: the
-// conventional-root rules deliberately never match inside a URL.
-//
-// Both HOME and USERPROFILE are set, because os.UserHomeDir consults a
-// different one per platform (USERPROFILE on Windows, HOME elsewhere) and this
-// property has to hold on all of them.
 func TestRedactText_UnconventionalHomeFromEnvironment(t *testing.T) {
 	tests := []struct {
 		name string
@@ -269,9 +260,6 @@ func TestRedactText_UnconventionalHomeFromEnvironment(t *testing.T) {
 	}
 }
 
-// TestUsableHomeCandidate_AcceptsBothPlatformSpellings pins the rule directly,
-// because it is the one place a platform-specific helper (filepath.IsAbs)
-// would silently disable redaction rather than fail loudly.
 func TestUsableHomeCandidate_AcceptsBothPlatformSpellings(t *testing.T) {
 	t.Parallel()
 	usable := []string{
@@ -305,8 +293,6 @@ func TestUsableHomeCandidate_AcceptsBothPlatformSpellings(t *testing.T) {
 	}
 }
 
-// TestRedactText_DegenerateHomeIsIgnored guards the over-redaction limit: a
-// home value of "/" would otherwise rewrite every path in the document.
 func TestRedactText_DegenerateHomeIsIgnored(t *testing.T) {
 	t.Setenv("HOME", "/")
 	t.Setenv("USERPROFILE", "")
@@ -317,8 +303,6 @@ func TestRedactText_DegenerateHomeIsIgnored(t *testing.T) {
 	}
 }
 
-// TestRedactText_NeverGrowsTheText is what lets the PR-body assembly redact
-// after it has already clamped the body to the host's character cap.
 func TestRedactText_NeverGrowsTheText(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
@@ -337,11 +321,6 @@ func TestRedactText_NeverGrowsTheText(t *testing.T) {
 	}
 }
 
-// TestHomeCandidates_AreSeparatorSpellingIndependent pins that candidate
-// resolution does not depend on the platform the binary was built for. Without
-// it, filepath.Clean would normalise separators one way on Windows and another
-// on Linux, and a green Linux test run would say nothing about what a Windows
-// daemon actually redacts.
 func TestHomeCandidates_AreSeparatorSpellingIndependent(t *testing.T) {
 	for _, home := range []string{"/srv/nm-operator", `D:\profiles\operator`} {
 		t.Run(home, func(t *testing.T) {

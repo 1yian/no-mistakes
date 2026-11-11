@@ -247,9 +247,6 @@ func TestProtectedPathRefusalSurvivesFailedTrustedRecovery(t *testing.T) {
 	}
 }
 
-// parkedGateFindingIDs returns every finding ID the run's parked gate shows, so
-// a fix response can account for all of them: an omitted finding is refused and
-// leaves the gate parked.
 func parkedGateFindingIDs(t *testing.T, database *db.DB, runID string) []string {
 	t.Helper()
 	steps, err := database.GetStepsByRun(runID)

@@ -167,10 +167,6 @@ func TestMergeRunClosingIssueRefsPreservesEarlierValues(t *testing.T) {
 	}
 }
 
-// `axi run --closes` re-sends the same references after a fresh run already
-// recorded them from its push options. Once claimed, a reference that is
-// already recorded is accepted (it is in the composed body); only a NEW one
-// is refused.
 func TestMergeRunClosingIssueRefsAfterClaimAcceptsOnlyRecordedRefs(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/home/user/project", "git@github.com:user/project.git", "main")
@@ -192,9 +188,6 @@ func TestMergeRunClosingIssueRefsAfterClaimAcceptsOnlyRecordedRefs(t *testing.T)
 	}
 }
 
-// The reattach race: an `axi run --closes` update that lands after the PR step
-// has already sampled the closing issue references can no longer reach the composed body,
-// so it must fail closed instead of reporting a write the PR will never show.
 func TestUpdateRunClosingIssueRefsFailsClosedAfterPRBodyClaim(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/home/user/project", "git@github.com:user/project.git", "main")
@@ -229,9 +222,6 @@ func TestUpdateRunClosingIssueRefsFailsClosedAfterPRBodyClaim(t *testing.T) {
 	}
 }
 
-// A database created before the claim column gains it on reopen, and its
-// pre-existing runs read back as unclaimed so a run that was already in flight
-// during an upgrade can still receive its closing issue references.
 func TestOpenMigratesClosingIssueRefsLockedAtColumn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	d, err := Open(path)
@@ -280,7 +270,6 @@ func TestOpenMigratesClosingIssueRefsLockedAtColumn(t *testing.T) {
 	}
 }
 
-// An update that wins the race must still apply, and the claim must observe it.
 func TestClaimClosingIssueRefsForPRBodyObservesEarlierUpdate(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/home/user/project", "git@github.com:user/project.git", "main")
@@ -301,8 +290,6 @@ func TestClaimClosingIssueRefsForPRBodyObservesEarlierUpdate(t *testing.T) {
 	}
 }
 
-// The claim is idempotent: a PR step that runs again (resume, or updating an
-// existing PR) recomposes from the value it already claimed.
 func TestClaimClosingIssueRefsForPRBodyIsIdempotent(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/home/user/project", "git@github.com:user/project.git", "main")
@@ -327,8 +314,6 @@ func TestClaimClosingIssueRefsForPRBodyIsIdempotent(t *testing.T) {
 	}
 }
 
-// Exactly one of N concurrent reattach updates racing a claim may report
-// success, and the composed body must carry whatever the claim returned.
 func TestUpdateRunClosingIssueRefsConcurrentWithClaimNeverReportsAPhantomWrite(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/home/user/project", "git@github.com:user/project.git", "main")
@@ -640,8 +625,6 @@ func TestRunPRTextRoundTripAndClaimMatching(t *testing.T) {
 		t.Fatalf("matching PR text claim = %#v, claimed=%v, err=%v", first, claimed, err)
 	}
 
-	// Mismatched claimers already polling when the row is inserted must not
-	// consume `created` for the caller whose text matches.
 	const racers = 8
 	mismatch := PRTextDigest(text.Title, "Other words.\n")
 	start := make(chan struct{})
@@ -1881,10 +1864,6 @@ func TestSetRunCustodyReturnedStampsOnceAndSurvivesStatusUpdates(t *testing.T) {
 	}
 }
 
-// TestRunGatesArePinnedAndDefaultToNone covers the durable half of a run's
-// pinned gate list: an untouched run reports no pin (the bare core pipeline,
-// which is the only sequence a row written before this column existed can have
-// had), and a recorded pin survives a reopen of the database.
 func TestRunGatesArePinnedAndDefaultToNone(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "gates.sqlite")
 	d, err := Open(dbPath)

@@ -16,8 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// Exercise the shipped process, including command registration and flags, with
-// private storage and no daemon, forge, provider, or live repository.
 func TestExportCLI(t *testing.T) {
 	_, source, _, _ := runtime.Caller(0)
 	binary := filepath.Join(t.TempDir(), "no-mistakes")

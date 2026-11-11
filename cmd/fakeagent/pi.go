@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// runPi is a synthetic JSON-mode fixture for dispatch tests, not a recorded
-// provider response. Session header + message_end + agent_end follow Pi's
-// documented JSON stream and the adapter's existing wire regressions.
 func runPi(args []string, input io.Reader, scenario *Scenario) int {
 	if len(args) == 1 && args[0] == "--version" {
 		fmt.Println("0.99.1")

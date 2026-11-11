@@ -1,17 +1,3 @@
-// Command genwinres renders the Windows resource objects that embed the
-// no-mistakes application manifest (internal/winres) into
-// cmd/no-mistakes/rsrc_windows_<arch>.syso. Go links any .syso object in the
-// package directory, so every Windows build of no-mistakes.exe carries the
-// manifest without extra build steps.
-//
-// Usage:
-//
-//	go run ./cmd/genwinres           # (re)write the resource objects
-//	go run ./cmd/genwinres --check   # fail if a committed object is stale
-//
-// The --check form is meant for CI so the committed objects never drift from
-// the generator, which is the single source of truth: never hand-edit or
-// replace a .syso with one built by another tool.
 package main
 
 import (
@@ -29,8 +15,6 @@ func main() {
 	os.Exit(run(os.Args[1:], ".", os.Stdout, os.Stderr))
 }
 
-// run writes or checks the objects under the repository root and returns the
-// process exit code.
 func run(args []string, root string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("genwinres", flag.ContinueOnError)
 	flags.SetOutput(stderr)

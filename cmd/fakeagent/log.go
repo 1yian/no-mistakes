@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-// logMu guards appends to $FAKEAGENT_LOG. The fake agent stays
-// single-process per invocation, but opencode runs as a long-lived server
-// that handles concurrent message POSTs from a single test, so the lock
-// keeps log lines from interleaving.
 var logMu sync.Mutex
 
 type invocation struct {

@@ -15,270 +15,101 @@ var ErrApprovalBlocked = errors.New("approval blocked by required review")
 
 var ErrFatalGateReconciliation = errors.New("fatal gate reconciliation")
 
-// ErrDaemonShutdown is the cancellation cause RunManager.Shutdown gives every
-// active run.
 var ErrDaemonShutdown = errors.New("daemon shutting down")
 
-// ErrHandoff stops an already-green CI monitor without cancelling the work.
-// Only the daemon's validated explicit handoff request supplies this cause.
 var ErrHandoff = errors.New("green PR handed off for human review")
 
-// ErrParkedAtShutdown is returned when a daemon shutdown reached a run that was
-// fully recorded as waiting at an approval gate. The run keeps that record so
-// the next start resumes it, as it would after a crash.
 var ErrParkedAtShutdown = errors.New("run left parked at an approval gate by daemon shutdown")
 
-// StepContext provides shared resources to pipeline steps during execution.
 type StepContext struct {
-	Ctx              context.Context
-	Run              *db.Run
-	Repo             *db.Repo
-	WorkDir          string
-	GateDir          string
-	Agent            agent.Agent
-	Config           *config.Config
-	ForgeContext     *forgecontext.Context
-	DB               *db.DB
-	Log              func(string) // discrete log line (newline-terminated, user-visible + file)
-	LogChunk         func(string) // raw streaming chunk (user-visible + file)
-	LogFile          func(string) // file-only log callback (not shown to user)
-	Fixing           bool         // true when re-executing after a "fix" action
-	SkipFixExecution bool         // replay an already-completed fix round's review turn only
-	// EvalReplay marks a review driven directly by `eval replay` rather than by
-	// the executor. Replay scores the review's findings against captured gold
-	// and never consumes the reviewed_paths certification, so ReviewStep skips
-	// its focused coverage-completion turn there: that turn exists only to
-	// satisfy the certification gate, and spending it in replay would add an
-	// agent invocation the captured baseline does not charge, doubling the
-	// candidate's recorded cost. Production never sets it.
-	EvalReplay bool
-	// FinalizingAnswers is true when re-executing after a types.ActionAnswer
-	// response: every question the reviewer left open has been answered, and
-	// the step resumes the SAME reviewer session with those answers so it can
-	// finish the pass it parked mid-way.
-	//
-	// The answer itself changes no code, but this CAN be set together with
-	// Fixing, and both answer paths do set both: a question may be asked by a
-	// rereview inside a fix round, whose gate parks as fix_review, and the
-	// answer round has to keep that context or the step's durable status
-	// changes depending on whether a daemon restart happened. SkipFixExecution
-	// is what keeps the fixer from re-running over already-fixed code, and
-	// review.go's `FinalizingAnswers && !Fixing` exists because the
-	// combination is reachable - not to forbid it.
-	FinalizingAnswers     bool
-	ReviewStartingHeadSHA string
-	// CoverageContinuation names the exact stored round accepted at the gate.
-	// The real review consumer re-reads and validates its scope before reuse.
-	CoverageContinuation *db.StepRound
-	// CarriedFindings is the outstanding set an ANSWER round carries in, minus
-	// the reviewer's own open-question rows (see answerRoundCarriedFindings),
-	// so the finalize turn re-adjudicates by id only findings it made itself.
-	// Empty on every other round type.
-	CarriedFindings  string
-	PreviousFindings string // JSON findings selected for the current fix round
-	DeferredFindings string // JSON findings left unselected when the current fix round began
-	// AutoFixRound is true when the automatic fix loop, not a human response,
-	// started the current fix round. Only then do DeferredFindings hold
-	// findings nobody has decided on: a human fix response accounts for every
-	// finding it leaves unselected as an explicit decline.
-	AutoFixRound bool
-	// StepResultID is the DB row ID of the current step's step_results record.
-	// Steps use it to query their own round history for multi-round prompts.
-	StepResultID string
-	// EvidenceDir is where this run's test-evidence artifacts belong, always
-	// outside the worktree. The executor resolves it once from the app root
-	// (honoring test.evidence.local_root) so every consumer - the test step's
-	// prompt and the PR step's publisher - names the same directory. Empty only
-	// in embeddings that never gather evidence.
-	EvidenceDir string
-	Env         []string // extra environment variables for subprocesses (used in tests)
-	// UserIntent is a short, possibly-empty summary of what the change author
-	// was trying to accomplish. It's surfaced in step prompts so agents have
-	// context beyond the diff. Its authority depends on IntentSource: an
-	// explicit `--intent` is the author's own goal statement, while an
-	// inferred summary comes from a local agent transcript.
-	UserIntent string
-	// PublicIntentBrief is the PR-step's bounded rendering of UserIntent when
-	// trusted pr.intent.format is brief. It is never used as review criteria.
-	PublicIntentBrief string
-	// IntentSource records the provenance of UserIntent so steps can weigh
-	// its authority. db.RunIntentSourceAgent ("agent") means the driving
-	// agent supplied it explicitly via `axi run --intent`; db.RunIntentSourceRerun
-	// ("rerun") means that authoritative intent was inherited. Both are
-	// authoritative acceptance criteria; an agent name ("claude", "codex", ...)
-	// means it was inferred from a transcript (a hint). Empty when no intent exists.
-	IntentSource string
-	// UncertifiedFromSHA/ToSHA/SourceRunID name a previous run's fixer
-	// commits on this branch whose re-review did not complete. They are set
-	// on a later run's initial review (Fixing==false) so that review still
-	// receives fix-round provenance. Empty when no such range applies.
-	UncertifiedFromSHA     string
-	UncertifiedToSHA       string
-	UncertifiedSourceRunID string
-	// UncertifiedPriorRounds are review rounds from the source run that left
-	// the uncertified range. Nil when none apply.
-	UncertifiedPriorRounds []*db.StepRound
-	// PriorBranchDecisions are rounds from EARLIER runs on this branch that
-	// recorded a human decision about their findings. Unlike the uncertified
-	// range above, nothing clears them when a review completes: a decision the
-	// user made about this branch keeps standing until the branch's run history
-	// ages out of the loader's bound. Nil when none apply. Advisory prompt
-	// context only.
+	Ctx                           context.Context
+	Run                           *db.Run
+	Repo                          *db.Repo
+	WorkDir                       string
+	GateDir                       string
+	Agent                         agent.Agent
+	Config                        *config.Config
+	ForgeContext                  *forgecontext.Context
+	DB                            *db.DB
+	Log                           func(string) // discrete log line (newline-terminated, user-visible + file)
+	LogChunk                      func(string) // raw streaming chunk (user-visible + file)
+	LogFile                       func(string) // file-only log callback (not shown to user)
+	Fixing                        bool         // true when re-executing after a "fix" action
+	SkipFixExecution              bool         // replay an already-completed fix round's review turn only
+	EvalReplay                    bool
+	FinalizingAnswers             bool
+	ReviewStartingHeadSHA         string
+	CoverageContinuation          *db.StepRound
+	CarriedFindings               string
+	PreviousFindings              string // JSON findings selected for the current fix round
+	DeferredFindings              string // JSON findings left unselected when the current fix round began
+	AutoFixRound                  bool
+	StepResultID                  string
+	EvidenceDir                   string
+	Env                           []string // extra environment variables for subprocesses (used in tests)
+	UserIntent                    string
+	PublicIntentBrief             string
+	IntentSource                  string
+	UncertifiedFromSHA            string
+	UncertifiedToSHA              string
+	UncertifiedSourceRunID        string
+	UncertifiedPriorRounds        []*db.StepRound
 	PriorBranchDecisions          []*db.BranchDecisionRound
 	PriorBranchDecisionsTruncated bool
-	// PreviousRunReviewRounds are the review rounds of the most recent OTHER
-	// run on this branch. They are bound on the review step so a run that
-	// superseded a parked one - which is what an author's own fix push does -
-	// still carries what the previous round found and what was already
-	// answered. The code itself is still reviewed cold. Nil when there is no
-	// such run, or when the uncertified-range channel already carries the same
-	// run's rounds.
-	PreviousRunReviewRounds []*db.StepRound
-	// Sessions manages the run's durable review-loop sessions: the fixer's,
-	// which spans its fix turns, and the reviewer's, which spans one review
-	// pass and is dropped before any fix round. Nil runs every invocation cold.
-	Sessions *RunSessions
-	// Shared carries in-memory run-scoped results one step hands to a later
-	// step in the same run (e.g. the combined document+lint pass).
-	Shared             *RunShared
-	CIReadinessChanged func(ready, declaredNoCI bool)
-	// SetCIReadiness is the daemon-owned transition boundary for CI monitor
-	// readiness. When set, the CI step uses it instead of writing readiness
-	// directly, so a daemon can serialize readiness changes with lifecycle
-	// decisions such as handoff. Embeddings leave it nil and use the local DB
-	// write path.
-	SetCIReadiness func(ready, declaredNoCI bool) error
-	// HandoffPending reports an explicit request waiting on this monitor.
-	HandoffPending func() bool
-	// SetPRState is the daemon-owned transition boundary for CI monitor PR
-	// lifecycle observations. Embeddings leave it nil and use the local DB
-	// write path.
-	SetPRState func(state string) error
-	CIWake     <-chan struct{}
-	// MarkRunning tells the executor that a step re-executing as a fix round
-	// has finished its repair and is executing normally again, so the step's
-	// status returns from fixing to running before Execute returns. The CI
-	// step needs it: a fix round that publishes a repair keeps monitoring the
-	// pull request afterwards, and both the TUI's active-CI indicator and the
-	// AXI checks-passed outcome read a running status. Nil in embeddings that
-	// never fix.
-	MarkRunning func() error
-	// OnPRMerged is a best-effort hook after a merged PR state is persisted.
-	// Eval uses it to relabel auto-fix/shipped-unfixed gold; nil is a no-op.
-	OnPRMerged func(ctx context.Context, runID string)
-	// ClosingIssueRefs are the explicit --closes values claimed from the DB at
-	// PR-step start. Steps read this snapshot instead of mutable run state.
-	ClosingIssueRefs []string
+	PreviousRunReviewRounds       []*db.StepRound
+	Sessions                      *RunSessions
+	Shared                        *RunShared
+	CIReadinessChanged            func(ready, declaredNoCI bool)
+	SetCIReadiness                func(ready, declaredNoCI bool) error
+	HandoffPending                func() bool
+	SetPRState                    func(state string) error
+	CIWake                        <-chan struct{}
+	MarkRunning                   func() error
+	OnPRMerged                    func(ctx context.Context, runID string)
+	ClosingIssueRefs              []string
 
-	// All validation steps share the actual diff-base pin; runs.base_sha is
-	// the previous push, not necessarily the base resolved by a fresh fetch.
 	crashRetryBaseSHA *string
 }
 
-// RunAgentSession executes one turn of a durable review-loop role session,
-// running cold when sessions are unavailable. The invocation is bounded by
-// RunAgent's deadline. Only the review step uses it: its fixer turns, and the
-// asking/finalize pair of one review pass. A review turn that judges changed
-// code - every post-fix rereview - passes an empty role so it stays isolated
-// from the session that prescribed the fixes under review. Every other agent
-// invocation goes through RunAgent.
 func (sctx *StepContext) RunAgentSession(role SessionRole, opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(sctx.Ctx, opts, role, 0, 0, nil)
 }
 
-// StepOutcome is the result of executing a pipeline step.
 type StepOutcome struct {
-	CIReadyNoCI   *bool
-	NeedsApproval bool // whether the step pauses for user action
-	AutoFixable   bool
-	Findings      string // JSON findings for TUI display (optional)
-	// ReviewedPaths is the review step's agent-reported coverage record for this
-	// round. It is a positive-verification signal only after the executor
-	// intersects it with ReviewablePaths.
-	ReviewedPaths []string
-	// ReviewablePaths is the trusted changed-file set this review round can
-	// certify. It is computed from the diff, not supplied by the agent.
-	ReviewablePaths []string
-	// WithdrawnFindings is an answer round's explicit retraction list: the
-	// carried findings the turn says no longer hold, each with the reason it
-	// gave. It is the ONLY way a carried finding leaves the outstanding set on
-	// an answer round, so the reason is the record of why it left.
-	WithdrawnFindings []types.WithdrawnFinding
-	ExitCode          int    // process exit code (0 = success)
-	PRURL             string // PR/MR URL if this step created or found one
-	Skipped           bool   // mark the step as skipped without failing the run
-	SkipReason        string // automatic PR/CI skip cause; explicit per-run skips leave it empty
-	SkipRemaining     bool   // skip all subsequent steps (e.g. empty diff after rebase)
-	// RestartFrom asks the executor to re-run validation from this earlier step.
-	// CI repairs use it when policy requires revalidation or continuity cannot be
-	// proven, sending the new local head back through review before push.
-	RestartFrom types.StepName
-	// FixSummary, when non-empty, records the result of a fix attempt.
-	FixSummary      string
-	RepairPublished bool
-	// ReviewApprovedHeadSHA is set only by a successfully executed full review
-	// round. The executor durably records it only when the review step actually
-	// completes, never while that outcome is parked or after a failed round.
+	CIReadyNoCI           *bool
+	NeedsApproval         bool // whether the step pauses for user action
+	AutoFixable           bool
+	Findings              string // JSON findings for TUI display (optional)
+	ReviewedPaths         []string
+	ReviewablePaths       []string
+	WithdrawnFindings     []types.WithdrawnFinding
+	ExitCode              int    // process exit code (0 = success)
+	PRURL                 string // PR/MR URL if this step created or found one
+	Skipped               bool   // mark the step as skipped without failing the run
+	SkipReason            string // automatic PR/CI skip cause; explicit per-run skips leave it empty
+	SkipRemaining         bool   // skip all subsequent steps (e.g. empty diff after rebase)
+	RestartFrom           types.StepName
+	FixSummary            string
+	RepairPublished       bool
 	ReviewApprovedHeadSHA string
 
-	// DurationOverrideMS, when positive, replaces the wall-clock duration
-	// reported for this step. Used by demo mode to show realistic durations
-	// without actually waiting.
 	DurationOverrideMS int64
 }
 
-// Step is the interface that each pipeline step implements.
 type Step interface {
-	// Name returns the step's identity in the run's pipeline sequence.
 	Name() types.StepName
 
-	// Execute runs the step logic and returns an outcome.
-	// A step that returns NeedsApproval=true will pause the pipeline
-	// until the user responds with an approval action.
 	Execute(sctx *StepContext) (*StepOutcome, error)
 }
 
-// ApprovalGateReconciler is implemented by a step whose parked approval gate
-// can become obsolete when an external source of truth changes. The executor
-// invokes it with a bounded context while also waiting for an approval. A true
-// result completes the step through the normal success path; false or an error
-// leaves the gate parked. Implementations must be read-only and fail closed.
 type ApprovalGateReconciler interface {
 	ReconcileApprovalGate(sctx *StepContext) (resolved bool, err error)
 }
 
-// ApprovalGateResumer is implemented by a step whose parked approval gate can
-// become ANSWERABLE rather than obsolete: the condition that parked it is gone,
-// but the right outcome is to run the step again rather than to complete it.
-//
-// It exists because ApprovalGateReconciler cannot express that. A reconciler's
-// true result completes the step through the success path, which is correct for
-// the CI step - a merged or closed PR genuinely settles it - and wrong for the
-// review step, where completing would approve the run's head off the findings
-// snapshot the gate parked with, without the reviewer ever seeing the answers
-// that arrived. So a resumer returns the ApprovalAction to re-enter the step
-// with, and the executor delivers it exactly as if an operator had sent it; no
-// step completes on this path.
-//
-// resume false leaves the gate parked. Implementations must be read-only, must
-// fail closed, and must be certain the action belongs to THIS gate: a gate
-// parked on something the action does not answer must be left alone.
 type ApprovalGateResumer interface {
 	ResumeApprovalGate(sctx *StepContext, findingsJSON string) (action types.ApprovalAction, resume bool, err error)
 }
 
-// ApprovalOverrideVerifier preserves unresolved conditions when ActionApprove
-// completes a step. CI reads live checks; Test reads persisted command evidence.
-// The executor calls it when an approve response arrives at a parked gate (live
-// or recovered), not for Skip, Abort, or Fix. An empty reason means no override
-// is needed. A nonempty reason or an ordinary verification error is recorded as
-// an explicit override before approval can complete; failure to persist that
-// evidence fails the run closed.
-//
-// An error wrapping ErrApprovalBlocked instead refuses the approve response:
-// the gate stays parked and nothing is recorded. CI uses this when a required
-// external review is incomplete or cannot be verified. Steps without this
-// interface are unaffected.
 type ApprovalOverrideVerifier interface {
 	VerifyApprovalOverride(sctx *StepContext) (unresolved string, err error)
 }

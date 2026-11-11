@@ -12,10 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestPrepareSubmoduleCheckoutReachesConfiguredCommands drives a daemon run
-// whose commands.prepare populates a committed submodule. The run worktree
-// starts with the submodule empty, so the configured test and lint commands
-// pass only if they see the checkout preparation made.
 func TestPrepareSubmoduleCheckoutReachesConfiguredCommands(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: cleanReviewScenario(t)})
 	if out, err := h.Run("init"); err != nil {

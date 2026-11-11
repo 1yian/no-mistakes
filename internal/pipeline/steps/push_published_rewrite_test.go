@@ -9,13 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// TestPushStep_RepublishesReviewedRebaseOverRunsOwnPublishedHead reproduces a
-// run that published a head carrying a pipeline commit, then took a CI
-// merge-conflict repair: the repair always rebases, so it is revalidated from
-// Review and published again. The mirror still holds the run's own last pushed
-// head, whose patches the conflict resolution changed, so only Decision 41-A
-// for that exact head lets the reviewed rebase replace it. The same in-memory
-// run is reused across both publications, as the executor does.
 func TestPushStep_RepublishesReviewedRebaseOverRunsOwnPublishedHead(t *testing.T) {
 	for _, variant := range []string{"renumbered_migration", "plain_conflict_resolution", "external_mirror_head", "remote_moved_out_of_band"} {
 		t.Run(variant, func(t *testing.T) {

@@ -15,9 +15,6 @@ func symlinkTo(t *testing.T, target string) string {
 	return alias
 }
 
-// Issue #1465: the registered spelling of a checkout and the spelling a command
-// resolves from differ, yet name one directory, and lookup must find the one
-// repository either way.
 func TestRepoGetByPathResolvesASymlinkSpellingOfTheRegisteredDirectory(t *testing.T) {
 	d := openTestDB(t)
 	dir := t.TempDir()
@@ -81,8 +78,6 @@ func TestRepoGetByPathResolvesACaseVariantOnACaseInsensitiveFilesystem(t *testin
 	}
 }
 
-// Identity, not shared ancestry: a sibling directory is a different checkout,
-// and a registered path that no longer exists matches nothing.
 func TestRepoGetByPathDoesNotConflateDifferentDirectories(t *testing.T) {
 	d := openTestDB(t)
 	registered, sibling := t.TempDir(), t.TempDir()
@@ -101,10 +96,6 @@ func TestRepoGetByPathDoesNotConflateDifferentDirectories(t *testing.T) {
 	}
 }
 
-// An exact match is always preferred, and rows an older version registered
-// under several spellings of one directory resolve to the oldest, not to
-// whichever sorts first by id. Insertion order breaks a tie in created_at,
-// which is only second resolution.
 func TestRepoGetByPathPrefersTheExactRowThenTheOldest(t *testing.T) {
 	d := openTestDB(t)
 	dir := t.TempDir()

@@ -10,8 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// quotaTestAgent is a fallback chain member that records the session it was
-// handed, so a test can prove a switch continued with a fresh session.
 type quotaTestAgent struct {
 	name       string
 	run        func(opts RunOpts) (*Result, error)
@@ -215,8 +213,6 @@ func TestIsQuotaExhaustionError_RejectsNonQuotaErrors(t *testing.T) {
 	}
 }
 
-// A plain nil QuotaSwitch option keeps NewFallback's signature friendly to
-// existing callers and mirrors the pipeline's agent name type at the seam.
 var _ = types.AgentName("")
 
 func TestFallbackQuotaSwitchPersistsAcrossTurns(t *testing.T) {

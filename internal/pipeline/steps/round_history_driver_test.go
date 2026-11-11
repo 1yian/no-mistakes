@@ -8,9 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// A driver's fix guidance scoped one round. The step's own history shows it
-// under its own name and says whose it is; the decision sections, which reach
-// other steps and later runs as the user's choices, never carry it.
 func TestDriverInstructionsAreNeverPresentedAsTheUsersDecision(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -46,9 +43,6 @@ func TestDriverInstructionsAreNeverPresentedAsTheUsersDecision(t *testing.T) {
 	}
 }
 
-// A later run sees an earlier run's rounds as history, not as its own fix
-// round, so the driver's guidance that scoped that round must not ride along
-// under user_chose_to_fix.
 func TestEarlierRunRoundsNeverCarryDriverInstructions(t *testing.T) {
 	t.Parallel()
 	const guidance = "only touch a.go"

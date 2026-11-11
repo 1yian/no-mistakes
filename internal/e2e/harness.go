@@ -26,9 +26,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Harness wires together the temp filesystem state needed to run the real
-// no-mistakes binary against a fake agent. Each test gets its own Harness;
-// the binaries themselves are built once per `go test` process.
 type Harness struct {
 	t *testing.T
 
@@ -48,41 +45,18 @@ type Harness struct {
 	daemonOwn         *e2edaemon.Ownership
 }
 
-// SetupOpts controls per-test setup.
 type SetupOpts struct {
-	// Agent picks which fake the harness wires up: "claude", "codex", "grok",
-	// "opencode", or "antigravity". The other binaries are still on PATH (so
-	// `auto` detection finds the requested one first via config), but only
-	// the chosen one is exercised.
 	Agent string
 
-	// Scenario is an optional path to a YAML scenario file. If empty the
-	// fake agent uses its built-in clean-response default.
 	Scenario string
 
-	// AllowRepoCommands controls the per-repo allow_repo_commands opt-in
-	// committed to the trusted default-branch .no-mistakes.yaml (never the
-	// global config, and never the pushed branch). The harness models a
-	// trusted single-developer environment (the same user owns the working
-	// clone, gate, and daemon), so it defaults to true: feature-branch
-	// commands run as before. Tests that verify the supply-chain hardening
-	// (commands must come from the trusted default branch) pass a pointer
-	// to false to exercise the secure default.
 	AllowRepoCommands *bool
 
-	// GlobalConfigExtra is appended verbatim to the generated global
-	// config.yaml. It exists for operator-only settings a test must exercise
-	// through the real loader - agent_timeout and review_agent_timeout, whose
-	// production defaults are half an hour, are the reason it was added.
 	GlobalConfigExtra string
 }
 
 const e2eDaemonStartTimeout = "45s"
 
-// NewHarness builds the no-mistakes + fakeagent binaries (once per test
-// process), creates a temp git repo with origin, writes the no-mistakes
-// global config to point at the chosen fake agent, and registers cleanup
-// to stop the daemon and remove temp state at test end.
 func NewHarness(t *testing.T, opts SetupOpts) *Harness {
 	t.Helper()
 	if opts.Agent == "" {
@@ -200,11 +174,6 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
-// writeGlobalConfig writes a no-mistakes global config that pins the
-// agent name and binary path. The path override forces no-mistakes'
-// agent.New to use our absolute fake-agent path instead of looking up the
-// agent name in PATH (which would also work, but the override removes a
-// confounding variable when something goes wrong).
 func (h *Harness) writeGlobalConfig() {
 	configPath := filepath.Join(h.NMHome, "config.yaml")
 	if err := os.MkdirAll(h.NMHome, 0o755); err != nil {
@@ -231,9 +200,6 @@ auto_fix:
 	}
 }
 
-// initGitRepos creates a bare upstream repo and a working clone with one
-// initial commit on the default branch. Both repos use a local git
-// identity so commits succeed without reading the user's gitconfig.
 func (h *Harness) initGitRepos() {
 	h.t.Helper()
 	ctx := context.Background()
@@ -283,20 +249,16 @@ func (h *Harness) initGitRepos() {
 	mustGit(h.WorkDir, "push", "-u", "origin", "main")
 }
 
-// Run invokes the no-mistakes binary in the working repo and returns
-// (stdout+stderr, error). It propagates the harness env via os.Environ().
 func (h *Harness) Run(args ...string) (string, error) {
 	h.t.Helper()
 	return h.RunInDir(h.WorkDir, args...)
 }
 
-// RunInDir invokes the no-mistakes binary in dir and returns stdout+stderr.
 func (h *Harness) RunInDir(dir string, args ...string) (string, error) {
 	h.t.Helper()
 	return h.RunInDirWithEnv(dir, nil, args...)
 }
 
-// RunInDirWithEnv invokes the no-mistakes binary in dir with env overrides.
 func (h *Harness) RunInDirWithEnv(dir string, env map[string]string, args ...string) (string, error) {
 	h.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -309,8 +271,6 @@ func (h *Harness) RunInDirWithEnv(dir string, env map[string]string, args ...str
 	return string(out), err
 }
 
-// syncDaemonOwnership records a live daemon PID into the suite inventory when
-// a harness command has (possibly) started or restarted the detached daemon.
 func (h *Harness) syncDaemonOwnership() {
 	if h == nil || h.daemonOwn == nil || h.NMHome == "" {
 		return
@@ -349,9 +309,6 @@ func mergedEnv(base []string, overrides map[string]string) []string {
 	return out
 }
 
-// CommitChange writes content to path (relative to WorkDir), commits it
-// on the named branch, and returns the new HEAD SHA. Branches off main
-// the first time the branch is referenced.
 func (h *Harness) CommitChange(branch, path, content, message string) string {
 	h.t.Helper()
 	ctx := context.Background()
@@ -388,9 +345,6 @@ func (h *Harness) CommitChange(branch, path, content, message string) string {
 	return string(bytes.TrimSpace(sha))
 }
 
-// PushToGate pushes the current branch through the no-mistakes remote,
-// which fires the post-receive hook and triggers a daemon-side pipeline
-// run. Returns the IPC client connected to the daemon's socket.
 func (h *Harness) PushToGate(branch string) {
 	h.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -463,9 +417,6 @@ func (h *Harness) WorktreeRefSHA(ref string) string {
 	return string(bytes.TrimSpace(sha))
 }
 
-// WaitForRun polls the daemon over IPC until a run for branch completes
-// (status != pending|running) or timeout expires. Returns the final
-// RunInfo so the test can assert on per-step outcomes.
 func (h *Harness) WaitForRun(branch string, timeout time.Duration) *ipc.RunInfo {
 	h.t.Helper()
 	return h.waitForRunStatus(branch, timeout, func(status types.RunStatus) bool {
@@ -473,7 +424,6 @@ func (h *Harness) WaitForRun(branch string, timeout time.Duration) *ipc.RunInfo 
 	}, "finish")
 }
 
-// WaitForRunRunning polls until the newest run for branch reaches running.
 func (h *Harness) WaitForRunRunning(branch string, timeout time.Duration) *ipc.RunInfo {
 	h.t.Helper()
 	return h.waitForRunStatus(branch, timeout, func(status types.RunStatus) bool {
@@ -533,10 +483,6 @@ func (h *Harness) Respond(runID string, step types.StepName, action types.Approv
 	}
 }
 
-// RespondWithFindings answers an approval gate while explicitly selecting the
-// findings that the fix round must carry forward. An empty selection means no
-// findings, not all findings, so tests exercising review fixes should name the
-// finding IDs they intend to repair.
 func (h *Harness) RespondWithFindings(runID string, step types.StepName, action types.ApprovalAction, findingIDs []string) {
 	h.t.Helper()
 	if err := h.respondError(runID, step, action, findingIDs); err != nil {
@@ -556,10 +502,6 @@ func (h *Harness) respondError(runID string, step types.StepName, action types.A
 		return fmt.Errorf("dial daemon: %w", err)
 	}
 	defer client.Close()
-	// A fix response must account for every finding the gate shows, because an
-	// omission is never a decline. The harness declines the findings the test
-	// did not select, exactly as the TUI sends the boxes an operator left
-	// unchecked.
 	var ignoreIDs []string
 	if action == types.ActionFix {
 		ignoreIDs = h.unselectedFindingIDs(runID, step, findingIDs)
@@ -589,7 +531,6 @@ func (h *Harness) respondError(runID string, step types.StepName, action types.A
 	return nil
 }
 
-// withoutIDs returns the given IDs with every ID in exclude removed.
 func withoutIDs(ids, exclude []string) []string {
 	if len(ids) == 0 || len(exclude) == 0 {
 		return ids
@@ -607,8 +548,6 @@ func withoutIDs(ids, exclude []string) []string {
 	return kept
 }
 
-// unselectedFindingIDs returns the parked gate's finding IDs that the response
-// does not select, so they ride it as explicit declines.
 func (h *Harness) unselectedFindingIDs(runID string, step types.StepName, selected []string) []string {
 	h.t.Helper()
 	run := h.RunInfo(runID)
@@ -644,9 +583,6 @@ func (h *Harness) CancelRun(runID string) {
 	}
 }
 
-// TryCancelRun asks the daemon to cancel runID and returns the daemon's
-// error instead of failing the test, for callers that can tell a benign
-// refusal (the run already finished) from a real one.
 func (h *Harness) TryCancelRun(runID string) error {
 	h.t.Helper()
 	p := paths.WithRoot(h.NMHome)
@@ -711,9 +647,6 @@ func (h *Harness) waitForRunStatus(branch string, timeout time.Duration, match f
 	return nil
 }
 
-// dumpDebugState writes the daemon log, agent log, and per-step run
-// logs to test output. Called on WaitForRun timeout so a stuck pipeline
-// surfaces the actual failure mode instead of just "stuck running".
 func (h *Harness) dumpDebugState() {
 	for _, candidate := range []string{
 		filepath.Join(h.NMHome, "logs", "daemon.log"),
@@ -745,9 +678,6 @@ func tailBytes(data []byte, n int) []byte {
 	return data[len(data)-n:]
 }
 
-// AgentInvocations returns every recorded fake-agent invocation in the
-// order they happened. Useful for asserting which steps actually called
-// the agent.
 func (h *Harness) AgentInvocations() []Invocation {
 	h.t.Helper()
 	data, err := os.ReadFile(h.AgentLog)
@@ -772,7 +702,6 @@ func (h *Harness) AgentInvocations() []Invocation {
 	return invs
 }
 
-// Invocation is a single fake-agent call captured in $FAKEAGENT_LOG.
 type Invocation struct {
 	Time   string   `json:"time"`
 	Agent  string   `json:"agent"`
@@ -793,10 +722,6 @@ func (h *Harness) runGit(ctx context.Context, dir string, args ...string) ([]byt
 	return cmd.CombinedOutput()
 }
 
-// repoID mirrors gate.repoID(): sha256 of the absolute work path, first
-// 6 bytes hex. Tests need this to query runs by repo. EvalSymlinks
-// matches gate.Init's normalisation (macOS /var → /private/var bites here
-// without it).
 func (h *Harness) repoID() string {
 	abs := h.WorkDir
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
@@ -806,13 +731,6 @@ func (h *Harness) repoID() string {
 	return hex.EncodeToString(sum[:6])
 }
 
-// shutdown stops the daemon (best-effort) and is registered as a test
-// cleanup. Ignoring errors here is intentional: the daemon may already
-// be gone, the binary may have failed to build, etc. We just want the
-// next test (or the developer's real daemon) not to inherit our state.
-// Ownership release also unregisters the inventory entry and frees the
-// concurrency slot; suite-wrapper / TestMain reapers cover the path where
-// this Cleanup never runs.
 func (h *Harness) shutdown() {
 	if h.daemonOwn != nil {
 		h.daemonOwn.NMBin = h.NMBin
@@ -852,9 +770,6 @@ var (
 	buildErr  error
 )
 
-// buildBinaries compiles the no-mistakes binary and the fakeagent binary
-// once per `go test` invocation. Both are placed in a per-process build
-// dir; subsequent harnesses reuse them.
 func buildBinaries(t *testing.T) (nmBin, fakeBin string) {
 	t.Helper()
 	buildOnce.Do(func() {
@@ -901,7 +816,6 @@ func executableName(base string) string {
 	return base
 }
 
-// defaultFixtureRoot returns the absolute path to internal/e2e/fixtures.
 func defaultFixtureRoot() (string, error) {
 	root, err := findRepoRoot()
 	if err != nil {
@@ -918,9 +832,6 @@ func fixtureRootFromRepoRoot(root string) (string, error) {
 	return "", fmt.Errorf("fixtures directory not found: %s", dir)
 }
 
-// findRepoRoot walks up from this source file's directory looking for
-// the go.mod that declares the no-mistakes module. Robust to test
-// runners that change the working directory.
 func findRepoRoot() (string, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {

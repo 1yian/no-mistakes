@@ -21,8 +21,6 @@ func stubWindowsTaskUser() (*user.User, error) {
 	return &user.User{Username: stubWindowsTaskAccount}, nil
 }
 
-// readWindowsTaskDefinition decodes the UTF-16 task XML that a schtasks
-// /Create /XML invocation points at, while the file still exists.
 func readWindowsTaskDefinition(t *testing.T, args []string) string {
 	t.Helper()
 	path := windowsTaskDefinitionPath(args)
@@ -103,9 +101,6 @@ func TestRenderWindowsTaskXMLAllowsLongRunningOnBattery(t *testing.T) {
 	assertWindowsTaskAllowsLongRunningOnBattery(t, task)
 }
 
-// Issue #1192: an any-user ONLOGON trigger cannot be registered from a
-// non-elevated token, so the trigger must be scoped to the installing user and
-// the task must still run on that user's limited interactive token.
 func TestRenderWindowsTaskXMLScopesLogonTriggerToInstallingUser(t *testing.T) {
 	t.Parallel()
 

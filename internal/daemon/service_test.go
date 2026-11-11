@@ -15,12 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestStart_ReinstallsManagedServiceWhenPlistChanged covers the post-upgrade
-// case for #143: the user installed a newer binary that renders a different
-// plist (e.g., now carrying a PATH env fix), the old daemon is still alive
-// under the stale plist, and `daemon start` must refresh the plist and boot
-// launchd under the new one so the fix actually takes effect. Prior behavior
-// was "daemon already running" with no refresh, stranding the user.
 func TestStart_ReinstallsManagedServiceWhenPlistChanged(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -88,9 +82,6 @@ func TestStart_ReinstallsManagedServiceWhenPlistChanged(t *testing.T) {
 	}
 }
 
-// TestStartGuarded_RefusalLeavesDriftedServiceAndDaemonAlone covers #1425:
-// when the restart guard refuses, the stale definition stays on disk and the
-// running daemon is never stopped.
 func TestStartGuarded_RefusalLeavesDriftedServiceAndDaemonAlone(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -133,10 +124,6 @@ func TestStartGuarded_RefusalLeavesDriftedServiceAndDaemonAlone(t *testing.T) {
 	}
 }
 
-// TestStart_DoesNotReinstallWhenPlistUnchanged preserves the existing
-// "daemon already running" contract when nothing has changed, so repeated
-// `daemon start` invocations from shells/hooks don't silently restart the
-// daemon and churn the current run.
 func TestStart_DoesNotReinstallWhenPlistUnchanged(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -480,16 +467,6 @@ func TestStartRestoresStaleSystemdUnitWhenRefreshInstallFails(t *testing.T) {
 	}
 }
 
-// TestStartRestoresStaleSystemdUnitAtOriginalModeWhenRefreshInstallFails guards
-// the drift-reinstall restore path against re-opening the 0644 credential leak
-// that writeFileAtomic closed for the install path. A prior proxy install
-// leaves the unit at 0600 with credential-bearing content (a forwarded proxy
-// URL can embed user:pass). A drift reinstall from a shell without the proxy
-// vars rewrites the unit at the conventional 0644; if that reinstall then
-// fails, the restore writes the original 0600 credential content back - but an
-// in-place os.WriteFile only re-applies its mode on create, so it would leave
-// the credentials world-readable at 0644. The restore must re-apply the
-// captured 0600 mode.
 func TestStartRestoresStaleSystemdUnitAtOriginalModeWhenRefreshInstallFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX file modes (0600) are not enforced on Windows; the proxy-bearing service file is only generated on macOS/Linux")
@@ -1260,26 +1237,12 @@ func TestStopFallsBackToDetachedDaemonOnWindowsWithoutManagedService(t *testing.
 	}
 }
 
-// TestDefaultServiceManagerBypassedIsTrueUnderGoTest locks in the contract
-// that protects developer machines: under `go test`, the default bypass
-// function must short-circuit managed-service plumbing so unstubbed daemon
-// tests cannot invoke real launchctl/systemctl/schtasks. A regression here
-// previously caused TestStopNotRunningIsNoop to tear down the live
-// LaunchAgent-managed daemon on macOS.
 func TestDefaultServiceManagerBypassedIsTrueUnderGoTest(t *testing.T) {
 	if !defaultServiceManagerBypassed() {
 		t.Fatal("defaultServiceManagerBypassed() must return true under `go test` so daemon tests cannot reach real launchctl/systemctl/schtasks state")
 	}
 }
 
-// TestStopWithUnstubbedPathsDoesNotInvokeRealServiceCommands is the
-// end-to-end regression test: it simulates a managed service having been
-// installed at the user's real-looking home (plist / systemd unit) and
-// asserts that Stop(p), when called from a test binary with only a temp
-// paths.Paths, does not invoke any service-manager commands. Before the
-// fix, Stop went through stopManagedService -> managedServiceInstalled ->
-// os.Stat(launchAgentPath()) which used the real os.UserHomeDir, found the
-// real plist, then ran real `launchctl bootout` and killed the live daemon.
 func TestStopWithUnstubbedPathsDoesNotInvokeRealServiceCommands(t *testing.T) {
 	cleanup := stubServiceRuntime(t)
 	defer cleanup()
@@ -1337,11 +1300,6 @@ func TestStopWithUnstubbedPathsDoesNotInvokeRealServiceCommands(t *testing.T) {
 	}
 }
 
-// TestStartWithUnstubbedPathsDoesNotInvokeRealServiceCommands mirrors the
-// Stop regression for Start(). Start also goes through
-// installManagedService -> startManagedService, both of which rely on the
-// bypass guard to stay out of real launchctl/systemctl/schtasks when called
-// from a test binary with only a temp paths.Paths.
 func TestStartWithUnstubbedPathsDoesNotInvokeRealServiceCommands(t *testing.T) {
 	cleanup := stubServiceRuntime(t)
 	defer cleanup()
@@ -1470,17 +1428,6 @@ func TestServiceInstanceSuffixNormalizesCaseOnWindows(t *testing.T) {
 	}
 }
 
-// TestStopDoesNotTouchManagedDaemonOwnedByDifferentNMHome is the structural
-// regression test for the per-NM_HOME scoping. Before scoping, the launchd
-// label / systemd unit / Windows task name were globally unique per user.
-// Any `go test ./internal/daemon` in any checkout - including worktrees
-// without the testing.Testing() bypass - called TestStopNotRunningIsNoop
-// -> Stop(tmpdir-p), which matched the global identifier and tore down the
-// user's live LaunchAgent-managed daemon. This test pins in the scoping:
-// with serviceManagerBypassed explicitly disabled (simulating worktrees
-// without the testing.Testing() guard), Stop(p) for a tmpdir paths.Paths
-// must still not invoke any destructive service-manager command against
-// artifacts owned by a different NM_HOME.
 func TestStopDoesNotTouchManagedDaemonOwnedByDifferentNMHome(t *testing.T) {
 	cleanup := stubServiceRuntime(t)
 	defer cleanup()

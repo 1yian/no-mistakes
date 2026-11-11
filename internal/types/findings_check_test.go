@@ -2,10 +2,6 @@ package types
 
 import "testing"
 
-// The CI step routes its fix rounds by Finding.Check and Finding.Category, and
-// both travel through the same JSON the executor persists and hands back as
-// PreviousFindings. Finding.UnmarshalJSON copies fields explicitly, so a
-// field it does not name is silently dropped on every parse.
 func TestParseFindingsJSON_RoundTripsCICheckFields(t *testing.T) {
 	t.Parallel()
 	encoded, err := MarshalFindingsJSON(Findings{

@@ -16,9 +16,6 @@ const (
 	forgejoSSHDomainRemote = "git@ssh.forge.example:git/octo/widgets.git"
 )
 
-// isolateForgejoSSHDomainEnv points glab, gh, and tea configuration discovery at
-// empty temp dirs and clears both Forgejo variables, so only a step's own
-// environment can answer for the placeholder hosts below.
 func isolateForgejoSSHDomainEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("GLAB_CONFIG_DIR", t.TempDir())

@@ -30,17 +30,10 @@ type queuedRun struct {
 	spawn     func()
 }
 
-// slotFreeLocked reports whether a new execution may start under the given
-// cap. A non-positive cap means unlimited. Callers must hold m.mu: the
-// executors count and the queue change only under it, so check-and-register
-// stays atomic.
 func (m *RunManager) slotFreeLocked(maxConc int) bool {
 	return maxConc <= 0 || len(m.executors) < maxConc
 }
 
-// executionCapLocked reloads the cap while m.mu is held. Read the file directly:
-// LoadGlobal treats a missing file as defaults, which would clear a loaded cap
-// during config replacement. The initial zero still means unlimited.
 func (m *RunManager) executionCapLocked() int {
 	data, err := os.ReadFile(m.paths.ConfigFile())
 	if err == nil {
@@ -134,8 +127,6 @@ func (m *RunManager) shutdownQueuedRun(qe queuedRun) {
 	m.cancelQueuedRun(qe, "daemon shutting down")
 }
 
-// extractQueuedLocked removes and returns the queued run with the given id,
-// preserving the order of the rest. Callers must hold m.mu.
 func (m *RunManager) extractQueuedLocked(runID string) (queuedRun, bool) {
 	for i, qe := range m.runQueue {
 		if qe.spawn != nil && qe.runID == runID {
@@ -148,8 +139,6 @@ func (m *RunManager) extractQueuedLocked(runID string) (queuedRun, bool) {
 	return queuedRun{}, false
 }
 
-// extractQueuedForBranchLocked removes and returns every queued run for the
-// given repo and branch, in queue order. Callers must hold m.mu.
 func (m *RunManager) extractQueuedForBranchLocked(repoID, branch string) []queuedRun {
 	var out []queuedRun
 	kept := m.runQueue[:0]
@@ -167,10 +156,6 @@ func (m *RunManager) extractQueuedForBranchLocked(repoID, branch string) []queue
 	return out
 }
 
-// cancelQueuedRun records a queued run terminal without starting or resuming
-// its executor and releases its setup resources. A recovered run's head must
-// be preserved before its worktree is removed. It frees no execution slot in
-// this daemon lifetime, so no pump follows.
 func (m *RunManager) cancelQueuedRun(qe queuedRun, cause string) {
 	var head string
 	var verified bool

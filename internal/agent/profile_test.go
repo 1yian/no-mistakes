@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// nativeExtraArgs recovers the argv fragment a constructed native adapter will
-// splice ahead of its managed flags, so these tests assert what the harness
-// actually receives rather than what the mapping table says.
 func nativeExtraArgs(t *testing.T, a Agent) []string {
 	t.Helper()
 	switch v := a.(type) {
@@ -38,8 +35,6 @@ func nativeExtraArgs(t *testing.T, a Agent) []string {
 	}
 }
 
-// TestNewWithOptions_ProfileReachesEachHarnessArgv is the pipeline half of the
-// unified abstraction: one Profile, the right native spelling per harness.
 func TestNewWithOptions_ProfileReachesEachHarnessArgv(t *testing.T) {
 	profile := agentcfg.Profile{Model: "some-model", Effort: agentcfg.EffortHigh}
 	tests := []struct {
@@ -66,10 +61,6 @@ func TestNewWithOptions_ProfileReachesEachHarnessArgv(t *testing.T) {
 	}
 }
 
-// TestNewWithOptions_RawOverrideKeepsWinning is the backwards-compatibility
-// contract at the construction funnel: a knob already pinned through
-// agent_args_override is never emitted a second time, and the raw argv keeps
-// its exact previous shape.
 func TestNewWithOptions_RawOverrideKeepsWinning(t *testing.T) {
 	raw := []string{"--model", "opus", "--permission-mode", "acceptEdits"}
 	ag, err := NewWithOptions(types.AgentClaude, "bin", raw, Options{
@@ -110,8 +101,6 @@ func TestPiProfileParametersSurviveColdStartAndSessionResume(t *testing.T) {
 	}
 }
 
-// TestNewWithOptions_ZeroProfileLeavesArgvUntouched is the no-op guarantee for
-// every configuration written before the common layer existed.
 func TestNewWithOptions_ZeroProfileLeavesArgvUntouched(t *testing.T) {
 	raw := []string{"-c", `service_tier="priority"`}
 	ag, err := NewWithOptions(types.AgentCodex, "bin", raw, Options{})
@@ -138,9 +127,6 @@ func TestNewWithOptions_DoesNotMutateCallerArgs(t *testing.T) {
 	}
 }
 
-// TestNewWithOptions_RefusesUnmappableKnob keeps the construction funnel
-// fail-closed, so a programmatic caller that skipped config validation still
-// cannot launch a harness that will ignore the request.
 func TestNewWithOptions_RefusesUnmappableKnob(t *testing.T) {
 	tests := []struct {
 		agent   types.AgentName
@@ -162,9 +148,6 @@ func TestNewWithOptions_RefusesUnmappableKnob(t *testing.T) {
 	}
 }
 
-// TestACPModelIsPinnedOnTheAcpxCommand covers the closed ACP gap end to end:
-// the model reaches acpx's own flag, positioned among acpx options rather than
-// after the target or the exec subcommand.
 func TestACPModelIsPinnedOnTheAcpxCommand(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCursor, types.AgentDevin, "acp:custom"} {
 		ag, err := NewWithOptions(name, "acpx", nil, Options{
@@ -208,9 +191,6 @@ func TestACPWithoutModelKeepsItsPreviousArgv(t *testing.T) {
 	}
 }
 
-// TestOpenCodeProfileRidesTheMessageBody covers the one harness whose launch
-// command cannot carry either knob: `opencode serve` exits with usage on an
-// unknown flag, so an argv pin would take the server down instead of tuning it.
 func TestOpenCodeProfileRidesTheMessageBody(t *testing.T) {
 	ag, err := NewWithOptions(types.AgentOpenCode, "opencode", nil, Options{
 		Profile: agentcfg.Profile{Model: "openai/gpt-5", Effort: agentcfg.EffortHigh},

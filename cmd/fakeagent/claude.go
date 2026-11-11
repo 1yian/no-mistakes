@@ -87,16 +87,6 @@ func runClaude(args []string, promptReader io.Reader, scenario *Scenario) int {
 	return 0
 }
 
-// patchClaudeFixture rewrites the result event's structured_output to
-// match the scenario action, leaving every other event byte-for-byte.
-// The result event is identified as the one whose top-level "type" is
-// "result" — there's exactly one per session in stream-json output.
-//
-// Why we don't just emit the recorded structured_output: the recorded
-// payload reflects whatever the live model returned at recording time,
-// which may not satisfy the schemas every step in the pipeline expects
-// (e.g. document.go's unmarshalRequiredFindings requires "summary").
-// Patching keeps the wire shape real but the content predictable.
 func patchClaudeFixture(raw []byte, action Action) ([]byte, error) {
 	if action.Structured == nil && action.StructuredRaw == "" {
 		return raw, nil
@@ -218,10 +208,6 @@ func hasClaudeSchema(args []string) bool {
 	return false
 }
 
-// extractClaudePrompt mirrors Claude Code's documented print-mode contract:
-// -p selects non-interactive mode and the text user prompt is read to EOF from
-// stdin. Keeping the e2e fake on this shape ensures prompts cannot regress into
-// process argv unnoticed.
 func extractClaudePrompt(args []string, promptReader io.Reader) (string, error) {
 	foundPrint := false
 	for _, arg := range args {

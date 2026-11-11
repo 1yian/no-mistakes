@@ -19,16 +19,11 @@ import (
 
 const gateRegistryStep = types.StepName("gate.test.package-registry")
 
-// architectureRegistry is the file the maintainer's command gate enforces:
-// every directory under internal/ has to be listed here.
 const architectureRegistry = `# Architecture
 
 ## Registered packages
 `
 
-// packageRegistryCheck is the maintainer's own fitness function. It is an
-// ordinary shell script in the repository - the point of a command gate is that
-// the check the repository already has becomes a pipeline verdict.
 const packageRegistryCheck = `#!/bin/sh
 status=0
 for dir in internal/*/; do
@@ -45,10 +40,6 @@ fi
 exit $status
 `
 
-// trustedRepoConfigWithGates is what the maintainer commits to the default
-// branch: one command gate after test.
-// allow_repo_commands is deliberately true: gates and their auto-fix budgets
-// remain trusted-only even when the maintainer permits pushed command settings.
 const trustedRepoConfigWithGates = `ignore_patterns:
   - 'vendor/**'
 allow_repo_commands: true
@@ -70,9 +61,6 @@ gates:
     command: sh scripts/package-registry.sh
 `
 
-// pushedRepoConfigAttemptingToAuthorItsOwnGates is what a contributor ships on
-// their own branch: it retargets the maintainer's gate and raises its fix
-// budget. Neither value may replace the trusted copy.
 const pushedRepoConfigAttemptingToAuthorItsOwnGates = `ignore_patterns:
   - 'vendor/**'
 gates:
@@ -84,7 +72,6 @@ auto_fix:
     package-registry: 99
 `
 
-// customGatesScenario answers the package-registry gate's authorized fix turn.
 func customGatesScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "custom-gates-scenario.yaml")
@@ -124,15 +111,6 @@ func customGatesScenario(t *testing.T) string {
 	return path
 }
 
-// TestCustomGatesJourney is the end-to-end proof of repository-declared gates:
-// a maintainer commits an extra check to the default branch, a contributor
-// pushes a branch that violates it, and the real pipeline runs the gate
-// immediately after its anchor core step, parks for a human decision, honors an
-// authorized fix, and re-checks the repaired worktree before continuing.
-//
-// It also covers the boundary the feature is only safe with: gates come from
-// the TRUSTED default-branch copy regardless of allow_repo_commands, so a
-// contributor can neither delete the maintainer's gates nor author their own.
 func TestCustomGatesJourney(t *testing.T) {
 	t.Run("trusted_gates_run_park_and_are_repaired_on_authorization", func(t *testing.T) {
 		h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: customGatesScenario(t)})
@@ -147,8 +125,6 @@ func TestCustomGatesJourney(t *testing.T) {
 			t.Fatalf("nm init: %v\n%s", err, out)
 		}
 
-		// The contributor's branch: a new package that is registered nowhere, plus
-		// a .no-mistakes.yaml that drops the maintainer's gates and declares its own.
 		const branch = "feature/custom-gates"
 		h.CommitChange(branch, "internal/pricing/pricing.go", "package pricing\n\nfunc Quote() int { return 1 }\n", "add pricing package")
 		h.CommitChange(branch, ".no-mistakes.yaml", pushedRepoConfigAttemptingToAuthorItsOwnGates,
@@ -347,9 +323,6 @@ gates:
 	})
 }
 
-// assertGatedPipelineOrder asserts the run's step sequence is the fixed core
-// pipeline with each declared gate immediately after its anchor, and that every
-// gate carries its anchor's step order.
 func assertGatedPipelineOrder(t *testing.T, steps []ipc.StepResultInfo) {
 	t.Helper()
 	expected := []types.StepName{
@@ -389,7 +362,6 @@ func assertGatedPipelineOrder(t *testing.T, steps []ipc.StepResultInfo) {
 	}
 }
 
-// pinnedGatesJSON reads the gate list the run recorded at creation.
 func pinnedGatesJSON(t *testing.T, h *Harness, runID string) string {
 	t.Helper()
 	database, err := db.Open(paths.WithRoot(h.NMHome).DB())
@@ -426,8 +398,6 @@ func upstreamFile(t *testing.T, h *Harness, branch, path string) string {
 	return string(out)
 }
 
-// firstFindingID returns the ID of the step's first parked finding, which is
-// what an operator passes to `axi respond --action fix --findings`.
 func firstFindingID(t *testing.T, run *ipc.RunInfo, step types.StepName) string {
 	t.Helper()
 	result, ok := findStep(run.Steps, step)

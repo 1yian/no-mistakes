@@ -8,25 +8,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/worktrees"
 )
 
-// maxStepDiffBytes bounds one fix-review diff response. The IPC transport
-// frames a whole JSON document per line and caps a line at 1 MiB, so an
-// unbounded diff would not merely be large - it would break the connection
-// carrying it. Half the frame budget leaves ample room for the rest of the
-// response and keeps a pathological change a partial view rather than a
-// transport failure.
 const maxStepDiffBytes = 512 * 1024
 
-// StepDiff returns the working-tree diff for a run that is parked at a
-// fix-review gate, derived on demand from the run's worktree.
-//
-// This diff is the only piece of gate context the pipeline never persists, so
-// it is the one thing a subscriber cannot rebuild from get_run. Serving it
-// here rather than attaching it to a step_completed event keeps the largest
-// possible payload off the event stream, where a frame over the transport
-// limit would kill the subscription and hide every event after it.
-//
-// It is read-only, fails closed on an unknown run or repo, and never persists
-// source text.
 func (m *RunManager) StepDiff(ctx context.Context, runID string) (string, bool, error) {
 	run, err := m.db.GetRun(runID)
 	if err != nil {

@@ -2,9 +2,6 @@ package config
 
 import "testing"
 
-// ci.carry_review_on_replay is off unless asked for, the trusted repository
-// value wins over the operator's in both directions, and a pushed branch
-// cannot set it: it decides whether a rebased head may skip Review.
 func TestCICarryReviewOnReplay_OffByDefaultAndTrustedOnly(t *testing.T) {
 	t.Parallel()
 	const on = "ci:\n  carry_review_on_replay: true\n"

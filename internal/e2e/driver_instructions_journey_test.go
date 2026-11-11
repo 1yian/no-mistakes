@@ -16,15 +16,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// driverGuidance is the scoping an agent driver passes with
-// `axi respond --instructions`. It is distinctive so every prompt can be
-// searched for it.
 const driverGuidance = "DRIVER-SCOPE only touch feature.txt and leave the docs alone"
 
-// driverInstructionsScenario reports one ask-user finding, lets the fixer edit
-// the file, and has the rereview report a second ask-user finding so the run
-// parks again after the fix round. The rereview carries the fix-round
-// provenance clause, so it is listed first.
 func driverInstructionsScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "driver-instructions-scenario.yaml")
@@ -114,9 +107,6 @@ func promptsWith(h *Harness, marker string) []string {
 	return out
 }
 
-// The driver's --instructions reach the fixer and the step's own rereview as
-// driver guidance, are persisted as driver_instructions, and never appear as
-// the user's decision in the decision history the Test step receives.
 func TestDriverInstructionsJourney_RecordedAsDriverGuidance(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: driverInstructionsScenario(t)})
 	branch := "feature/driver-instructions"
@@ -207,8 +197,6 @@ func TestDriverInstructionsJourney_RecordedAsDriverGuidance(t *testing.T) {
 	t.Logf("later step's decision history:\n%s", section)
 }
 
-// A superseding run's reviewer receives the previous run's rounds and branch
-// decisions without the driver's guidance.
 func TestDriverInstructionsJourney_SupersedingRunOmitsDriverGuidance(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: driverInstructionsScenario(t)})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithReviewConversation)
@@ -253,10 +241,6 @@ func TestDriverInstructionsJourney_SupersedingRunOmitsDriverGuidance(t *testing.
 	}
 }
 
-// An added finding cannot carry driver guidance: `--add-finding` JSON with a
-// driver_instructions key is refused before anything reaches the daemon, so
-// the gate stays parked on its own findings, and the same addition without
-// that key is accepted.
 func TestDriverInstructionsJourney_AddedFindingRefusesDriverInstructions(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: driverInstructionsScenario(t)})
 	branch := "feature/driver-instructions-add-finding"

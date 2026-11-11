@@ -14,9 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// reviewAgentsOverrideConfig is an operator global config whose review loop
-// reviews and fixes on claude profiles, plus a repository_overrides entry that
-// moves only the reviewer of overrideRemote to OpenCode on an OpenRouter model.
 func reviewAgentsOverrideConfig(overrideRemote string) string {
 	return "agent_config:\n" +
 		"  claude: {model: default-override-e2e}\n" +
@@ -29,9 +26,6 @@ func reviewAgentsOverrideConfig(overrideRemote string) string {
 		"      reviewer: {agent: opencode, model: openrouter/z-ai/glm-4.6}\n"
 }
 
-// runReviewFixLoop initializes the gate, points origin at remote (served from
-// the harness's bare upstream), pushes a branch whose review reports one
-// blocking finding, answers "fix", and waits for the run to complete.
 func runReviewFixLoop(t *testing.T, h *Harness, remote, branch string) *ipc.RunInfo {
 	t.Helper()
 	if out, err := h.Run("init"); err != nil {
@@ -59,9 +53,6 @@ func runReviewFixLoop(t *testing.T, h *Harness, remote, branch string) *ipc.RunI
 	return run
 }
 
-// assertRecordedReviewLoop reads the daemon's persisted agent_invocations for
-// the run and requires every review turn and every review-fix turn to have
-// been recorded on the wanted harness.
 func assertRecordedReviewLoop(t *testing.T, h *Harness, runID, reviewAgent, fixAgent string) {
 	t.Helper()
 	database, err := db.OpenReadOnly(paths.WithRoot(h.NMHome).DB())
@@ -131,12 +122,6 @@ func assertAgent(t *testing.T, role string, inv *Invocation, want string) {
 	}
 }
 
-// TestRepositoryOverrideReviewAgentsRouteOnRealBinary drives the real binary
-// and daemon: a repository_overrides entry matching the run's origin replaces
-// only the reviewer role (OpenCode instead of the global claude reviewer),
-// while the global fixer and the default agent for other steps stay as they
-// are. A repository whose origin does not match keeps every global role, and a
-// pushed branch cannot reach the override or review_agents from .no-mistakes.yaml.
 func TestRepositoryOverrideReviewAgentsRouteOnRealBinary(t *testing.T) {
 	const overrideRemote = "https://example.invalid/acme/raise.git"
 

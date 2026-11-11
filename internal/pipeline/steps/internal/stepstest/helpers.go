@@ -26,14 +26,6 @@ import (
 
 var testGitExecutable, testGitErr = testgit.RealGit()
 
-// ExecuteWithAutoFix drives step the way the executor drives a step whose
-// outcome carries auto-fix findings (see Executor.executeStep): it executes
-// the step, and while the outcome is auto-fixable, the step's auto-fix limit
-// has attempts left, and the findings contain an auto-fix item, it re-executes
-// the step with Fixing set and PreviousFindings holding only the auto-fix
-// findings. priorAttempts seeds the attempt count the executor would restore
-// from the round history. It returns the first outcome the executor would not
-// auto-fix - a park, a completion, a restart - or the step's error.
 func ExecuteWithAutoFix(t *testing.T, step pipeline.Step, sctx *pipeline.StepContext, priorAttempts int) (*pipeline.StepOutcome, error) {
 	t.Helper()
 	limit := 0
@@ -78,9 +70,6 @@ func ExecuteWithAutoFix(t *testing.T, step pipeline.Step, sctx *pipeline.StepCon
 	}
 }
 
-// CIGateFindingsJSON renders the findings a CI gate raises for the named
-// failing checks, the way a human's `fix` selection hands them back to the
-// step as PreviousFindings.
 func CIGateFindingsJSON(names ...string) string {
 	findings := types.Findings{Summary: fmt.Sprintf("%d CI checks failing", len(names))}
 	for i, name := range names {
@@ -145,8 +134,6 @@ func LastCommitMessage(t *testing.T, dir string) string {
 	return GitCmd(t, dir, "log", "-1", "--pretty=%s")
 }
 
-// gitRepoTemplate holds a cached template repo that setupGitRepo copies from
-// instead of running git init + config + commits each time.
 var gitRepoTemplate struct {
 	once    sync.Once
 	dir     string
@@ -198,9 +185,6 @@ func EnsureGitRepoTemplate(t *testing.T) {
 	})
 }
 
-// setupGitRepo creates a git repo with a base commit on main and a head commit on feature.
-// Returns (repoDir, baseSHA, headSHA).
-// Uses a cached template repo and copies it via cp -a for speed.
 func SetupGitRepo(t *testing.T) (string, string, string) {
 	t.Helper()
 	EnsureGitRepoTemplate(t)
@@ -213,7 +197,6 @@ func SetupGitRepo(t *testing.T) (string, string, string) {
 	return dir, gitRepoTemplate.baseSHA, gitRepoTemplate.headSHA
 }
 
-// newTestContext creates a StepContext for testing with optional config overrides.
 func NewTestContext(t *testing.T, ag agent.Agent, workDir, baseSHA, headSHA string, cmds config.Commands) *pipeline.StepContext {
 	t.Helper()
 	if testGitErr != nil {
@@ -260,8 +243,6 @@ func NewTestContext(t *testing.T, ag agent.Agent, workDir, baseSHA, headSHA stri
 	}
 }
 
-// fakeCLIEnv builds environment variable entries for a fake CLI binary and PATH override.
-// Returns env entries that should be set on StepContext.Env for parallel-safe tests.
 func FakeCLIEnv(binDir string, vars map[string]string) []string {
 	if testGitErr != nil {
 		panic(testGitErr)
@@ -277,9 +258,6 @@ func FakeCLIEnv(binDir string, vars map[string]string) []string {
 	return env
 }
 
-// fakeCLIBinDir creates a temporary directory for fake CLI binaries.
-// Unlike t.TempDir(), cleanup tolerates file locks from recently-executed
-// binaries on Windows (which prevent immediate deletion).
 func FakeCLIBinDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "fakecli")
@@ -297,9 +275,6 @@ func FakeCLIBinDir(t *testing.T) string {
 	return dir
 }
 
-// fakeCLIHelperPath is the tiny non-race helper compiled once in TestMain and
-// linked into each test's PATH as gh/glab/git. Re-execing the race-instrumented
-// test binary as those names was ~0.8s per spawn and dominated CI-monitor tests.
 var fakeCLIHelperPath string
 
 func Init() (func() error, error) {
@@ -390,9 +365,6 @@ func findModuleRoot() (string, error) {
 	}
 }
 
-// LinkFakeCLI aliases the tiny fake-CLI helper with the given name in binDir.
-// macOS uses symlinks; other platforms use hard links (or copies).
-// On Windows, .exe is appended.
 func LinkFakeCLI(t *testing.T, binDir, name string) {
 	t.Helper()
 	if fakeCLIHelperPath == "" {
@@ -423,8 +395,6 @@ func LinkFakeCLI(t *testing.T, binDir, name string) {
 	}
 }
 
-// fakeGH creates a mock gh binary in a temp dir and returns env entries for StepContext.Env.
-// The binary records all invocations to a log file and responds based on subcommand.
 func FakeGH(t *testing.T, prViewURL string) (env []string, logFile string) {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -438,9 +408,6 @@ func FakeGH(t *testing.T, prViewURL string) (env []string, logFile string) {
 	return env, logFile
 }
 
-// fakeGHWithBase behaves like fakeGH but additionally records the existing
-// PR's actual base branch, so the fake `gh pr list --base X` only returns the
-// PR when X matches it - mirroring GitHub's server-side base filtering.
 func FakeGHWithBase(t *testing.T, prViewURL, prBase string) (env []string, logFile string) {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -615,8 +582,6 @@ func FakeGlab(t *testing.T, mrViewJSON string) (env []string, logFile string) {
 	return env, logFile
 }
 
-// newTestContextWithDBRecords is like newTestContext but also inserts
-// repo and run records into the database so GetRun works after updates.
 func RecordReviewApproval(t *testing.T, sctx *pipeline.StepContext, headSHA string) {
 	t.Helper()
 	if err := sctx.DB.UpdateRunReviewApprovedHeadSHA(sctx.Run.ID, headSHA); err != nil {
@@ -644,8 +609,6 @@ func NewTestContextWithDBRecords(t *testing.T, ag agent.Agent, workDir, baseSHA,
 	return sctx
 }
 
-// fakeCIGH creates a fake gh binary that responds to CI-related
-// commands (pr view --json state, pr checks --json, pr view --json comments).
 func FakeCIGH(t *testing.T, state, checksJSON string) []string {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -758,10 +721,6 @@ func FakeCIGHSequence(t *testing.T, state string, checks []string) []string {
 	})
 }
 
-// fakeCIGHLoggedSequence is fakeCIGHSequence with a recorded argv log, so tests
-// can assert which gh commands the CI monitor issued (for example whether it
-// asked for a check rerun). mergeable overrides the reported mergeable state
-// ("" reports MERGEABLE); rerunErr, when set, makes `gh run rerun` fail.
 func FakeCIGHLoggedSequence(t *testing.T, state string, checks []string, mergeable, rerunErr string) (env []string, logFile string) {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -801,11 +760,6 @@ func FakeCIGHNoChecks(t *testing.T) []string {
 	})
 }
 
-// FakeCIGlab creates a fake glab binary that serves the CI monitoring
-// endpoints. state is the MR state ("opened", "merged", "closed"); checksJSON
-// is a JSON array of jobs served for `glab ci get` and the pipeline jobs read. headSHA is the run's head: the CI step names it on every
-// poll, so the fake merge request reports it as its source revision and runs
-// its head pipeline at it too.
 func FakeCIGlab(t *testing.T, state, checksJSON, headSHA string) []string {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -818,9 +772,6 @@ func FakeCIGlab(t *testing.T, state, checksJSON, headSHA string) []string {
 	})
 }
 
-// FakeCIGlabStalePipeline serves checksJSON as a head pipeline that ran at
-// pipelineSHA while the run is delivering headSHA: the GitLab shape of an old
-// pipeline whose result must never be reported as the delivered commit's.
 func FakeCIGlabStalePipeline(t *testing.T, state, checksJSON, headSHA, pipelineSHA string) []string {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -851,10 +802,6 @@ func FakeCIGlabConflict(t *testing.T, state, checksJSON, headSHA string, conflic
 	})
 }
 
-// FakeCIGlabWithReviewComments is FakeCIGlab with the merge request's
-// discussion notes served to the review-comment read. discussionsJSON is the
-// raw JSON the GitLab discussions endpoint returns (an array of discussions,
-// each with its notes). headSHA is the run's head, as in FakeCIGlab.
 func FakeCIGlabWithReviewComments(t *testing.T, state, checksJSON, discussionsJSON, headSHA string) []string {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -868,9 +815,6 @@ func FakeCIGlabWithReviewComments(t *testing.T, state, checksJSON, discussionsJS
 	})
 }
 
-// FakeCIGlabMRReadFails is FakeCIGlab with every merge request read failing like
-// a provider or CLI failure, so a test can assert the read-failure path (the
-// consecutive-error park) rather than a head-binding refusal.
 func FakeCIGlabMRReadFails(t *testing.T, state, checksJSON, headSHA string) []string {
 	t.Helper()
 	binDir := FakeCLIBinDir(t)
@@ -921,8 +865,6 @@ func FakeCIGlabSequence(t *testing.T, state string, checks []string, headSHA str
 	})
 }
 
-// runGitDirect runs git without any of the repository's step helpers, so a test
-// can observe what a plain, hook-verified git invocation does in dir.
 func RunGitDirect(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir

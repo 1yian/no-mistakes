@@ -550,9 +550,6 @@ func TestResolveAgent_AutoPicksACPAliasWhenBinariesPresent(t *testing.T) {
 	}
 }
 
-// TestResolveAgent_AutoProbesDevinAfterNativeAgentsAndCursor proves auto
-// selects devin only when both devin and acpx resolve, and only once every
-// native agent and the cursor alias ahead of it is unavailable.
 func TestResolveAgent_AutoProbesDevinAfterNativeAgentsAndCursor(t *testing.T) {
 	tests := []struct {
 		name      string

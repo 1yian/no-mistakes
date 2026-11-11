@@ -18,9 +18,6 @@ import (
 
 type olderDaemonContextKey struct{}
 
-// guardGateControl is the one CLI policy for commands that can mutate pipeline
-// ownership. It runs before command-specific resource opening, flag-driven
-// auto-approval, daemon admission, or any Git/DB mutation.
 func guardGateControl(cmd *cobra.Command) error {
 	if !mutatesPipelineControl(cmd) {
 		return nil
@@ -113,9 +110,6 @@ func classifyGateControlCaller(ctx context.Context, allowOlder bool) (gatecontex
 	// continue with canonical read-only topology so lifecycle repair commands
 	// retain their existing compatibility.
 
-	// An older daemon cannot classify the caller over IPC. Use the same
-	// inspector locally, including our process ancestry, without migrating or
-	// writing the database. When no daemon is active, only topology is needed.
 	var database *db.DB
 	if opened, openErr := db.OpenReadOnly(p.DB()); openErr == nil {
 		database = opened

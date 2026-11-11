@@ -207,13 +207,6 @@ func findingIDs(items []types.Finding) []string {
 	return ids
 }
 
-// TestExecutor_ReviewCarryForward_NoOpFixKeepsFindingParked mirrors the journey
-// that made the predecessor carry design (PR #704) a work-loss hole, inverted to
-// prove the hole is closed: the review reports two ask-user findings, the
-// operator selects one, the fixer writes a commit that does not fix it, and the
-// rereview reports nothing new without positively covering the finding's file.
-// The selected finding must still be outstanding, blocking the gate, with its
-// identity and action intact - the run must park again, never pass.
 func TestExecutor_ReviewCarryForward_NoOpFixKeepsFindingParked(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -318,11 +311,6 @@ func TestExecutor_ReviewCarryForward_NoOpFixKeepsFindingParked(t *testing.T) {
 	waitExecutorDone(t, done)
 }
 
-// TestExecutor_ReviewCarryForward_PositiveCoverageClearsFinding is the other
-// half of the same contract: a selected finding does leave the outstanding set
-// once the rereview positively records that it covered the finding's file and
-// no longer reports the defect. Without this the carry set could only grow and
-// a verified fix would park forever.
 func TestExecutor_ReviewCarryForward_UserAddedFindingStaysOutstanding(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -571,12 +559,6 @@ func TestExecutor_ReviewCarryForward_PositiveCoverageClearsFinding(t *testing.T)
 	}
 }
 
-// TestExecutor_ReviewCarryForward_AnOpenQuestionDoesNotBlockVerification pins
-// the boundary between the two mechanisms. A review question is not a report
-// about the code, so it must not take part in verification: a question's file
-// is optional and the omission marker never has one, so leaving questions in
-// the verification input made hasUnanchoredFinding true and refused to clear
-// EVERY selected finding for as long as any question stayed open.
 func TestExecutor_ReviewCarryForward_AnOpenQuestionDoesNotBlockVerification(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -635,14 +617,6 @@ func TestExecutor_ReviewCarryForward_AnOpenQuestionDoesNotBlockVerification(t *t
 	waitExecutorDone(t, done)
 }
 
-// TestExecutor_ReviewCarryForward_AnUnreadableHistoryDoesNotBlockVerification
-// is the sibling of the test above for the marker the step emits when the
-// reviewer's question history could not be read in full. It carries no File,
-// so leaving it in the verification input sets hasUnanchoredFinding and refuses
-// to clear ANY selected finding - and questions.ndjson is append-only, so the
-// condition is permanent: a genuinely fixed finding stayed outstanding and the
-// gate re-parked on it for ever. It carries no review-question category either,
-// so the category-keyed drop does not reach it.
 func TestExecutor_ReviewCarryForward_AnUnreadableHistoryDoesNotBlockVerification(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -698,19 +672,6 @@ func TestExecutor_ReviewCarryForward_AnUnreadableHistoryDoesNotBlockVerification
 	waitExecutorDone(t, done)
 }
 
-// TestExecutor_ReviewCarryForward_AnAnswerRoundWithdrawsByName covers the round
-// type the append-only set was not written for. The reviewer's protocol tells
-// it to prefix any finding contingent on an open question with
-// "PENDING ANSWER (<id>)", so a round that asks a question routinely reports
-// one, and the finalize turn that learns the answer disproves it must be able
-// to retract it - otherwise the carry-forward re-injects it, still pointing at
-// a question that is already settled.
-//
-// It retracts by NAMING the finding in withdrawn_findings. Clearing it by
-// coverage silence was the earlier rule and is gone: an answer changes what the
-// reviewer knows rather than the code, so a turn that covered the file proved
-// nothing about any finding in it, and an unrelated finding used to drop with
-// it. The sibling below pins that silence now keeps a finding.
 func TestExecutor_ReviewCarryForward_AnAnswerRoundWithdrawsByName(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -759,15 +720,6 @@ func TestExecutor_ReviewCarryForward_AnAnswerRoundWithdrawsByName(t *testing.T) 
 	}
 }
 
-// TestExecutor_ReviewCarryForward_AnAnswerRoundSilenceKeepsAnUnrelatedFinding is
-// the defect the withdrawal list exists to close.
-//
-// Under the earlier rule an answer round seeded its whole carried set as
-// pending verification, so the finalize turn's coverage record cleared any
-// carried finding whose file it named and did not re-report - including one the
-// answers had nothing to do with. That let the review gate complete having
-// silently dropped a defect nobody fixed, selected or approved. Here the turn
-// covers the file and withdraws NOTHING, so the unrelated finding must survive.
 func TestExecutor_ReviewCarryForward_AnAnswerRoundSilenceKeepsAnUnrelatedFinding(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -803,9 +755,6 @@ func TestExecutor_ReviewCarryForward_AnAnswerRoundSilenceKeepsAnUnrelatedFinding
 	if err := exec.Respond(types.StepReview, types.ActionAnswer, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Respond returns before the round runs, so the pre-answer snapshot is
-	// still on the step. The finalize turn is the one that settles the
-	// question, so its disappearance is the signal that the round landed.
 	var steps []*db.StepResult
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -848,10 +797,6 @@ func TestExecutor_ReviewCarryForward_AnAnswerRoundSilenceKeepsAnUnrelatedFinding
 	waitExecutorDone(t, done)
 }
 
-// TestResolveVerifiedFindingsJSON pins the verify-before-clear rule: only a
-// positive coverage record that also stops reporting the defect clears a
-// selected finding. Silence, a round that looked elsewhere, a re-reported
-// defect, and a finding with no file all leave it outstanding.
 func TestResolveVerifiedFindingsJSON(t *testing.T) {
 	// An EXACT restatement is what the round's own output must contain for the
 	// item to read as still reported. Identity here is still content-derived, so
@@ -906,14 +851,6 @@ func TestResolveVerifiedFindingsJSON(t *testing.T) {
 	}
 }
 
-// TestResolveVerifiedFindingsJSON_FilelessPendingFinding pins the upgrade
-// compat carve-out for findings the reviewer could not anchor to a file: no
-// coverage record can ever match them, so a SELECTED file-less item clears on
-// a positive verification round that covers every reviewable path and no
-// longer reports it - and stays on partial coverage, an unanchored rereport,
-// or a round that is not a positive verification. Runs parked before the recorded-decision review machinery was
-// removed carry such items, and a fix selection could otherwise never clear
-// them.
 func TestResolveVerifiedFindingsJSON_FilelessPendingFinding(t *testing.T) {
 	outstanding := `{"findings":[{"id":"review-1","severity":"warning","description":"finding with no file anchor","action":"ask-user"}],"summary":"1 finding"}`
 	reported := `{"findings":[{"id":"review-9","severity":"warning","description":"finding with no file anchor","action":"ask-user"}],"summary":"1 finding"}`
@@ -973,10 +910,6 @@ func TestRemapFindingIDsJSON_UsesRemintedAutomaticSelection(t *testing.T) {
 	}
 }
 
-// TestMergeOutstandingFindingsJSON_AppendsAndKeepsSelectionIdentity pins the
-// append-only merge: the accumulated set is never reduced, an item keeps its
-// ID (the selector `axi respond --findings <id>` uses), and a colliding new ID
-// is re-minted rather than silently replacing the outstanding item.
 func TestMergeOutstandingFindingsJSON_UsesCurrentReviewedPathsWhenRoundIsEmpty(t *testing.T) {
 	prior := `{"findings":[` +
 		`{"id":"review-1","severity":"error","file":"service.go","description":"old issue","action":"ask-user"},` +
@@ -1023,14 +956,6 @@ func TestMergeOutstandingFindingsJSON_AppendsAndKeepsSelectionIdentity(t *testin
 	}
 }
 
-// TestRetainFindingIDsByIdentity_RejectsPositionalIDReuse closes the Greptile
-// P1 that recovery unions selected IDs from every historical round and then
-// retains any ID present in the LATEST findings, with no check that it is
-// the SAME finding. Finding IDs are positional and get re-minted for an
-// unrelated finding once the original drops out of the outstanding set
-// (mergeOutstandingFindingsJSON hands a freed ID to the next new item). An
-// old selection under a reused ID must not silently alias the new,
-// never-selected finding as "selected".
 func TestRetainFindingIDsByIdentity_RejectsPositionalIDReuse(t *testing.T) {
 	roundOneFindings := `{"findings":[{"id":"review-1","severity":"error","file":"service.go","description":"old carried issue","action":"ask-user"}],"summary":"1 finding"}`
 	roundOne := &db.StepRound{FindingsJSON: strPtr(roundOneFindings), SelectedFindingIDs: strPtr(`["review-1"]`)}
@@ -1075,9 +1000,6 @@ func TestRetainFindingIDsByIdentity_UsesUserFindingIdentity(t *testing.T) {
 	}
 }
 
-// TestRetainFindingIDsByIdentity_KeepsGenuineSameFindingAcrossRounds proves
-// the identity guard does not over-block: an ID that still names the SAME
-// finding across rounds must remain retained.
 func TestRetainFindingIDsByIdentity_KeepsRemappedUserFindingAfterRecovery(t *testing.T) {
 	persistedUserFindings := `{"findings":[{"id":"review-1","severity":"error","file":"service.go","description":"selected issue","action":"ask-user"},{"id":"review-2","severity":"info","file":"new.go","description":"new user note","action":"no-op","source":"user"}],"summary":"2 findings"}`
 	latestFindings := `{"findings":[{"id":"review-1","severity":"error","file":"service.go","description":"selected issue","action":"ask-user"},{"id":"review-2","severity":"info","file":"new.go","description":"new user note","action":"no-op","source":"user"},{"id":"review-3","severity":"warning","file":"other.go","description":"different finding","action":"auto-fix"}],"summary":"3 findings"}`
@@ -1115,16 +1037,6 @@ func TestRetainFindingIDsByIdentity_KeepsGenuineSameFindingAcrossRounds(t *testi
 
 func strPtr(v string) *string { return &v }
 
-// TestExecutor_ReviewCarryForward_AFixRoundCannotWithdraw pins the retraction
-// list to the round type it was written for.
-//
-// withdrawn_findings lives in the findings schema every review turn shares, so
-// a fix-round rereview is offered the field too - and the schema's "answer
-// rounds only" description is guidance to the agent, never enforcement. A fix
-// round that claimed it would clear a selected finding with no coverage record
-// at all: exactly the no-op fix TestExecutor_ReviewCarryForward_NoOpFixKeepsFindingParked
-// exists to catch, taking a different route out of the outstanding set. Only a
-// finalize turn may retract; every other round stays on the coverage rule.
 func TestExecutor_ReviewCarryForward_AFixRoundCannotWithdraw(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -1198,22 +1110,6 @@ func TestExecutor_ReviewCarryForward_AFixRoundCannotWithdraw(t *testing.T) {
 	waitExecutorDone(t, done)
 }
 
-// TestExecutor_ReviewCarryForward_AnAnswerRoundDoesNotCarryItsOwnQuestions
-// drives the carried set the executor really produces, which is what the
-// step-level fixtures cannot: they hand-write a code finding alone, while the
-// set taken at the ActionAnswer branch is the outstanding set BEFORE the next
-// round drops question rows from it - so it always still holds the
-// question-<id> row whose emission is why the gate parked.
-//
-// Handing that row to carriedFindingsPromptSection tells the finalize turn to
-// re-adjudicate a finding the step generated rather than one the reviewer made,
-// and a turn that complies echoes it back through a findings schema that has no
-// category field. The echo is therefore uncategorised: dropReviewQuestionFindingsJSON
-// (keyed on the category and the unreadable-marker ID, never the "question-"
-// prefix) never removes it, it re-parks the gate as an ordinary ask-user
-// warning, HasUnansweredReviewQuestion is false for it so --yes and the TUI's
-// yolo hand the fixer a question row, and the `axi answer` its own description
-// instructs records a duplicate that releases nothing.
 func TestExecutor_ReviewCarryForward_AnAnswerRoundDoesNotCarryItsOwnQuestions(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -1271,15 +1167,6 @@ func TestExecutor_ReviewCarryForward_AnAnswerRoundDoesNotCarryItsOwnQuestions(t 
 	}
 }
 
-// TestExecutor_ReviewCarryForward_AnAnswerRoundCannotWithdrawTheOperatorsOwnFinding
-// covers the one finding a retraction may never reach. `respond --action fix
-// --add-finding` stamps the item Source=user with a user-N id, and that id and
-// source both survive into the outstanding set - so an answer round's carried
-// set hands it to the finalize turn like any other row. It is not a claim the
-// reviewer made, it is an instruction the operator gave, so a turn naming it in
-// withdrawn_findings must change nothing: it leaves only on positive coverage
-// or on the operator's own approve, skip or abort, which is the contract
-// docs/.../pipeline-steps.md already states for a selected finding.
 func TestExecutor_ReviewCarryForward_AnAnswerRoundCannotWithdrawTheOperatorsOwnFinding(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -1403,10 +1290,6 @@ func TestExecutor_ReviewCarryForward_AnAnswerRoundCannotWithdrawTheOperatorsOwnF
 	waitExecutorDone(t, done)
 }
 
-// outstandingIDs is the ids still OUTSTANDING in a persisted findings payload.
-// A round that applied a retraction also records the ids it removed on that
-// payload, so a substring match over the raw JSON cannot tell a finding that
-// survived from one the round reported retracting.
 func outstandingIDs(t *testing.T, raw string) map[string]bool {
 	t.Helper()
 	parsed, err := types.ParseFindingsJSON(raw)
@@ -1420,9 +1303,6 @@ func outstandingIDs(t *testing.T, raw string) map[string]bool {
 	return ids
 }
 
-// withdrawnIDs is the retraction record a persisted round carries. It is the
-// round's own claim about what IT removed, so a round that retracted nothing
-// must carry none.
 func withdrawnIDs(t *testing.T, raw string) []string {
 	t.Helper()
 	parsed, err := types.ParseFindingsJSON(raw)
@@ -1436,19 +1316,6 @@ func withdrawnIDs(t *testing.T, raw string) []string {
 	return ids
 }
 
-// TestExecutor_ReviewCarryForward_ARetractionIsRecordedOnlyOnTheRoundThatMadeIt
-// covers the stamp-after-assign ordering. An answer round's retraction is
-// stamped onto the payload it persists, and a later round that retracted
-// nothing must carry none - which holds here because the loop takes the
-// outstanding set it carries forward BEFORE the stamp, so the record cannot
-// ride along with it.
-//
-// It does not reach the merge-inheritance route: both of its resolutions are
-// answers, and only an operator `--action fix` after a retracting answer round
-// merges from the stamped payload. That route is guarded by the
-// WithdrawnFindings resets in mergeOutstandingFindingsJSON, covered by
-// TestExecutor_ReviewCarryForward_AnEmptyOutstandingSetRecordsNoRetraction and
-// TestExecutor_ReviewCarryForward_ARecoveredRoundInheritsNoRetractionRecord.
 func TestExecutor_ReviewCarryForward_ARetractionIsRecordedOnlyOnTheRoundThatMadeIt(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -1522,14 +1389,6 @@ func TestExecutor_ReviewCarryForward_ARetractionIsRecordedOnlyOnTheRoundThatMade
 	waitExecutorDone(t, done)
 }
 
-// TestExecutor_ReviewCarryForward_AnEmptyOutstandingSetRecordsNoRetraction
-// covers the second route, which the operator-finding regression cannot reach
-// because its outstanding set is never empty. When the gate carries only
-// question rows - the common case where the reviewer asks before it has
-// reported any code finding - the outstanding set is empty after the question
-// rows are dropped, so nothing is retractable and the executor applies nothing.
-// The agent's own unfiltered withdrawn_findings must not ride its payload into
-// the record as though the executor had applied it.
 func TestExecutor_ReviewCarryForward_AnEmptyOutstandingSetRecordsNoRetraction(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -1578,9 +1437,6 @@ func TestExecutor_ReviewCarryForward_AnEmptyOutstandingSetRecordsNoRetraction(t 
 	waitExecutorDone(t, done)
 }
 
-// waitForFindings blocks until the step is parked with findings carrying marker.
-// Status alone can match the previous round, while findings alone are persisted
-// before the executor registers the next gate's response handler.
 func waitForFindings(t *testing.T, database *db.DB, runID, marker string) []*db.StepResult {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -1599,9 +1455,6 @@ func waitForFindings(t *testing.T, database *db.DB, runID, marker string) []*db.
 	}
 }
 
-// waitForRounds blocks until at least want rounds are persisted and the step
-// is parked. Read the status after the rounds so an earlier gate's status
-// cannot combine with the new round's row before its response handler is ready.
 func waitForRounds(t *testing.T, database *db.DB, stepResultID string, want int, status types.StepStatus) []*db.StepRound {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -1626,14 +1479,6 @@ func waitForRounds(t *testing.T, database *db.DB, stepResultID string, want int,
 	}
 }
 
-// TestExecutor_ReviewCarryForward_ARecoveredRoundInheritsNoRetractionRecord
-// covers the branch the live loop cannot reach. In-process, the outstanding set
-// is taken BEFORE the retraction record is stamped, so only the persisted
-// payload carries it - but recovery rebuilds the outstanding set FROM that
-// persisted payload, so a recovered round starts holding a record it did not
-// make. A round that then reports nothing of its own rebuilds the set from
-// itself, and without a per-round reset it would persist that inherited
-// record as its own.
 func TestExecutor_ReviewCarryForward_ARecoveredRoundInheritsNoRetractionRecord(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	// Seeded exactly as a retracting answer round leaves the gate.

@@ -147,10 +147,6 @@ review_agents:
 	}
 }
 
-// reviewRoleProbeStep drives one review turn and one review-fix turn through the
-// pipeline agent the executor was given, so a test can observe which harness
-// profile each role resolved to. Sessions are deliberately not used: pi requires
-// a session-id header when resuming, which the fake binary does not emit.
 type reviewRoleProbeStep struct{}
 
 func (s *reviewRoleProbeStep) Name() types.StepName { return types.StepReview }
@@ -165,10 +161,6 @@ func (s *reviewRoleProbeStep) Execute(sctx *pipeline.StepContext) (*pipeline.Ste
 	return &pipeline.StepOutcome{}, nil
 }
 
-// writeCapturingPiAgent writes a fake pi binary that appends its argv to
-// capturePath.<working-directory basename> on every invocation and returns a
-// minimal agent_end payload. Each run has its own worktree, so concurrent runs
-// never append to the same file (cmd.exe redirection can lose a competing write).
 func writeCapturingPiAgent(t *testing.T, dir, capturePath string) string {
 	t.Helper()
 	const response = `{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"ok"}]}]}`
@@ -184,12 +176,6 @@ func writeCapturingPiAgent(t *testing.T, dir, capturePath string) string {
 	return bin
 }
 
-// TestPushReceivedRoutesReviewRolesToIndependentProfiles is the behavioral
-// regression for review-role routing on the NORMAL push start path
-// (HandlePushReceived -> startRun -> startRunWithIntentSourceLocked), which used
-// to build the pipeline agent inline and never apply WithReviewAgents. Both role
-// models can only appear in the captured argv if that wrapper is applied on this
-// path; before the fix both review-loop turns ran on the default profile.
 func TestPushReceivedRoutesReviewRolesToIndependentProfiles(t *testing.T) {
 	capturePath := filepath.Join(t.TempDir(), "pi-argv.log")
 	piBin := writeCapturingPiAgent(t, t.TempDir(), capturePath)
@@ -250,10 +236,6 @@ func TestPushReceivedRoutesReviewRolesToIndependentProfiles(t *testing.T) {
 	}
 }
 
-// TestPipelineReviewRolesHandOverAtConfiguredRound is the config-to-argv
-// regression for the opt-in later-round role overlay: only the model the round
-// resolved to can appear in that invocation's argv, and an unconfigured round
-// number must keep the first-round profile.
 func TestPipelineReviewRolesHandOverAtConfiguredRound(t *testing.T) {
 	dir := t.TempDir()
 	capture := filepath.Join(dir, "pi-argv.txt")

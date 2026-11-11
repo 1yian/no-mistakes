@@ -28,8 +28,6 @@ func TestPRTemplateBitbucketVisibleAttestationUsesExistingConsumer(t *testing.T)
 	}
 }
 
-// Exercise real HTTP adapter + PR step routing, including ownership discovery
-// after configuration removal and visible (not HTML-only) machine evidence.
 func TestPRTemplateBitbucketCreateReadbackUpdateAndPrePush(t *testing.T) {
 	t.Parallel()
 	sctx, ag, _ := templateTestContext(t)

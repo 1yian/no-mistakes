@@ -10,11 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestSettlePublishedToleratesRunFinishedBeforeCancel pins the race behind the
-// closing-issues journey flake: a run that skips CI finishes and drops out of
-// the daemon's active set after the caller's snapshot showed it live, so the
-// cancel reports "no active run". The run's real outcome must decide, not the
-// refusal.
 func TestSettlePublishedToleratesRunFinishedBeforeCancel(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	setupStatefulGitHub(t, h)

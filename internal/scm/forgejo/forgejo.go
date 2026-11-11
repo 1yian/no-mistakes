@@ -1,4 +1,3 @@
-// Package forgejo implements scm.Host through forgejo-axi's stable JSON CLI.
 package forgejo
 
 import (
@@ -28,10 +27,8 @@ const (
 
 var errForgejoOutputLimit = errors.New("forgejo-axi output exceeded limit")
 
-// CmdFactory creates one non-shell forgejo-axi invocation.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Options configures a Forgejo host adapter.
 type Options struct {
 	CommandFactory CmdFactory
 	CLIAvailable   func(executable string) bool
@@ -42,7 +39,6 @@ type Options struct {
 	Secrets        []string
 }
 
-// Host maps no-mistakes SCM operations to forgejo-axi --json commands.
 type Host struct {
 	cmdFactory                CmdFactory
 	available                 func(string) bool
@@ -55,8 +51,6 @@ type Host struct {
 	commitStatusesUnavailable bool
 }
 
-// New constructs a Forgejo host. Callers should resolve the remote with
-// ResolveRemote first so host and repository identity are pinned once.
 func New(opts Options) *Host {
 	executable := strings.TrimSpace(opts.Executable)
 	if executable == "" {
@@ -1082,19 +1076,10 @@ func stringValue(value *string) string {
 	return *value
 }
 
-// ResolveRemote pins a Forgejo web base URL and OWNER/REPO identity from a
-// remote. configuredBase is required for arbitrary self-hosted names and SSH
-// origins; recognizable HTTPS Forgejo origins can infer a path prefix from all
-// path segments before OWNER/REPO.
 func ResolveRemote(remote, configuredBase, resolvedSSHHost string) (string, string, error) {
 	return ResolveRemoteWithSSHDomain(remote, configuredBase, resolvedSSHHost, "")
 }
 
-// ResolveRemoteWithSSHDomain is ResolveRemote with the SSH hostname declared
-// through FORGEJO_SSH_DOMAIN, which mirrors Forgejo's own SSH_DOMAIN setting. An
-// SSH remote is accepted when its resolved host is either the configured base
-// URL's host or that declared hostname; every other input behaves exactly as
-// ResolveRemote.
 func ResolveRemoteWithSSHDomain(remote, configuredBase, resolvedSSHHost, declaredSSHDomain string) (string, string, error) {
 	remoteHost, remotePath, remoteScheme, err := parseRemote(remote)
 	if err != nil {
@@ -1157,11 +1142,6 @@ func ResolveRemoteWithSSHDomain(remote, configuredBase, resolvedSSHHost, declare
 	return base, repo, nil
 }
 
-// checkSSHHost accepts an SSH remote's resolved host when it belongs to the
-// configured Forgejo instance: either the host of its web base URL or the
-// separate clone host declared through FORGEJO_SSH_DOMAIN. An unusable declared
-// domain never widens the accepted hosts, and a rejection names the resolved
-// host, every accepted host, and a declared domain that had to be ignored.
 func checkSSHHost(resolvedSSHHost, baseHostname, declaredSSHDomain string) error {
 	if strings.EqualFold(resolvedSSHHost, baseHostname) {
 		return nil

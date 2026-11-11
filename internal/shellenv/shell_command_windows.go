@@ -24,14 +24,8 @@ import (
 
 const windowsTerminateGrace = 3 * time.Second
 
-// taskkillExitNoSuchProcess is the nonzero exit code taskkill returns when no
-// process matches the given PID (the child had already exited before we could
-// kill it). All other nonzero codes are genuine kill failures that must not
-// be collapsed into os.ErrProcessDone.
 const taskkillExitNoSuchProcess = 128
 
-// defaultWaitDelay bounds Wait when failed cleanup leaves inherited handles
-// open for commands that do not opt into cooperative cancellation.
 const defaultWaitDelay = 5 * time.Second
 
 type shellCommandJobState struct {
@@ -62,22 +56,10 @@ var assignShellCommandJobFunc = assignShellCommandJob
 var resumeProcessThreadsFunc = resumeProcessThreads
 var windowsCooperativeHelperCommandFunc = windowsCooperativeHelperCommand
 
-// ConfigureShellCommand prepares a Windows command for whole-tree cleanup on
-// cancellation and normal exit. StartShellCommand assigns a kill-on-close job
-// and fails if that guarantee is unavailable.
-//
-// Use RunShellCommand, OutputShellCommand, or CombinedOutputShellCommand for
-// one-shot commands, or use StartShellCommand and defer
-// TerminateShellCommandGroup immediately after a successful start when the
-// caller needs manual pipe handling. If a parser reads stdout/stderr until EOF,
-// the goroutine that owns Wait should terminate the group when the leader exits
-// so inherited pipe holders cannot wedge the parser.
 func ConfigureShellCommand(cmd *exec.Cmd) {
 	configureWindowsShellCommand(cmd, false)
 }
 
-// ConfigureCooperativeShellCommand prepares a repository command that receives
-// CTRL+BREAK and a bounded cleanup window before the usual forced tree kill.
 func ConfigureCooperativeShellCommand(cmd *exec.Cmd) {
 	configureWindowsShellCommand(cmd, true)
 }
@@ -147,9 +129,6 @@ func configureWindowsShellCommand(cmd *exec.Cmd, cooperative bool) {
 	}
 }
 
-// StartShellCommand starts cmd and assigns it to the job object created by its
-// shell-command configurator. If the job cannot be created or assigned, the
-// command fails instead of running without clean-exit descendant cleanup.
 func StartShellCommand(cmd *exec.Cmd) error {
 	if err, ok := takeShellCommandJobSetupError(cmd); ok {
 		return fmt.Errorf("windows job object setup: %w", err)
@@ -178,12 +157,6 @@ func StartShellCommand(cmd *exec.Cmd) error {
 	return nil
 }
 
-// TerminateShellCommandGroup terminates the Windows job object for cmd. Callers
-// defer it after a successful StartShellCommand so clean exits and ordinary
-// errors get the same process-tree cleanup as context cancellation. After a
-// cooperative cancellation it preserves the remaining grace window before
-// forcing the job down, including when the console leader exits before a child
-// finishes cleanup. A nil or never-started command is a no-op.
 func TerminateShellCommandGroup(cmd *exec.Cmd) {
 	if cmd == nil || cmd.Process == nil {
 		return
@@ -223,24 +196,6 @@ func forceKillShellCommand(cmd *exec.Cmd) error {
 	return nil
 }
 
-// ShellCommandGroupActive reports whether the command's job still holds a
-// process that makes the leader's exit unverified. Each probe lists the job's
-// processes and inspects each one: a stale listing of a process that has
-// exited, and the operating system's console host that the leader itself
-// started, are not children. Everything else, including a process that cannot
-// be inspected, is reported. The job's TotalProcesses counter is read before
-// the list and again after the last inspection, and the job is reported
-// active if it moved, so a process started while the list was being inspected
-// cannot slip past. The job is re-probed on a fixed cadence until window
-// elapses: a child that was merely finishing when the leader exited (issue
-// #1614) gets the window to leave the job, and only a member still live past
-// the deadline makes the verdict active. The returned detail names up to
-// groupMemberReportLimit members seen on the last good probe so the caller's
-// error can identify what refused to exit; it is empty when the verdict rests
-// only on a moved TotalProcesses counter with nothing nameable left. A probe
-// that fails after earlier probes saw members still returns those
-// last-observed members, since the probe's error refuses completion without
-// identifying anyone.
 func ShellCommandGroupActive(cmd *exec.Cmd, window time.Duration) (active bool, detail string, err error) {
 	job, ok := shellCommandJob(cmd)
 	if !ok || !job.assigned.Load() || cmd.Process == nil {
@@ -264,8 +219,6 @@ func ShellCommandGroupActive(cmd *exec.Cmd, window time.Duration) (active bool, 
 	}
 }
 
-// probeShellCommandJob takes one inspected snapshot of the job, keeping the
-// TotalProcesses movement check whole so the re-probe loop never weakens it.
 func probeShellCommandJob(job windows.Handle, leaderPID uint32) (bool, []groupMember, error) {
 	totalBefore, err := jobTotalProcesses(job)
 	if err != nil {
@@ -287,8 +240,6 @@ func probeShellCommandJob(job windows.Handle, leaderPID uint32) (bool, []groupMe
 	return jobHasLiveProcesses(totalBefore, totalAfter, procs, leaderPID), members, nil
 }
 
-// jobTotalProcesses returns how many processes have ever been assigned to the
-// job, including those that have exited.
 func jobTotalProcesses(job windows.Handle) (uint32, error) {
 	var info jobObjectBasicAccountingInformation
 	err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation,
@@ -299,23 +250,18 @@ func jobTotalProcesses(job windows.Handle) (uint32, error) {
 	return info.TotalProcesses, nil
 }
 
-// stillActiveExitCode is the exit code GetExitCodeProcess reports for a process
-// that has not exited.
 const stillActiveExitCode = 259
 
-// maxJobProcessList bounds the buffer used to list a job's processes.
 const maxJobProcessList = 1 << 16
 
 var procIsProcessInJob = windows.NewLazySystemDLL("kernel32.dll").NewProc("IsProcessInJob")
 
-// jobObjectBasicProcessIDList mirrors JOBOBJECT_BASIC_PROCESS_ID_LIST.
 type jobObjectBasicProcessIDList struct {
 	NumberOfAssignedProcesses uint32
 	NumberOfProcessIdsInList  uint32
 	ProcessIdList             [1]uintptr
 }
 
-// jobProcessIDs returns the ids of the processes the job lists.
 func jobProcessIDs(job windows.Handle) ([]uint32, error) {
 	for capacity := 16; capacity <= maxJobProcessList; capacity *= 4 {
 		size := int(unsafe.Offsetof(jobObjectBasicProcessIDList{}.ProcessIdList)) + capacity*int(unsafe.Sizeof(uintptr(0)))
@@ -340,9 +286,6 @@ func jobProcessIDs(job windows.Handle) ([]uint32, error) {
 	return nil, errors.New("list job processes: the job holds too many processes to inspect")
 }
 
-// inspectJobProcesses lists the job's processes and records, for each, whether
-// it is still running inside the job, which process started it, and whether it
-// is the operating system's console host.
 func inspectJobProcesses(job windows.Handle) ([]jobProcess, error) {
 	ids, err := jobProcessIDs(job)
 	if err != nil {
@@ -380,7 +323,6 @@ func inspectJobProcess(job windows.Handle, pid uint32, consoleHost string) jobPr
 		proc.state = jobProcessExited
 		return proc
 	}
-	// The id may have been reused by a process that is not in the job.
 	var inJob int32
 	if ret, _, _ := procIsProcessInJob.Call(uintptr(handle), uintptr(job), uintptr(unsafe.Pointer(&inJob))); ret == 0 {
 		return proc
@@ -609,12 +551,6 @@ func failStartedShellCommand(cmd *exec.Cmd, cause error) error {
 	return cause
 }
 
-// isTaskkillAlreadyGone reports whether a taskkill error means the target PID
-// no longer exists (the child had already exited). taskkill emits exit code
-// taskkillExitNoSuchProcess for that case; matching on the numeric exit code
-// keeps the detection locale-independent, since the accompanying stderr text
-// ("...not found.") is locale-translated. All other nonzero codes are treated
-// as genuine failures by the caller, which then falls back to a direct kill.
 func isTaskkillAlreadyGone(err error) bool {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
@@ -623,6 +559,4 @@ func isTaskkillAlreadyGone(err error) bool {
 	return exitErr.ExitCode() == taskkillExitNoSuchProcess
 }
 
-// detachFromTerminal is a no-op where there is no POSIX session or controlling
-// terminal for an interactive shell to contend for.
 func detachFromTerminal(cmd *exec.Cmd) {}

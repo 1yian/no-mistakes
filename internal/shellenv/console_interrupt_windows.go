@@ -16,7 +16,6 @@ import (
 
 const windowsCooperativeCommandArg = "--internal-windows-cooperative-command="
 
-// allocConsoleModeNoWindow is ALLOC_CONSOLE_MODE_NO_WINDOW.
 const allocConsoleModeNoWindow = 2
 
 var (
@@ -25,15 +24,12 @@ var (
 	procAllocConsoleWithOptions = modKernel32.NewProc("AllocConsoleWithOptions")
 )
 
-// allocConsoleOptions is ALLOC_CONSOLE_OPTIONS.
 type allocConsoleOptions struct {
 	mode          uint32
 	useShowWindow int32
 	showWindow    uint16
 }
 
-// RunWindowsCooperativeCommandHelper handles the private console process that
-// launches a configured command in a targetable process group.
 func RunWindowsCooperativeCommandHelper(args []string) (bool, int, error) {
 	if len(args) == 0 || !strings.HasPrefix(args[0], windowsCooperativeCommandArg) {
 		return false, 0, nil
@@ -105,12 +101,6 @@ func runWindowsCooperativeCommand(eventName, targetPath string, targetArgs []str
 	return windowsCommandExit(target.Wait())
 }
 
-// ensureWindowsCooperativeConsole gives the helper the private console its
-// target must share. The shipped binary's consoleAllocationPolicy=detached
-// also overrides the CREATE_NEW_CONSOLE this helper is started with, so on the
-// builds that honor it (26100 and later) the helper starts without a console
-// and allocates one without a window. AllocConsoleWithOptions exists on exactly
-// those builds; older ones ignore the manifest and already gave it a console.
 func ensureWindowsCooperativeConsole() error {
 	var pids [1]uint32
 	if n, _, _ := procGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&pids[0])), uintptr(len(pids))); n != 0 {

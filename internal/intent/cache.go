@@ -9,19 +9,15 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// Cache abstracts the summarization cache behind a small interface so the
-// extractor can be exercised without a real DB in tests.
 type Cache interface {
 	Get(key string) (string, bool)
 	Put(key, summary, agentName, sessionID string)
 }
 
-// dbCache is the production cache backed by db.IntentCache* methods.
 type dbCache struct {
 	db *db.DB
 }
 
-// NewDBCache wraps a *db.DB as a Cache.
 func NewDBCache(database *db.DB) Cache {
 	if database == nil {
 		return memCache{}
@@ -46,19 +42,13 @@ func (c *dbCache) Put(key, summary, agentName, sessionID string) {
 	})
 }
 
-// memCache is an in-memory fallback used when the DB is unavailable and in tests.
 type memCache map[string]string
 
-// NewMemCache returns an in-memory Cache. Mainly for tests.
 func NewMemCache() Cache { return memCache{} }
 
 func (c memCache) Get(key string) (string, bool) { v, ok := c[key]; return v, ok }
 func (c memCache) Put(key, summary, _, _ string) { c[key] = summary }
 
-// cacheKeyFor derives a deterministic cache key. We include the agent name,
-// session id, last-message key, and message count - the latter two are
-// independent stale-detection signals so a buggy reader that fails to
-// update LastMsgKey on append still gets cache misses on growth.
 func cacheKeyFor(s *Session) string {
 	h := sha256.New()
 	h.Write([]byte(s.AgentName))
@@ -71,8 +61,6 @@ func cacheKeyFor(s *Session) string {
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// A session can produce several changes without gaining another message. Keep
-// summaries distinct by change and transcript, and invalidate transcript-only caches.
 func summaryCacheKeyFor(s *Session, change SummaryContext) string {
 	data, _ := json.Marshal(struct {
 		Change     ChangeContext

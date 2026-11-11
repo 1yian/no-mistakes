@@ -1,12 +1,3 @@
-// Package ghsanitize is a test-only port of the response sanitizer that the
-// GitHub CLI's API client (github.com/cli/go-gh/v2/pkg/asciisanitizer, used with
-// JSON enabled) runs over every API response, including `gh pr view --json`.
-// It rewrites C0 and C1 control characters, and the six-character JSON escapes
-// that decode to them, into caret notation, so a body read back through gh is
-// not byte-for-byte what was written.
-//
-// The fake gh binary and the publication tests share this port so a body that
-// survives it round-trips through the real client too.
 package ghsanitize
 
 import (
@@ -17,8 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// JSON sanitizes a JSON document exactly as asciisanitizer.Sanitizer{JSON: true}
-// does when it has the whole response.
 func JSON(src []byte) []byte {
 	var out bytes.Buffer
 	addEscape := false
@@ -55,8 +44,6 @@ func JSON(src []byte) []byte {
 	return out.Bytes()
 }
 
-// Text returns what gh hands back for a string stored on the server: the text
-// is encoded as a JSON string, sanitized, and decoded again.
 func Text(s string) string {
 	encoded, err := json.Marshal(s)
 	if err != nil {
@@ -81,9 +68,6 @@ func sanitized(code int) bool {
 	return false
 }
 
-// caretFor mirrors the library's table: the C0 code point c maps to '@'+c, and
-// the C1 code point 0x80+c maps to the same letter. Code 28 is the library's
-// three-character `^\\`.
 func caretFor(code int) string {
 	if code >= 0x80 {
 		code -= 0x80

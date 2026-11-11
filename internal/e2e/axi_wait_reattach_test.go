@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// Exercise the CLI and daemon, with agent turns supplied by a scripted
-// agent. The independent oracle is the requested hold: an expired call must
-// recommend the same duration without replaying an accepted response.
 func TestAxiCustomWaitSurvivesReattachmentAndAcceptedResponse(t *testing.T) {
 	scenario := writeScenario(t, "slow-review.yaml", `actions:
   - match: "Review the code changes and return structured findings"

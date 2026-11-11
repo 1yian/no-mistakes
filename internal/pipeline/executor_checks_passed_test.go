@@ -23,8 +23,6 @@ func (s releasingCIStep) Execute(sctx *StepContext) (*StepOutcome, error) {
 	return &StepOutcome{CIReadyNoCI: &declaredNoCI}, nil
 }
 
-// ciStepSnapshot is the recorded CI step state a terminal run must keep: its
-// status and the wall-clock duration the executor measured for it.
 type ciStepState struct {
 	status     string
 	durationMS int64
@@ -50,16 +48,6 @@ func ciStepSnapshot(t *testing.T, database *db.DB, runID string) ciStepState {
 	return ciStepState{}
 }
 
-// TestExecutor_GreenCIRunRecordsChecksPassedAndReleases is the run-level half
-// of the CI step's default verdict: a run whose checks came back green while
-// its PR was still open finishes as checks_passed, not as an ordinary
-// completion, so a caller can tell "checks passed, waiting on a human merge
-// decision" apart from "the PR merged or closed" - and the merge is not this
-// run's to observe.
-//
-// The second half proves the recorded outcome is stable and the duration is
-// CI-only: the merge is observed afterwards (recorded as PR truth), and
-// neither the run's status nor the CI step's status and duration move.
 func TestExecutor_GreenCIRunRecordsChecksPassedAndReleases(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	events := &eventCollector{}
@@ -113,9 +101,6 @@ func TestExecutor_GreenCIRunRecordsChecksPassedAndReleases(t *testing.T) {
 	}
 }
 
-// TestExecutor_MergedCIRunStillRecordsCompleted keeps the other outcome
-// distinct: a run that ended because the PR merged records an ordinary
-// completed run, whose agent-facing outcome is "passed", not "checks-passed".
 func TestExecutor_MergedCIRunStillRecordsCompleted(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	exec := NewExecutor(database, p, nil, nil, []Step{mergedCIStep{}}, nil)
@@ -132,8 +117,6 @@ func TestExecutor_MergedCIRunStillRecordsCompleted(t *testing.T) {
 	}
 }
 
-// mergedCIStep is the CI step's other terminal shape: the PR merged, so the run
-// completes rather than releasing at a green head.
 type mergedCIStep struct{ releasingCIStep }
 
 func (mergedCIStep) Execute(sctx *StepContext) (*StepOutcome, error) {

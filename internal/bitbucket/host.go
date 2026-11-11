@@ -11,23 +11,18 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// Host implements scm.Host for Bitbucket using the REST API client.
 type Host struct {
 	client *Client
 	repo   RepoRef
 	draft  bool // open created PRs as drafts ("draft": true in the create body)
 }
 
-// NewHost builds a Host from an API client and a parsed repository reference.
-// When draft is true, created PRs are opened as drafts.
 func NewHost(client *Client, repo RepoRef, draft bool) *Host {
 	return &Host{client: client, repo: repo, draft: draft}
 }
 
 func (h *Host) Provider() scm.Provider { return scm.ProviderBitbucket }
 
-// Capabilities reports Bitbucket's feature matrix. Bitbucket's REST API
-// does not expose a reliable merge-conflict probe, so MergeableState is off.
 func (h *Host) Capabilities() scm.Capabilities {
 	return scm.Capabilities{MergeableState: false, FailedCheckLogs: true}
 }
@@ -254,8 +249,6 @@ func normalizePRState(raw string) scm.PRState {
 	}
 }
 
-// LatestStatuses keeps only the newest status per unique key/name.
-// Exported because legacy step code still calls it by name during the migration.
 func LatestStatuses(statuses []CommitStatus) []CommitStatus {
 	latest := make([]CommitStatus, 0, len(statuses))
 	seen := make(map[string]struct{}, len(statuses))

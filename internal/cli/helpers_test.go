@@ -106,9 +106,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// removeTestDir removes dir even when it holds read-only directories. Child
-// go commands run with the test HOME and write their module cache under it
-// read-only, which a plain os.RemoveAll cannot delete.
 func removeTestDir(dir string) error {
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() {
@@ -145,9 +142,6 @@ func explicitDaemonLogSinkRootFromArgs(args []string) (string, bool) {
 	return args[3], true
 }
 
-// setupTestRepo creates a git repo with an origin remote in a temp dir and
-// sets NM_HOME to an isolated temp dir. Returns the repo path and a cleanup
-// function that restores the original working directory and NM_HOME.
 func setupTestRepo(t *testing.T) string {
 	t.Helper()
 
@@ -238,7 +232,6 @@ func waitForDaemonRunning(t *testing.T, p *paths.Paths) {
 	t.Fatal("daemon did not become responsive")
 }
 
-// chdir changes to the given directory and restores the original on cleanup.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	origDir, err := os.Getwd()
@@ -378,7 +371,6 @@ func makeSocketSafeTempDir(t *testing.T) string {
 	return dir
 }
 
-// startTestDaemon starts an in-process daemon for integration tests.
 func startTestDaemon(t *testing.T, p *paths.Paths, d *db.DB) {
 	t.Helper()
 

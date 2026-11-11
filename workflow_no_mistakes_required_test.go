@@ -34,29 +34,14 @@ import (
 // action is fully tested here on its own head, while the required check that
 // judges it keeps running the published pinned copy.
 
-// requiredWorkflowTestHeadSHA is the commit the generated pipeline summary
-// attestation binds to. Tests that execute the gate pass the same value as the
-// PR head SHA unless they are asserting a mismatch.
 const requiredWorkflowTestHeadSHA = "0123456789abcdef0123456789abcdef01234567"
 
-// requireActionUsesPrefix is the `uses:` prefix every enforcing repository in
-// the fleet points at. The path after it must resolve to the action directory
-// in this repository, so a rename breaks the caller test rather than the fleet.
 const requireActionUsesPrefix = "kunchenguid/no-mistakes/"
 
-// requiredActionPin is the exact commit the gate delegates to. It is
-// deliberately asserted by value, not just by shape: the pin must always name
-// a commit that already carries the action, and bumping it is a separate,
-// deliberate pull request that updates this constant in the same change.
 const requiredActionPin = "f6441c96c352a18b9cadcaef6b6c7017e9ac3970"
 
 var immutableActionPin = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// TestNoMistakesRequiredWorkflowCallsTheSharedActionAtAnImmutablePin pins the
-// migration this repository dogfoods for the whole fleet: the gate delegates to
-// the shared action rather than carrying its own copy of the enforcement, and
-// it names a 40-character commit SHA. A mutable ref - `@main` above all - would
-// let the pull request under judgement rewrite its own judge.
 func TestNoMistakesRequiredWorkflowCallsTheSharedActionAtAnImmutablePin(t *testing.T) {
 	step := requiredWorkflowCheckStep(t, loadRequiredWorkflow(t))
 
@@ -90,13 +75,6 @@ func TestNoMistakesRequiredWorkflowCallsTheSharedActionAtAnImmutablePin(t *testi
 	}
 }
 
-// TestNoMistakesRequiredWorkflowExemptsReleaseAutomation pins the exemption
-// logic so the release pipeline (release-please via GITHUB_TOKEN) and
-// dependabot are never silently blocked by the gate.
-//
-// These stay job-level rather than moving to the action's exempt-authors input:
-// an in-job exemption still needs the run to start, and a GITHUB_TOKEN pull
-// request's run is created in action_required and never starts.
 func TestNoMistakesRequiredWorkflowExemptsReleaseAutomation(t *testing.T) {
 	condition := loadRequiredWorkflow(t).Jobs["check"].If
 	for _, tc := range []struct {
@@ -139,14 +117,6 @@ func evaluateRequiredWorkflowAuthorCondition(condition, author string) (bool, er
 	return true, nil
 }
 
-// TestNoMistakesRequiredWorkflowTriggersOnRelevantPREvents ensures the check
-// re-runs when the PR body is edited so a contributor cannot bypass by opening
-// clean then editing the body.
-//
-// T2 includes "synchronize": since the pre-push attestation change (#994),
-// synchronize is the event that judges a pipeline-pushed head. #773 had
-// dropped it because a pipeline push pinned a FAILURE check run to the new
-// head before the PR step rewrote the body; that ordering no longer holds.
 func TestNoMistakesRequiredWorkflowTriggersOnRelevantPREvents(t *testing.T) {
 	types := requiredWorkflowPullRequestTypes(t, loadRequiredWorkflow(t))
 	want := []string{"opened", "edited", "synchronize", "reopened"}
@@ -155,9 +125,6 @@ func TestNoMistakesRequiredWorkflowTriggersOnRelevantPREvents(t *testing.T) {
 	}
 }
 
-// requiredWorkflowPullRequestTypes reads the workflow's pull_request event
-// types from the parsed document, so a type named only in a comment cannot
-// satisfy a trigger assertion.
 func requiredWorkflowPullRequestTypes(t *testing.T, workflow requiredWorkflow) []string {
 	t.Helper()
 	pullRequest, ok := workflow.On["pull_request"].(map[string]any)
@@ -175,18 +142,6 @@ func requiredWorkflowPullRequestTypes(t *testing.T, workflow requiredWorkflow) [
 	return types
 }
 
-// TestNoMistakesRequiredWorkflowExecutesEveryBodyEvent reproduces the
-// first-time-fork incident in which an opened event and two same-head body
-// edits became actionable together. The scheduler fixture implements GitHub's
-// documented one-running/one-pending concurrency limit, including pending-run
-// replacement even when cancel-in-progress is false, and the exact
-// cancel-in-progress ordering observed in runs 29962844999, 29962943078, and
-// 29965243268. It then drives the check job's real delegation for every job
-// that survives scheduling.
-//
-// This is also the caller's end-to-end wiring test: the workflow forwards no
-// pr-* inputs, so a verdict only appears if the action really does read the
-// body and head SHA out of the workflow event payload.
 func TestNoMistakesRequiredWorkflowExecutesEveryBodyEvent(t *testing.T) {
 	workflow := loadRequiredWorkflow(t)
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
@@ -207,12 +162,6 @@ func TestNoMistakesRequiredWorkflowExecutesEveryBodyEvent(t *testing.T) {
 	}
 }
 
-// TestNoMistakesRequiredWorkflowBindsAttestationToTheEventHead keeps the one
-// verdict that is genuinely a property of the caller's wiring rather than of
-// verify.py: the head SHA the gate judges against comes from the event payload
-// this workflow subscribes to, so a body carrying an older attestation fails
-// even though it is otherwise well-formed. Every other verdict is owned by
-// TestRequireActionEnforcesTheGate against the same interpreter.
 func TestNoMistakesRequiredWorkflowBindsAttestationToTheEventHead(t *testing.T) {
 	workflow := loadRequiredWorkflow(t)
 	compliant := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
@@ -422,8 +371,6 @@ func executeRequiredWorkflowFixture(t *testing.T, workflow requiredWorkflow, eve
 	return results
 }
 
-// requiredWorkflowCheckStep returns the check job's single step, so a second
-// step smuggled into the gate is caught rather than silently ignored.
 func requiredWorkflowCheckStep(t *testing.T, workflow requiredWorkflow) requiredWorkflowStep {
 	t.Helper()
 	job, ok := workflow.Jobs["check"]
@@ -436,10 +383,6 @@ func requiredWorkflowCheckStep(t *testing.T, workflow requiredWorkflow) required
 	return job.Steps[0]
 }
 
-// runRequiredWorkflowCheckJob drives the check job the way a runner does: it
-// resolves the action the workflow delegates to, forwards the step's `with:`
-// inputs under the env names the action maps them to, and hands the action a
-// real workflow event payload for every PR fact the caller does not pass.
 func runRequiredWorkflowCheckJob(t *testing.T, workflow requiredWorkflow, event requiredWorkflowEvent) (conclusion, output string) {
 	t.Helper()
 	step := requiredWorkflowCheckStep(t, workflow)

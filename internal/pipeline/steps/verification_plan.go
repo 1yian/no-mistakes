@@ -6,9 +6,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// verificationPlanPromptSection reads only the pinned snapshot. A lost or altered
-// attachment is an error, never an implicit no-plan run. The digest-labelled
-// boundary keeps author-supplied text distinct from pipeline instructions.
 func verificationPlanPromptSection(sctx *pipeline.StepContext) (string, error) {
 	plan := sctx.Run.VerificationPlan
 	if plan == nil {

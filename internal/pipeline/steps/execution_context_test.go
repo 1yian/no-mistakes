@@ -71,8 +71,6 @@ func TestExecutionContext_TestRepairAndEvidenceDelivery(t *testing.T) {
 	}
 }
 
-// This fixture checks metadata sufficiency and preservation during read-only
-// Git commands. It does not implement or certify an OS sandbox.
 func TestExecutionContext_LinkedGitReadsPreserveIdentity(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.EvalSymlinks(t.TempDir())
@@ -133,9 +131,6 @@ func TestExecutionContext_LinkedGitReadsPreserveIdentity(t *testing.T) {
 	}
 }
 
-// The section is injected into review/test/lint/document/pr step prompts.
-// It must be task-neutral - words like "review" or "lint" leak the wrong
-// framing into other steps.
 func TestExecutionContextPromptSection_TaskNeutral(t *testing.T) {
 	t.Parallel()
 	// The injected workDir is a t.TempDir path whose name embeds this test's

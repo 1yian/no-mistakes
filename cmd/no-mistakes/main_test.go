@@ -98,10 +98,6 @@ func TestRunAttemptsOldExecutableCleanupBeforeEarlyRoutes(t *testing.T) {
 	})
 }
 
-// Issue #1653: `daemon run` must release a console of its own and repoint
-// unusable standard output before the daemon spawns or writes anything, and
-// against the root it was given, since the fallback writes to that root's
-// bootstrap log.
 func TestRunPreparesDaemonStdioBeforeTheDaemonRuns(t *testing.T) {
 	originalArgs := os.Args
 	originalPrepare := prepareDaemonRunStdio
@@ -133,10 +129,6 @@ func TestRunPreparesDaemonStdioBeforeTheDaemonRuns(t *testing.T) {
 	}
 }
 
-// The console release and the stdio fallback belong to `daemon run` alone:
-// every other invocation, including the daemon's own log-sink child and a CLI
-// sharing its console with a git hook, terminal, or agent, must keep its
-// console and standard handles untouched.
 func TestOnlyDaemonRunPreparesDaemonStdio(t *testing.T) {
 	originalArgs := os.Args
 	originalPrepare := prepareDaemonRunStdio

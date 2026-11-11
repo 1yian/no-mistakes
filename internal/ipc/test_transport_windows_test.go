@@ -49,8 +49,6 @@ func rawListen(t *testing.T, endpoint string) net.Listener {
 	return &tokenStripListener{Listener: ln}
 }
 
-// tokenStripListener wraps a net.Listener to auto-consume the auth token
-// line sent by dial(), so test server goroutines see requests directly.
 type tokenStripListener struct {
 	net.Listener
 }

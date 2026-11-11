@@ -70,9 +70,6 @@ func TestReviewAgentTimeout_AbsentKeepsGlobal(t *testing.T) {
 	}
 }
 
-// The timeout gates the review of the pushed branch, so the pushed copy must
-// neither set it nor change the trusted value, with or without the commands
-// opt-in.
 func TestReviewAgentTimeout_PushedBranchCannotAlterIt(t *testing.T) {
 	pushed := reviewTimeoutRepo(t, "1m")
 	for _, allow := range []bool{false, true} {

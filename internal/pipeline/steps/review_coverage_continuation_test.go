@@ -28,8 +28,6 @@ func (*coverageContinuationTestGate) Execute(*pipeline.StepContext) (*pipeline.S
 	return &pipeline.StepOutcome{NeedsApproval: true, Findings: `{"findings":[{"id":"required-test","severity":"warning","description":"Keep the next validation gate pending","action":"ask-user"}]}`}, nil
 }
 
-// The reviewer here is the real ReviewStep. Only the agent boundary is
-// scripted, so starting a new full review cannot masquerade as continuation.
 func TestReviewStep_ParkedCoverageContinuationTargetsOnlyRetainedGap(t *testing.T) {
 	t.Parallel()
 	testRetainedCoverageContinuation(t, false)

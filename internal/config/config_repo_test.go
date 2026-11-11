@@ -76,12 +76,6 @@ ignore_patterns:
 	}
 }
 
-// TestLoadRepo_BranchSyncRemoteTimeoutIsNotARepoSetting proves
-// branch_sync_remote_timeout is inert in .no-mistakes.yaml: RepoConfig has
-// no matching field, so a pushed branch cannot widen or narrow how long
-// guarded branch synchronization waits before failing closed. It is a
-// global-only operator machine setting (config.GlobalConfig,
-// DefaultBranchSyncRemoteTimeout).
 func TestLoadRepo_BranchSyncRemoteTimeoutIsNotARepoSetting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".no-mistakes.yaml")
@@ -99,10 +93,6 @@ func TestLoadRepo_BranchSyncRemoteTimeoutIsNotARepoSetting(t *testing.T) {
 	}
 }
 
-// TestLoadRepo_AgentTimeoutIsNotARepoSetting proves agent_timeout is inert in
-// .no-mistakes.yaml: RepoConfig has no matching field, so a pushed branch
-// cannot widen or remove the default per-invocation agent bound. It is a
-// global-only operator machine setting (config.GlobalConfig, DefaultAgentTimeout).
 func TestLoadRepo_AgentTimeoutIsNotARepoSetting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".no-mistakes.yaml")
@@ -120,11 +110,6 @@ func TestLoadRepo_AgentTimeoutIsNotARepoSetting(t *testing.T) {
 	}
 }
 
-// TestLoadRepo_TestAgentTimeoutIsNotARepoSetting proves test_agent_timeout is
-// inert in .no-mistakes.yaml: RepoConfig has no matching field, so a pushed
-// branch cannot widen or remove the Test-step evidence-agent bound. It is a
-// global-only operator machine setting (config.GlobalConfig,
-// DefaultTestAgentTimeout).
 func TestLoadRepo_WorkingTimeoutIsNotARepoSetting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".no-mistakes.yaml")
@@ -158,11 +143,6 @@ func TestLoadRepo_TestAgentTimeoutIsNotARepoSetting(t *testing.T) {
 	}
 }
 
-// TestLoadRepo_GateReconcileTimingsAreNotRepoSettings proves
-// gate_reconcile_timeout / gate_reconcile_interval are inert in
-// .no-mistakes.yaml: RepoConfig has no matching fields, so a pushed branch
-// cannot widen the approval-gate reconcile budget. They are global-only
-// operator machine settings.
 func TestLoadRepo_GateReconcileTimingsAreNotRepoSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".no-mistakes.yaml")
@@ -324,10 +304,6 @@ func TestMerge_CIRerunTransientFromRepoConfig(t *testing.T) {
 	}
 }
 
-// The budget is trusted-only per repository, so contributing to a project whose
-// default branch this operator does not control would otherwise leave them no
-// way to decline spending someone else's CI minutes. The global value is that
-// switch, and a repository that states its own preference still overrides it.
 func TestMerge_CIRerunTransientGlobalOverrideYieldsToTrustedRepoValue(t *testing.T) {
 	globalOff := 0
 	global := DefaultGlobalConfig()
@@ -364,9 +340,6 @@ func TestLoadGlobal_CIRerunTransientFromFile(t *testing.T) {
 	}
 }
 
-// Every rerun ci.rerun_transient authorizes is another provider-side workflow
-// run billed to the repository, so the budget is read only from the trusted
-// default-branch copy: a pushed branch must not be able to raise its own.
 func TestEffectiveRepoConfig_CIRerunTransientTrustedOnly(t *testing.T) {
 	pushedBudget := MaxCIRerunTransient
 	trustedBudget := 0
@@ -446,10 +419,6 @@ func TestLoadRepo_ReviewPathInstructionsDefaultsEmpty(t *testing.T) {
 	}
 }
 
-// TestParseRepoConfig_ReviewPathInstructionsFailClosed proves a malformed or
-// over-cap list is rejected when the config is parsed, so the run aborts before
-// an agent starts instead of silently dropping guidance or overrunning the
-// review prompt budget.
 func TestParseRepoConfig_ReviewPathInstructionsFailClosed(t *testing.T) {
 	oversized := "review:\n  path_instructions:\n" +
 		"    - path: \"internal/**\"\n      instructions: \"" + strings.Repeat("x", MaxReviewPathInstructionsBytes) + "\"\n"
@@ -526,8 +495,6 @@ func TestParseRepoConfig_ReviewPathInstructionsFailClosed(t *testing.T) {
 	}
 }
 
-// Instruction text that merely mentions a conflict marker still carries content,
-// so it must parse rather than be rejected with the empty-render error.
 func TestParseRepoConfig_ReviewPathInstructionsKeepsTextAroundMarkers(t *testing.T) {
 	cfg, err := LoadRepoFromBytes([]byte("review:\n  path_instructions:\n    - path: \"internal/**\"\n      instructions: \"Never leave <<<<<<< markers behind.\"\n"))
 	if err != nil {
@@ -541,9 +508,6 @@ func TestParseRepoConfig_ReviewPathInstructionsKeepsTextAroundMarkers(t *testing
 	}
 }
 
-// TestParseRepoConfig_ReviewPathInstructionsAtCapsIsValid pins both boundaries:
-// a list exactly at the entry cap and a section exactly at the byte cap parse,
-// and one byte more fails, so the limits reject only what exceeds them.
 func TestParseRepoConfig_ReviewPathInstructionsAtCapsIsValid(t *testing.T) {
 	atEntryCap := "review:\n  path_instructions:\n"
 	for i := 0; i < MaxReviewPathInstructions; i++ {
@@ -576,10 +540,6 @@ func TestParseRepoConfig_ReviewPathInstructionsAtCapsIsValid(t *testing.T) {
 	}
 }
 
-// The accounting must charge for everything the review step injects: the
-// heading, every block label, the separators, the path, the instructions, and
-// the matched-file allowance. internal/pipeline/steps owns the drift check
-// against the real rendered section.
 func TestReviewPathInstructionsBytes_CountsTheWholeSection(t *testing.T) {
 	if got := ReviewPathInstructionsBytes(nil); got != 0 {
 		t.Fatalf("ReviewPathInstructionsBytes(nil) = %d, want 0", got)

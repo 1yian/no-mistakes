@@ -20,19 +20,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// nowUnix returns the current time in unix seconds. It is a package var so tests
-// can pin the clock when asserting how long a run has been parked.
 var nowUnix = func() int64 { return time.Now().Unix() }
 
-// maxGateSummary bounds a step summary in default views. A Test, Lint, or
-// repository gate summary carries up to 64 KiB of command output whose complete
-// copy lives in the step log, so `axi logs --full` is the full-read path.
-// Finding descriptions are deliberately never bounded: they are the decision
-// content a driver must relay verbatim for ask-user findings.
 const maxGateSummary = 1200
 
-// Row types carry `toon` tags so the encoder renders a []row slice as a
-// tabular array (name[N]{cols}:) with one comma-delimited line per element.
 type stepRow struct {
 	Step       string `toon:"step"`
 	Status     string `toon:"status"`
@@ -77,21 +68,15 @@ type runRow struct {
 	PR     string `toon:"pr"`
 }
 
-// logRow is a single log line; a []logRow renders as a block array so multiline
-// logs stay readable rather than collapsing onto one inline row.
 type logRow struct {
 	Line string `toon:"line"`
 }
 
-// fixRow is one fix the pipeline applied: the step it ran under and the
-// agent's one-line summary of the change.
 type fixRow struct {
 	Step    string `toon:"step"`
 	Summary string `toon:"summary"`
 }
 
-// stepView is a render-ready view of a single pipeline step, decoupled from
-// whether it came from the daemon (ipc) or the local database.
 type stepView struct {
 	ID               string
 	Name             string
@@ -113,30 +98,20 @@ type stepView struct {
 	SkipReason       string
 }
 
-// runView is a render-ready view of a pipeline run.
 type runView struct {
-	PiProfile        *agentcfg.PiProfile
-	ReviewerProfile  *agentcfg.ReviewerProfile
-	VerificationPlan *verificationplan.Snapshot
-	// QuotaRouting is the run's parsed quota-aware ordering record, nil when
-	// the feature was off for this run.
-	QuotaRouting *quotarouting.Record
-	ID           string
-	Branch       string
-	Status       string
-	HeadSHA      string
-	PRURL        string
-	CIReady      bool
-	CIReadyNoCI  bool
-	// AwaitingAgentSince is the unix-seconds time the run parked at a gate
-	// awaiting the driving agent, or nil when the run is not parked. It powers
-	// the top-level parked signal in the run object.
+	PiProfile          *agentcfg.PiProfile
+	ReviewerProfile    *agentcfg.ReviewerProfile
+	VerificationPlan   *verificationplan.Snapshot
+	QuotaRouting       *quotarouting.Record
+	ID                 string
+	Branch             string
+	Status             string
+	HeadSHA            string
+	PRURL              string
+	CIReady            bool
+	CIReadyNoCI        bool
 	AwaitingAgentSince *int64
 	Steps              []stepView
-	// CIOverrideReason is non-empty when a human approved past a still-failing
-	// live check (see pipeline.ApprovalOverrideVerifier). outcomeForRun uses
-	// it to keep a deliberate override from reading identically to a
-	// genuinely green run in agent-facing output.
 	CIOverrideReason   string
 	TestOverrideReason string
 	RetryOf            *ipc.RunRetryInfo
@@ -262,8 +237,6 @@ func runViewFromDB(r *db.Run, steps []*db.StepResult, database *db.DB) runView {
 	return rv
 }
 
-// awaitingStep returns the step currently blocking on a human decision, if any.
-// At most one step awaits at a time, so the first match is the active gate.
 func (rv runView) awaitingStep() (stepView, bool) {
 	for _, s := range rv.Steps {
 		if s.Status == string(types.StepStatusAwaitingApproval) || s.Status == string(types.StepStatusFixReview) {
@@ -273,10 +246,6 @@ func (rv runView) awaitingStep() (stepView, bool) {
 	return stepView{}, false
 }
 
-// formatParkedFor renders how long a run has been parked awaiting the agent,
-// given the unix-seconds time it parked. The phrasing reports the elapsed
-// duration so a supervisor can tell a fresh park ("parked 4s") from a stalled
-// one ("parked 18m20s") in a single `axi status` read.
 func formatParkedFor(sinceUnix int64) string {
 	secs := nowUnix() - sinceUnix
 	if secs < 0 {
@@ -295,7 +264,6 @@ func formatParkedFor(sinceUnix int64) string {
 	}
 }
 
-// shortSHA trims a commit SHA for display.
 func shortSHA(sha string) string {
 	if len(sha) > 8 {
 		return sha[:8]
@@ -303,7 +271,6 @@ func shortSHA(sha string) string {
 	return sha
 }
 
-// findingCount returns the number of findings recorded for a step.
 func (s stepView) findingCount() int {
 	if s.FindingsJSON == "" {
 		return 0
@@ -315,8 +282,6 @@ func (s stepView) findingCount() int {
 	return len(parsed.Items)
 }
 
-// findingsTally summarizes a run's findings across all steps by action, so an
-// agent sees the shape of outstanding work without a follow-up call.
 func (rv runView) findingsTally() string {
 	var awaiting, autofix, info int
 	for _, s := range rv.Steps {
@@ -354,10 +319,6 @@ func (rv runView) findingsTally() string {
 	return joinComma(parts)
 }
 
-// fixRows flattens fix-attempt summaries in step then round order. Dispatching
-// a fix round does not prove a change was applied; legacy empty summaries
-// must not manufacture that claim, and a round that changed nothing is not a
-// fix at all.
 func (rv runView) fixRows() []fixRow {
 	var rows []fixRow
 	for _, s := range rv.Steps {
@@ -487,7 +448,6 @@ func joinComma(parts []string) string {
 	return out
 }
 
-// runObjectField renders a run as a TOON "run:" object with a steps table.
 func runObjectField(rv runView) toon.Field {
 	return runObjectFieldWithKey("run", rv)
 }
@@ -575,10 +535,6 @@ func runObjectFieldWithKey(key string, rv runView) toon.Field {
 	return toon.Field{Key: key, Value: toon.NewObject(fields...)}
 }
 
-// quotaRoutingField renders the run's quota-aware ordering outcome: the
-// choice, why the order is what it is, the per-candidate evidence table, and
-// any mid-run switches. Everything here is local-only data the daemon already
-// holds; nothing in the record names a prompt, output, or credential.
 func quotaRoutingField(record *quotarouting.Record) toon.Field {
 	fields := []toon.Field{
 		{Key: "enabled", Value: record.Enabled},
@@ -660,14 +616,10 @@ func (rv runView) automaticSkips() []automaticSkipRow {
 	return rows
 }
 
-// gateFields renders the active approval gate: the awaiting step, its findings
-// table, and the next-step commands an agent can run to clear it.
 func gateFields(gate stepView) []toon.Field {
 	return gateFieldsForRun(gate, "")
 }
 
-// gateFieldsForRun renders the gate with every follow-up command that accepts
-// --run carrying runID, so a caller that selected the run by id keeps naming it.
 func gateFieldsForRun(gate stepView, runID string) []toon.Field {
 	respond := "no-mistakes axi respond" + runFlag(runID)
 	coverageHelp := "Run `" + respond + " --action complete-coverage` to review only the remaining paths using stored coverage for this source"
@@ -771,11 +723,6 @@ func findingRows(items []types.Finding) []findingRow {
 	return rows
 }
 
-// recordedFindingsFields renders a step's persisted summary and findings for
-// `axi logs`, which keeps them readable after the gate resolves and for any
-// explicitly selected run. It reports whether the summary was bounded.
-// Unparseable findings surface as a findings_error field rather than vanishing,
-// so a damaged record does not read as a step that recorded nothing.
 func recordedFindingsFields(findingsJSON string, full bool) ([]toon.Field, bool) {
 	if findingsJSON == "" {
 		return nil, false
@@ -814,8 +761,6 @@ func axiLogsFullCommand(step, runID string) string {
 	return fmt.Sprintf("no-mistakes axi logs --step %s --full", step)
 }
 
-// truncate shortens s to limit runes, appending a disclosure of the full size
-// when it actually trims, per the AXI content-truncation convention.
 func truncate(s string, limit int) string {
 	runes := []rune(s)
 	if len(runes) <= limit {
@@ -826,10 +771,6 @@ func truncate(s string, limit int) string {
 
 // --- output helpers ---
 
-// axiDoc marshals an ordered set of TOON fields into a document with a trailing
-// newline. AXI fields can include arbitrary subprocess output, findings, and
-// provider data. TOON intentionally rejects most C0 controls, so make those
-// bytes visible before encoding instead of dropping the entire document.
 func axiDoc(fields ...toon.Field) string {
 	value := sanitizeTOONValue(toon.NewObject(fields...))
 	out, err := toon.MarshalString(value)
@@ -839,10 +780,6 @@ func axiDoc(fields ...toon.Field) string {
 	return out + "\n"
 }
 
-// escapeUnsupportedTOONControls converts only C0 bytes the TOON encoder cannot
-// represent. Byte-wise copying preserves all printable Unicode and arbitrary
-// non-ASCII evidence exactly; tab, carriage return, and newline keep TOON's
-// supported escaping semantics.
 func escapeUnsupportedTOONControls(s string) string {
 	first := -1
 	for i := 0; i < len(s); i++ {
@@ -872,9 +809,6 @@ func unsupportedTOONControl(b byte) bool {
 	return b < 0x20 && b != '\t' && b != '\r' && b != '\n'
 }
 
-// sanitizeTOONValue recursively copies the render value while escaping strings.
-// Keeping each concrete type intact preserves TOON's existing ordered objects,
-// struct field names, and tabular-array rendering.
 func sanitizeTOONValue(value any) any {
 	return sanitizeTOONReflect(reflect.ValueOf(value)).Interface()
 }
@@ -952,13 +886,10 @@ func axiEncodingError(err error) string {
 	return out + "\n"
 }
 
-// emitDoc writes a finished TOON document to stdout.
 func emitDoc(cmd *cobra.Command, fields ...toon.Field) {
 	fmt.Fprint(cmd.OutOrStdout(), axiDoc(fields...))
 }
 
-// emitError renders a structured TOON error to stdout and returns an exitError
-// so the process exits non-zero without cobra printing the Go error.
 func emitError(cmd *cobra.Command, code int, msg string, help ...string) error {
 	fields := []toon.Field{{Key: "error", Value: msg}}
 	if len(help) > 0 {

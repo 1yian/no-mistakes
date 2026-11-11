@@ -16,12 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestGateStepCannotStartRecursivePipeline reproduces the public-command
-// incident from an actual validation-step child. The child first issues the
-// exact init + axi run --yes sequence, then probes the independent authorities:
-// marker removal, process ancestry after changing cwd, concurrent init calls,
-// and a direct gate push. Every attempt must fail before creating a repo, run,
-// remote, worktree, or gate ref.
 func TestGateStepCannotStartRecursivePipeline(t *testing.T) {
 	adapters := []struct {
 		name          string

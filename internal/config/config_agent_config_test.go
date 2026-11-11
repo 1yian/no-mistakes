@@ -96,9 +96,6 @@ func TestLoadGlobal_AgentConfigAcceptsExplicitACPTarget(t *testing.T) {
 	}
 }
 
-// TestLoadGlobal_AgentConfigAbsentIsZero is the backwards-compatibility floor:
-// a config that predates agent_config resolves every agent to the zero Profile,
-// which changes no argv anywhere.
 func TestLoadGlobal_AgentConfigAbsentIsZero(t *testing.T) {
 	cfg := writeGlobalConfig(t, "agent: codex\nagent_args_override:\n  codex:\n    - -m\n    - gpt-5.4\n")
 	if cfg.AgentConfig != nil {
@@ -113,10 +110,6 @@ func TestLoadGlobal_AgentConfigAbsentIsZero(t *testing.T) {
 	}
 }
 
-// TestAgentConfigAndArgsOverrideCoexistWithRawWinning states the precedence rule
-// in the terms an operator reads it: a raw flag beats the common field for the
-// same knob, and the common field still supplies every knob the raw args leave
-// alone.
 func TestAgentConfigAndArgsOverrideCoexistWithRawWinning(t *testing.T) {
 	cfg := writeGlobalConfig(t, `
 agent: codex
@@ -158,7 +151,6 @@ func TestMerge_PreservesAgentConfig(t *testing.T) {
 	}
 }
 
-// TestAgentProfileFollowsTheSelectedAgent covers the accessor the wizard uses.
 func TestAgentProfileFollowsTheSelectedAgent(t *testing.T) {
 	cfg := &Config{
 		Agent:       types.AgentPi,
@@ -199,9 +191,6 @@ func TestACPAliasAgentProfiles(t *testing.T) {
 	}
 }
 
-// TestRepoConfigCannotSetAgentConfig keeps model and effort selection on the
-// operator's machine: they decide which model runs with the maintainer's
-// credentials, exactly like agent_args_override.
 func TestRepoConfigCannotSetAgentConfig(t *testing.T) {
 	repo, err := LoadRepoFromBytes([]byte("agent_config:\n  codex:\n    model: attacker-model\n"))
 	if err != nil {
@@ -213,8 +202,6 @@ func TestRepoConfigCannotSetAgentConfig(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigYAML_DocumentsAgentConfig keeps the shipped config commentary
-// honest about the field that replaces knowing each harness's own flag.
 func TestDefaultConfigYAML_DocumentsAgentConfig(t *testing.T) {
 	cfg, err := LoadGlobalFromBytes([]byte(defaultConfigYAML))
 	if err != nil {

@@ -21,14 +21,8 @@ const (
 	sigKill = syscall.SIGKILL
 )
 
-// cwdLookupTimeout bounds the external cwd lookup. It is a diagnostic read on
-// a cleanup path, so a wedged or missing helper must degrade to "found
-// nothing" rather than stall daemon startup or a run's teardown.
 const cwdLookupTimeout = 10 * time.Second
 
-// listProcesses reads the whole process table. `ps` is used rather than /proc
-// so one implementation covers macOS and Linux, matching how the daemon's
-// other process inspection works (internal/daemon/proc_unix.go).
 func listProcesses() ([]Process, error) {
 	cmd := exec.Command(psExecutable(), "-ww", "-eo", "pid=,ppid=,pgid=,etime=,command=")
 	cmd.Env = cEnv()
@@ -39,7 +33,6 @@ func listProcesses() ([]Process, error) {
 	return parseProcessTable(string(out)), nil
 }
 
-// listProcessStates reads pid, parent, group, and state for every process.
 func listProcessStates() ([]processState, error) {
 	cmd := exec.Command(psExecutable(), "-eo", "pid=,ppid=,pgid=,stat=")
 	cmd.Env = cEnv()
@@ -64,10 +57,6 @@ func listProcessStates() ([]processState, error) {
 	return procs, nil
 }
 
-// parseProcessTable turns `ps -eo pid=,ppid=,pgid=,etime=,command=` output
-// into Process values. Lines it cannot parse are skipped: a partially
-// readable table is still useful, and an unreadable line must never abort the
-// sweep.
 func parseProcessTable(out string) []Process {
 	var procs []Process
 	for _, line := range strings.Split(out, "\n") {
@@ -106,7 +95,6 @@ func parseProcessTable(out string) []Process {
 	return procs
 }
 
-// parseETime parses the POSIX `ps etime` format: [[DD-]HH:]MM:SS.
 func parseETime(value string) (time.Duration, error) {
 	days := 0
 	rest := value
@@ -185,9 +173,6 @@ func cEnv() []string {
 	return append(env, "LC_ALL=C", "LANG=C")
 }
 
-// trimDeletedSuffix drops the marker the kernel appends to the cwd of a
-// process standing in a directory that has since been removed. That is
-// precisely the leaked-process case, so the path must stay usable.
 func trimDeletedSuffix(path string) string {
 	return strings.TrimSuffix(strings.TrimSpace(path), " (deleted)")
 }

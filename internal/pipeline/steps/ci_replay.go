@@ -10,17 +10,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ciCarriesReviewOnReplay reports whether a CI rebase repair may keep the run's
-// review approval when it is a provable pure replay. It is the resolved
-// ci.carry_review_on_replay policy, and it never applies under
-// ci.revalidate_repairs, which keeps meaning "every repair re-passes Review".
 func ciCarriesReviewOnReplay(sctx *pipeline.StepContext) bool {
 	return sctx.Config != nil && sctx.Config.CI.CarryReviewOnReplay && !sctx.Config.CI.RevalidateRepairs
 }
 
-// reviewAnchoredGate returns the first repository gate that runs after Review,
-// or "". Carrying the approval restarts validation at Test, so such a gate
-// would be skipped for the replayed head; its presence keeps the full restart.
 func reviewAnchoredGate(sctx *pipeline.StepContext) string {
 	if sctx.Config == nil {
 		return ""
@@ -33,25 +26,6 @@ func reviewAnchoredGate(sctx *pipeline.StepContext) string {
 	return ""
 }
 
-// pureReplayGap returns why replayedHead cannot be proven to be a pure replay
-// of the commits approved at reviewedHead onto base, or "" when it can.
-//
-// A pure replay is exactly what an unattended `git rebase base` produces when
-// no commit stops: the reviewed commits (the linear range from their merge
-// base with base up to reviewedHead) reappear in order as a linear chain whose
-// first parent is base and whose tip is replayedHead, and for every pair:
-//
-//   - the reviewed commit replays onto its new parent with no conflict, to
-//     exactly the tree the replayed commit records (`git merge-tree`), so no
-//     conflict was resolved and nothing was added, dropped, or edited; and
-//   - the two commits are patch-identical (`git patch-id --verbatim` over the
-//     full binary diff, so whitespace, mode, and binary changes all count).
-//
-// Every other shape - a different commit count, a merge anywhere in either
-// range, a new base other than base, an empty commit, a conflict, a changed
-// patch, an extra commit on top - is not a pure replay. So is any git error
-// while checking: the cost of a wrong yes is an unreviewed diff reaching the
-// PR, so the proof fails closed.
 func pureReplayGap(sctx *pipeline.StepContext, reviewedHead, base, replayedHead string) string {
 	base = strings.TrimSpace(base)
 	if base == "" {
@@ -89,8 +63,6 @@ func pureReplayGap(sctx *pipeline.StepContext, reviewedHead, base, replayedHead 
 	return ""
 }
 
-// linearChain lists the commits in from..to oldest first and fails unless they
-// form a single parent chain that starts on from and ends at to.
 func linearChain(sctx *pipeline.StepContext, from, to string) ([]string, error) {
 	out, err := stepGitRun(sctx, "rev-list", "--reverse", "--topo-order", "--parents", from+".."+to)
 	if err != nil {
@@ -121,7 +93,6 @@ func linearChain(sctx *pipeline.StepContext, from, to string) ([]string, error) 
 	return chain, nil
 }
 
-// replayedCommitGap proves one pair of a pure replay; see pureReplayGap.
 func replayedCommitGap(sctx *pipeline.StepContext, reviewed, replayed, newParent string) string {
 	wantTree, err := stepGitRun(sctx, "merge-tree", "--write-tree", "--merge-base="+reviewed+"^", newParent, reviewed)
 	if err != nil {
@@ -142,10 +113,6 @@ func replayedCommitGap(sctx *pipeline.StepContext, reviewed, replayed, newParent
 	return ""
 }
 
-// commitPatchID returns `git patch-id --verbatim` of one commit's full diff
-// against its parent, or "" for an empty commit. --verbatim keeps whitespace;
-// --binary and --full-index make binary content part of the identity, and
-// external diff drivers and textconv are off so local config cannot change it.
 func commitPatchID(sctx *pipeline.StepContext, commit string) (string, error) {
 	diff, err := stepGitRunRaw(sctx, "diff-tree", "-p", "--no-commit-id", "--full-index", "--binary", "--no-renames", "--no-ext-diff", "--no-textconv", commit)
 	if err != nil {

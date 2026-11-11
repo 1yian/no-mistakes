@@ -43,10 +43,6 @@ var errUnownedLegacyAttestation = errors.New("existing PR has an unowned legacy 
 
 var errPRAppendixMismatch = errors.New("PR appendix was edited or is malformed; refusing to overwrite possible author content")
 
-// The digest is an accidental-edit/ownership guard, NOT authentication. PR
-// authors can edit every byte, including the attestation. We never infer
-// ownership from headings: only an intact, unchanged, explicitly delimited
-// appendix is replaceable. Editing inside it fails instead of erasing notes.
 func parsePROwnedBody(body string) (prOwnedBody, error) {
 	if !hasPRAppendixMarkers(body) {
 		if strings.Contains(body, pipelineAttestationCommentPrefix) {
@@ -84,9 +80,6 @@ func parsePROwnedBody(body string) (prOwnedBody, error) {
 	return parts, nil
 }
 
-// Only track fenced blocks to keep a quoted marker from acquiring ownership.
-// This deliberately does not interpret headings or attempt general Markdown
-// rewriting. Four-space-indented lines cannot open a CommonMark fence.
 func markdownFenceOpen(text string) bool {
 	var fence markdownFence
 	for _, line := range strings.Split(text, "\n") {
@@ -127,12 +120,6 @@ func wrapPRAppendix(appendix string) string {
 	return fmt.Sprintf("%s%x -->\n%s\n%s", prAppendixStart, sha256.Sum256([]byte(appendix)), appendix, prAppendixEnd)
 }
 
-// composeOwnedPRContent uses the same publication redaction owner as ordinary
-// drafting, BEFORE stamping the byte-integrity guard. No clamp or heading-based
-// stripper may run here: if author text and all recorded evidence cannot fit,
-// publication fails. That includes suffix text/closing lines added after the
-// generated block. Model-authored copies of ownership markers in evidence are
-// escaped before the actual delimiters are inserted, like foreign attestations.
 func composeOwnedPRContent(parts prOwnedBody, title, appendix string, bodyLimit int, runWorktree, worktreesRoot string) (prContent, error) {
 	before := redactPRContent(prContent{Body: parts.before}, runWorktree, worktreesRoot).Body
 	after := redactPRContent(prContent{Body: parts.after}, runWorktree, worktreesRoot).Body
@@ -161,11 +148,6 @@ func validateOwnedPRBudget(body string, bodyLimit int) error {
 	return nil
 }
 
-// updateOwnedPR re-reads before the full-body write and verifies afterwards.
-// This is NOT compare-and-swap: providers expose full-body writes. Detected
-// pre-write edits are merged from their latest version (bounded). Readback may
-// briefly retain that exact pre-write body; any other divergence or a write error
-// fails without replaying a potentially applied write.
 func updateOwnedPR(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, initial scm.PRContent, title, emptyNarrative, appendix string, bodyLimit int) error {
 	reader, ok := host.(scm.PRContentReader)
 	if !ok {
@@ -226,9 +208,6 @@ func updateOwnedPR(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, initia
 	return fmt.Errorf("PR body kept changing before template update; no write performed")
 }
 
-// Restamping is also an owner-authorized appendix edit. Recompute its integrity
-// guard without touching author text, while refusing evidence edited by anyone
-// else. Legacy unmarked bodies retain the existing restamp contract.
 func rebindOwnedPRAttestation(body, head string, steps []*db.StepResult, policy pipelineAttestationPolicy) (string, bool, error) {
 	if !hasPRAppendixMarkers(body) {
 		updated, rebound := rebindPipelineAttestationWithSteps(body, head, steps, policy)

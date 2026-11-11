@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// ghStatefulPR is one pull request the stateful gh stub remembers, keyed by
-// its head branch. The body is exactly what the pipeline last wrote, so a
-// later `gh pr view --json body` reads it back the way a real forge would.
 type ghStatefulPR struct {
 	Number int    `json:"number"`
 	URL    string `json:"url"`
@@ -29,11 +26,6 @@ type ghStatefulState struct {
 	PRs map[string]*ghStatefulPR `json:"prs"`
 }
 
-// runGhStatefulPRStub is a tiny in-file GitHub: PRs persist across gh calls
-// in $FAKEAGENT_GH_STATE (a JSON file the e2e test may also edit, standing in
-// for an author editing the PR description on the forge). It implements only
-// the PR surface the pipeline drives: auth status, pr list/create/edit/view,
-// and pr checks (always empty).
 func runGhStatefulPRStub(args []string) int {
 	var stdin string
 	if hasArgValue(args, "--body-file", "-") || hasArgValue(args, "--input", "-") {
@@ -229,10 +221,6 @@ func writeGhPullProof(repo, source, branch, head string, number int, url, state 
 	return 0
 }
 
-// lookup resolves `gh pr <verb> <selector>` where the selector is a PR number
-// or URL.
-// patchPR applies the JSON document streamed to a REST pulls PATCH to the PR the
-// endpoint names, replacing the title only when the document carries one.
 func (s *ghStatefulState) patchPR(statePath string, args []string, stdin string) int {
 	var pr *ghStatefulPR
 	for _, arg := range args {
@@ -285,8 +273,6 @@ func (s *ghStatefulState) lookup(args []string) *ghStatefulPR {
 	return nil
 }
 
-// ghStatefulHeadOID reads the PR head from the forge's git remote (the e2e
-// harness rewrites the github.com URL to its local upstream).
 func ghStatefulHeadOID(repo, head string) string {
 	out, err := exec.Command("git", "ls-remote", "https://github.com/"+repo+".git", "refs/heads/"+head).Output()
 	if err != nil {

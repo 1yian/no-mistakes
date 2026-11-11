@@ -11,7 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// RefreshFailureReason is a bounded, URL-free reason safe to emit in logs.
 type RefreshFailureReason string
 
 const (
@@ -29,8 +28,6 @@ func (e *repoURLRefreshError) Error() string {
 	return "repository URL refresh failed: " + string(e.reason)
 }
 
-// ReasonForRefreshFailure returns a bounded reason that contains no remote URL
-// or wrapped dependency output.
 func ReasonForRefreshFailure(err error) RefreshFailureReason {
 	if refreshErr, ok := err.(*repoURLRefreshError); ok {
 		return refreshErr.reason
@@ -42,14 +39,6 @@ func refreshFailure(reason RefreshFailureReason) error {
 	return &repoURLRefreshError{reason: reason}
 }
 
-// RefreshRepoURLs best-effort discovers the current registered targets from
-// the working clone and atomically replaces both URL fields. Origin remains the
-// authoritative upstream source. An existing fork is refreshed only when one
-// unique clone remote still identifies that same fork repository.
-//
-// It never mutates Git configuration. Every failure is deliberately URL-free
-// so callers can safely log only ReasonForRefreshFailure and continue with the
-// exact repo value they already hold.
 func RefreshRepoURLs(ctx context.Context, database *db.DB, repo *db.Repo) (*db.Repo, bool, error) {
 	if database == nil || repo == nil || strings.TrimSpace(repo.WorkingPath) == "" {
 		return nil, false, refreshFailure(RefreshRemoteUnreadable)

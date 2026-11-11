@@ -11,7 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// swapCase flips the letter case of every ASCII letter in s.
 func swapCase(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
@@ -24,7 +23,6 @@ func swapCase(s string) string {
 	}, s)
 }
 
-// sameDirectory reports whether a and b are the one directory on disk.
 func sameDirectory(a, b string) bool {
 	infoA, err := os.Stat(a)
 	if err != nil {
@@ -34,16 +32,9 @@ func sameDirectory(a, b string) bool {
 	return err == nil && os.SameFile(infoA, infoB)
 }
 
-// Issue #1465: one checkout is one repository identity however its path is
-// spelled. A second init from a case variant (case-insensitive volume) or from
-// a path whose registered spelling is a symlink alias refreshes the existing
-// gate; before, it registered a second repository, or failed on the existing
-// row and tore down the gate it had just reused.
 func TestInitFromAnAlternateSpellingRefreshesTheRegisteredGate(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		// register records the checkout under a spelling other than the one
-		// init resolves, and returns the spelling init is then invoked with.
+		name     string
 		register func(t *testing.T, workDir string) (initFrom string)
 	}{
 		{"case variant", func(t *testing.T, workDir string) string {
@@ -102,9 +93,6 @@ func TestInitFromAnAlternateSpellingRefreshesTheRegisteredGate(t *testing.T) {
 	}
 }
 
-// On a case-sensitive volume two directories whose names differ only in case
-// are different checkouts: initializing both must register two repositories,
-// and neither lookup may resolve to the other.
 func TestInitKeepsCaseDistinctCheckoutsApartOnACaseSensitiveFilesystem(t *testing.T) {
 	workDir := setupTestRepo(t)
 	sibling := filepath.Join(filepath.Dir(workDir), swapCase(filepath.Base(workDir)))
@@ -150,9 +138,6 @@ func TestInitKeepsCaseDistinctCheckoutsApartOnACaseSensitiveFilesystem(t *testin
 	}
 }
 
-// The direct form of the same report: init from the checkout's case variant
-// after it was registered under its own spelling reuses that registration and
-// keeps the recorded path stable.
 func TestInitFromACaseVariantReusesTheRegisteredRepository(t *testing.T) {
 	workDir := setupTestRepo(t)
 	variant := swapCase(workDir)

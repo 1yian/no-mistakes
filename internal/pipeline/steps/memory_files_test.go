@@ -16,11 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// These prompt-contract tests pin the intended scope: pipeline agents may not
-// initiate unrelated memory-file edits, but changes under review are reviewed
-// normally and a fix turn may address a finding or recorded human decision.
-// Conflict resolution and document correction retain their narrower rules.
-// Tests assert on rendered prompts delivered to agents, not source text.
 const (
 	memoryHandsOffProbe        = "Agent memory files (AGENTS.md and CLAUDE.md) - limits on your own changes"
 	memoryHandsOffNoEdit       = "Do not independently create, modify, rename, or delete these files"
@@ -56,9 +51,6 @@ func requirePromptOmits(t *testing.T, prompt string, forbiddens ...string) {
 	}
 }
 
-// The review analyzer is a read-and-report turn, but its agent holds write
-// tools in the worktree, so its prompt limits independently initiated edits
-// and explicitly says changes under review are not findings by themselves.
 func TestReviewStep_PromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -81,9 +73,6 @@ func TestReviewStep_PromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix, memoryReviewNormally, memoryReviewNoTouchFinding, memoryReviewAccuracy)
 }
 
-// The shared fixer wrapper covers every fix turn (review, test, lint, custom
-// gates, CI repair). This pins it through the review fix path, where the
-// agent definitely writes.
 func TestReviewStep_FixPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -134,8 +123,6 @@ func TestReviewStep_FixPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 		"AGENTS.md incorrectly recommends make nonexistent; restore make lint", "Do not make unrelated or otherwise unprompted memory-file edits")
 }
 
-// The test evidence turn can write to the worktree (building scratch surfaces
-// to drive scenarios), so its prompt carries the rule.
 func TestTestStep_PromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -157,8 +144,6 @@ func TestTestStep_PromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// With no configured lint command the agent-managed pass fixes lint and
-// formatting itself, so its prompt carries the rule through fixerPrompt.
 func TestLintStep_AgentPassPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -181,7 +166,6 @@ func TestLintStep_AgentPassPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// A configured-lint fix turn also goes through the shared wrapper.
 func TestLintStep_FixPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -206,8 +190,6 @@ func TestLintStep_FixPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// The CI repair turn composes the shared wrapper after LateRepairPrompt, so
-// the rule survives its extra prompt layers.
 func TestCIStep_RepairPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -273,8 +255,6 @@ func TestCIStep_RepairPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, capturedPrompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// The rebase conflict resolver gets the scoped variant: it must still be able
-// to resolve a conflicted AGENTS.md, but may not touch the content otherwise.
 func TestRebaseStep_ConflictPromptResolvesMemoryFileMarkers(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -350,8 +330,6 @@ func TestRebaseStep_ConflictPromptResolvesMemoryFileMarkers(t *testing.T) {
 	requirePromptOmits(t, prompt, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// A modify/delete conflict has no conflict markers. The merge resolver must
-// still ask the agent to settle the conflicted memory file itself.
 func TestRebaseStep_MergeStrategyConflictPromptResolvesMemoryFileModifyDelete(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -410,8 +388,6 @@ func TestRebaseStep_MergeStrategyConflictPromptResolvesMemoryFileModifyDelete(t 
 	requirePromptOmits(t, prompt, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// PR drafting is output-oriented, but the same agent can still write to the
-// worktree while drafting, and the push step would commit the leftovers.
 func TestPRStep_DraftPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -437,7 +413,6 @@ func TestPRStep_DraftPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// The configured-title draft on an existing PR runs its own prompt path.
 func TestPRStep_ConfiguredTitlePromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -471,7 +446,6 @@ func TestPRStep_ConfiguredTitlePromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// The template narrative draft runs yet another prompt path.
 func TestPRStep_TemplateNarrativePromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	t.Parallel()
 	sctx, ag, _ := templateTestContext(t)
@@ -488,9 +462,6 @@ func TestPRStep_TemplateNarrativePromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	requirePromptContains(t, ag.calls[0].Prompt, memoryHandsOffProbe, memoryHandsOffNoEdit, memoryHandsOffNoFix)
 }
 
-// The document step has its own correction-only policy: it may edit memory
-// files to correct factually wrong content, but never add because something is
-// missing. Its prompt must not carry the generic independent-edit rule.
 func TestDocumentStep_PromptScopesMemoryFilesToCorrections(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

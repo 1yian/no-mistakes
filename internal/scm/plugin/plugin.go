@@ -1,16 +1,3 @@
-// Package plugin implements scm.Host by delegating every provider operation to
-// an operator-configured executable that is an AXI-shaped CLI: subcommands
-// such as "pr find" or "pr checks" with --json, one process per operation,
-// one JSON document on stdout. It is driven the same way no-mistakes drives
-// forgejo-axi, and lets a machine add PR and CI support for a forge
-// no-mistakes does not ship (for example a private or company-internal host)
-// without changing this repository.
-//
-// The adapter trusts nothing the plugin returns: every identity (PR number,
-// URL, head and base branch) is re-checked against what was asked for, and
-// any missing, malformed, or contradictory answer is an ErrProtocol error
-// rather than a guess, so a buggy plugin can never make the PR step open a
-// duplicate PR or the CI step certify the wrong commit.
 package plugin
 
 import (
@@ -33,8 +20,6 @@ import (
 )
 
 const (
-	// DefaultTimeout bounds one plugin invocation when the operator did not
-	// configure provider_plugins.<name>.timeout.
 	DefaultTimeout = 2 * time.Minute
 
 	maxResponseBytes     = 1 << 20
@@ -44,41 +29,23 @@ const (
 	maxErrorMessageBytes = 4 << 10
 )
 
-// CmdFactory creates one non-shell invocation of the plugin executable.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Options configures a plugin host.
 type Options struct {
-	// Name is the provider_plugins key. It is reported as provider
-	// "plugin:<name>" and sent to the plugin as --plugin on every call.
-	Name string
-	// Executable and Args are the configured command. Args are passed
-	// verbatim before the subcommand words. PR bodies never travel in argv:
-	// they go through --body-file, so a body can neither hit an argv limit
-	// nor show up in a process listing.
-	Executable string
-	Args       []string
-	Repository Repository
-	// Timeout bounds each invocation. Zero means DefaultTimeout.
-	Timeout           time.Duration
-	DraftPullRequests bool
-	CommandFactory    CmdFactory
-	// ExecutableAvailable reports whether Executable resolves in the run's
-	// environment. Nil assumes it does and lets the spawn report otherwise.
+	Name                string
+	Executable          string
+	Args                []string
+	Repository          Repository
+	Timeout             time.Duration
+	DraftPullRequests   bool
+	CommandFactory      CmdFactory
 	ExecutableAvailable func(string) bool
-	// BodyDir is where the private --body-file is created. Empty means the
-	// system temporary directory. Never the worktree: the file must not
-	// become part of the pushed branch's tree.
-	BodyDir string
+	BodyDir             string
 }
 
-// Host is a scm.Host backed by a provider plugin executable.
 type Host struct {
 	opts Options
-	// run replaces runProcess in this package's tests, so output validation
-	// can be exercised without a process per case. args excludes the
-	// executable and starts with the configured Args.
-	run func(ctx context.Context, args []string, maxStdout int) (invocation, error)
+	run  func(ctx context.Context, args []string, maxStdout int) (invocation, error)
 
 	mu           sync.Mutex
 	capabilities scm.Capabilities
@@ -96,7 +63,6 @@ var (
 	_ scm.PRBodyLimiter      = (*Host)(nil)
 )
 
-// New constructs a plugin host.
 func New(opts Options) *Host {
 	opts.Name = strings.TrimSpace(opts.Name)
 	opts.Executable = strings.TrimSpace(opts.Executable)
@@ -109,27 +75,18 @@ func New(opts Options) *Host {
 
 func (h *Host) Provider() scm.Provider { return scm.PluginProvider(h.opts.Name) }
 
-// Capabilities reports what the plugin declared in its last successful
-// handshake. Before Available succeeds every optional capability is off.
 func (h *Host) Capabilities() scm.Capabilities {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.capabilities
 }
 
-// MaxPRBodyChars reports the description limit the plugin declared, in
-// scm.PRBodyLen units; zero means no limit.
 func (h *Host) MaxPRBodyChars() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.maxBodyChars
 }
 
-// Available runs the plugin's "status" handshake. A plugin that exits
-// non-zero (not authenticated, cannot serve the repository) returns an
-// ordinary error and the PR and CI steps skip with the plugin's own message.
-// A handshake that breaks the contract (bad output, wrong protocol version,
-// timeout) returns ErrProtocol and the steps fail closed.
 func (h *Host) Available(ctx context.Context) error {
 	if h.opts.Name == "" {
 		return errors.New("provider plugin has no name")
@@ -223,9 +180,6 @@ func (h *Host) CreatePR(ctx context.Context, branch, base string, content scm.PR
 	return pr, nil
 }
 
-// UpdatePR replaces the PR description. An empty title omits --title, which
-// means "leave the title unchanged"; the attestation rebind relies on that to
-// avoid overwriting a concurrent title edit.
 func (h *Host) UpdatePR(ctx context.Context, pr *scm.PR, content scm.PRContent) (*scm.PR, error) {
 	number, err := h.prNumberOf(CmdPRUpdate, pr)
 	if err != nil {
@@ -269,10 +223,6 @@ func (h *Host) GetPRState(ctx context.Context, pr *scm.PR) (scm.PRState, error) 
 	}
 }
 
-// GetPRContent reads the live title and raw body. Both fields must be present
-// in the response: an explicitly empty body is valid, a missing or null one is
-// not, because author-preserving publication would otherwise overwrite text it
-// never saw.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	result, _, err := h.viewPR(ctx, pr)
 	if err != nil {
@@ -314,10 +264,6 @@ func (h *Host) viewPR(ctx context.Context, pr *scm.PR) (viewResult, *scm.PR, err
 	return result, live, nil
 }
 
-// GetChecks returns the checks for the PR's current head on the forge. The
-// "checks" key is required: an empty list is a real "nothing registered yet"
-// answer, a missing one is an unreadable response, and CI readiness must never
-// mistake the second for the first.
 func (h *Host) GetChecks(ctx context.Context, pr *scm.PR) ([]scm.Check, error) {
 	number, err := h.prNumberOf(CmdPRChecks, pr)
 	if err != nil {
@@ -424,9 +370,6 @@ func (h *Host) GetMergeableState(ctx context.Context, pr *scm.PR) (scm.Mergeable
 	}
 }
 
-// FetchFailedCheckLogs returns the plugin's failed-job logs, keeping the last
-// 1 MiB when the plugin returns more: the end of a log is where a build or
-// test failure is reported.
 func (h *Host) FetchFailedCheckLogs(ctx context.Context, pr *scm.PR, branch, headSHA string, failingNames []string) (string, error) {
 	if !h.Capabilities().FailedCheckLogs {
 		return "", scm.ErrUnsupported
@@ -500,9 +443,6 @@ func (h *Host) GetMergedProof(ctx context.Context, pr *scm.PR, expectedHead stri
 	return proof, nil
 }
 
-// SetPRBaseBranch retargets an existing PR. A plugin that did not declare the
-// capability fails closed, which is what the PR step requires of any host
-// that cannot move a live base.
 func (h *Host) SetPRBaseBranch(ctx context.Context, pr *scm.PR, baseBranch string) error {
 	h.mu.Lock()
 	canRetarget := h.canRetarget
@@ -531,9 +471,6 @@ func (h *Host) SetPRBaseBranch(ctx context.Context, pr *scm.PR, baseBranch strin
 	return nil
 }
 
-// checkBodyBudget refuses a description over the plugin's declared limit
-// before anything is written. The PR step fits bodies under the limit, so
-// reaching this is a no-mistakes bug, not a plugin protocol violation.
 func (h *Host) checkBodyBudget(command, body string) error {
 	if limit := h.MaxPRBodyChars(); limit > 0 && scm.PRBodyLen(body) > limit {
 		return fmt.Errorf("provider plugin %q %s: description is %d characters, over the plugin's declared max_pr_body_chars %d", h.opts.Name, command, scm.PRBodyLen(body), limit)
@@ -541,8 +478,6 @@ func (h *Host) checkBodyBudget(command, body string) error {
 	return nil
 }
 
-// prNumberOf returns the PR number to pass as the positional argument. It
-// must be a positive base-10 integer, so it can never be read as a flag.
 func (h *Host) prNumberOf(command string, pr *scm.PR) (string, error) {
 	if pr == nil {
 		return "", fmt.Errorf("provider plugin %q %s: no pull request identity to send", h.opts.Name, command)
@@ -562,10 +497,6 @@ func (h *Host) sameNumber(command, want, got string) error {
 	return nil
 }
 
-// samePR checks that a read or write answered for the PR it was asked about:
-// the same number and, when the caller holds one (a persisted run URL or the
-// PR a lookup returned), the same URL. A number alone is not an identity
-// across repositories, and a changed URL would be persisted by the run.
 func (h *Host) samePR(command string, requested *scm.PR, number string, got *scm.PR) error {
 	if err := h.sameNumber(command, number, got.Number); err != nil {
 		return err
@@ -576,12 +507,6 @@ func (h *Host) samePR(command string, requested *scm.PR, number string, got *scm
 	return nil
 }
 
-// normalizePR validates a plugin-reported PR. The URL must end in the PR
-// number because runs persist only the URL and later steps (CI, recovery,
-// approval reconciliation) recover the number from it, and it must name the
-// run's repository: its path must contain the repository path sent as
-// --repo as consecutive segments. The host is not compared, because a
-// forge's web host need not be its git host.
 func (h *Host) normalizePR(command string, raw *wirePR) (*scm.PR, error) {
 	if raw == nil {
 		return nil, h.protocolf(command, "response did not include a pr object")
@@ -608,10 +533,6 @@ func (h *Host) normalizePR(command string, raw *wirePR) (*scm.PR, error) {
 	}, nil
 }
 
-// urlNamesRepository reports whether the URL path contains the repository
-// path as whole, consecutive segments (case-insensitively, as forges treat
-// owner and repository names). An unknown repository path proves nothing,
-// so it never matches.
 func urlNamesRepository(u *url.URL, repoPath string) bool {
 	repoPath = strings.Trim(strings.TrimSpace(repoPath), "/")
 	if repoPath == "" {
@@ -621,7 +542,6 @@ func urlNamesRepository(u *url.URL, repoPath string) bool {
 	return strings.Contains(path, strings.ToLower("/"+repoPath+"/"))
 }
 
-// invocation is the raw outcome of one plugin process.
 type invocation struct {
 	stdout   []byte
 	stderr   string
@@ -629,9 +549,6 @@ type invocation struct {
 	runErr   error
 }
 
-// call runs one plugin invocation and decodes its result into dst. body, when
-// non-nil, is written to a private temporary file passed as --body-file and
-// removed when the call returns.
 func (h *Host) call(parent context.Context, command string, args []string, body *string, dst any, maxStdout int) error {
 	argv := append(append([]string(nil), h.opts.Args...), commandWords(command)...)
 	argv = append(argv, args...)
@@ -681,8 +598,6 @@ func (h *Host) call(parent context.Context, command string, args []string, body 
 	return nil
 }
 
-// writeBodyFile writes a PR description to a fresh 0600 file (os.CreateTemp's
-// mode) that only the daemon's user can read.
 func writeBodyFile(dir, body string) (string, func(), error) {
 	f, err := os.CreateTemp(dir, "no-mistakes-pr-body-*.md")
 	if err != nil {
@@ -702,7 +617,6 @@ func writeBodyFile(dir, body string) (string, func(), error) {
 	return path, cleanup, nil
 }
 
-// protocolf reports a contract violation. It matches ErrProtocol.
 func (h *Host) protocolf(command, format string, args ...any) error {
 	return &protocolError{plugin: h.opts.Name, command: command, message: fmt.Sprintf(format, args...)}
 }
@@ -720,10 +634,6 @@ func (e *protocolError) Is(target error) bool {
 	return target == ErrProtocol || (e.timeout && target == ErrTimeout)
 }
 
-// runProcess spawns the configured executable once with stdin empty. Stdout
-// is capped (a plugin that floods it fails the call) while stderr keeps only
-// its first bytes and never fails the write, so a chatty plugin is never
-// killed by SIGPIPE.
 func (h *Host) runProcess(ctx context.Context, args []string, maxStdout int) (invocation, error) {
 	if h.opts.CommandFactory == nil {
 		return invocation{}, errors.New("no command runner")
@@ -743,8 +653,6 @@ func (h *Host) runProcess(ctx context.Context, args []string, maxStdout int) (in
 	return invocation{stdout: stdout.Bytes(), stderr: stderr.String(), exceeded: stdout.exceeded, runErr: runErr}, nil
 }
 
-// Error is a failure the plugin reported through a failure document on a
-// non-zero exit.
 type Error struct {
 	Plugin    string
 	Operation string
@@ -763,8 +671,6 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("provider plugin %q %s: %s", e.Plugin, e.Operation, message)
 }
 
-// Unwrap maps protocol error codes onto the sentinels callers branch on. See
-// ErrorCodeUnsupported for why "unsupported" is a protocol violation.
 func (e *Error) Unwrap() error {
 	switch e.Code {
 	case ErrorCodeUnsupported:
@@ -784,8 +690,6 @@ func parseOptionalTime(raw string) (time.Time, error) {
 	return time.Parse(time.RFC3339, raw)
 }
 
-// boundedText redacts credentials and caps plugin-supplied text so a noisy
-// plugin cannot flood step logs or the IPC event stream.
 func boundedText(text string) string {
 	text = strings.TrimSpace(safeurl.RedactText(text))
 	if len(text) <= maxErrorMessageBytes {
@@ -832,8 +736,6 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 
 func (b *cappedBuffer) Bytes() []byte { return b.buf.Bytes() }
 
-// prefixBuffer keeps the first limit bytes of stderr and discards the rest
-// without failing the write, so a chatty plugin is never killed by SIGPIPE.
 type prefixBuffer struct {
 	buf   bytes.Buffer
 	limit int

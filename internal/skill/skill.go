@@ -1,11 +1,3 @@
-// Package skill holds the canonical content of the no-mistakes agent skill.
-//
-// It is the single source of truth for the skill's identity (name and
-// trigger description) and its SKILL.md body. The genskill tool renders
-// Markdown() to the public skills/no-mistakes/SKILL.md (verified fresh in
-// CI), and the init command installs the same rendering into the user-level
-// agent skill directories under the user's home.
-// The CLI's axi home view reuses Description so the two never drift.
 package skill
 
 import (
@@ -15,24 +7,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/testguidance"
 )
 
-// Name is the skill directory name and frontmatter name. It must match the
-// installed directory so the agent exposes it as the /no-mistakes command.
 const Name = "no-mistakes"
 
-// Description is the trigger-shaped frontmatter description: what the skill
-// does and when to use it. It is the single most important field for the
-// agent's decision to load the skill, so it leads with outcomes and keywords.
 const Description = "Validate your code changes through the no-mistakes pipeline - automated code review, tests, lint, docs, push, PR, and CI - before they reach the configured push target. Use when the user asks to run no-mistakes, gate or ship or validate their changes, push safely, asks you to do a task and then validate it, or invokes /no-mistakes."
 
-// Markdown returns the complete SKILL.md document (YAML frontmatter plus body).
-// The output is deterministic so it can be regenerated and diff-checked. It is
-// the single rendering: the canonical public skill (surfaced by discovery
-// tools, e.g. `npx skills add kunchenguid/no-mistakes`) and the copy init
-// installs at user level are identical. Older versions vendored a variant with
-// `metadata.internal: true` into each target repo to keep the vendored copy
-// out of repo skill listings; the user-level install is a genuine user
-// installation that should stay discoverable, so no internal marker exists
-// anymore.
 func Markdown() string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -44,9 +22,6 @@ func Markdown() string {
 	return b.String()
 }
 
-// body is the Markdown instructions an agent reads when the skill activates.
-// Keep it focused: the operating loop, the command vocabulary, and how to read
-// the TOON output. Do not embed live state here - the skill is static.
 const body = `
 # no-mistakes
 

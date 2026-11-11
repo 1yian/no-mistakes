@@ -7,9 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// The Review step's per-invocation budget is the effective, merged value: a
-// trusted repository key that tightens the global limit reaches it, and a
-// looser one does not.
 func TestReviewAgentTimeoutUsesTrustedRepositoryLimit(t *testing.T) {
 	t.Parallel()
 	global := &config.GlobalConfig{ReviewAgentTimeout: 30 * time.Minute}

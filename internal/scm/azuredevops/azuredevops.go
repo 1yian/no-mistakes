@@ -1,5 +1,3 @@
-// Package azuredevops implements scm.Host backed by the az CLI with the
-// azure-devops extension.
 package azuredevops
 
 import (
@@ -17,10 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// outputJSON runs cmd and returns its stdout alone, leaving stderr out of the
-// payload so non-JSON az chatter (preview-command notices, token-refresh
-// messages) cannot corrupt the bytes a caller json.Unmarshal's. On failure it
-// surfaces the separately-captured stderr in the error.
 func outputJSON(cmd *exec.Cmd) ([]byte, error) {
 	out, err := cmd.Output()
 	if err != nil {
@@ -33,18 +27,12 @@ func outputJSON(cmd *exec.Cmd) ([]byte, error) {
 	return out, nil
 }
 
-// clampDescription truncates body to Azure DevOps' PR-description cap. The
-// pipeline already budgets the body to fit (shedding whole sections), so this
-// is the connector-level backstop that guarantees `az repos pr create`/`update`
-// never sees an over-length description, no matter how the body was produced.
 func clampDescription(body string) string {
 	return scm.ClampPRBody(body, scm.MaxPRBodyChars(scm.ProviderAzureDevOps))
 }
 
-// CmdFactory builds an exec.Cmd in the caller's workdir with the caller's env.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Host talks to Azure DevOps through the az CLI (azure-devops extension).
 type Host struct {
 	cmd          CmdFactory
 	cliAvailable func() bool
@@ -54,12 +42,6 @@ type Host struct {
 	draft        bool   // open created PRs as drafts (az repos pr create --draft true)
 }
 
-// New builds a Host. cliAvailable reports whether the az binary is resolvable
-// on the caller's PATH. org is the organization URL; it is passed via
-// --organization to every command so they resolve the right organization
-// regardless of the process working directory. The daemon runs from a fixed,
-// non-repo working dir, so without it az cannot infer the org (or repo) and
-// fails on every poll. project and repo name the repository.
 func New(cmd CmdFactory, cliAvailable func() bool, org, project, repo string) *Host {
 	return &Host{
 		cmd:          cmd,
@@ -70,8 +52,6 @@ func New(cmd CmdFactory, cliAvailable func() bool, org, project, repo string) *H
 	}
 }
 
-// NewWithDraft builds a Host that opens created PRs as drafts when draft is
-// true (az repos pr create --draft true). See New for the other parameters.
 func NewWithDraft(cmd CmdFactory, cliAvailable func() bool, org, project, repo string, draft bool) *Host {
 	h := New(cmd, cliAvailable, org, project, repo)
 	h.draft = draft
@@ -80,17 +60,10 @@ func NewWithDraft(cmd CmdFactory, cliAvailable func() bool, org, project, repo s
 
 func (h *Host) Provider() scm.Provider { return scm.ProviderAzureDevOps }
 
-// Capabilities reports the Azure DevOps feature matrix. Merge status is
-// reliably available from `az repos pr show`. Failed-check log fetching is not
-// yet wired up - the az CLI has no first-class build-log command, so callers
-// gate on FailedCheckLogs and skip it.
 func (h *Host) Capabilities() scm.Capabilities {
 	return scm.Capabilities{MergeableState: true, FailedCheckLogs: false}
 }
 
-// orgArgs scopes a command to the organization. The show/update/policy-list
-// commands accept only --organization because the PR id is organization-unique;
-// passing --project/--repository to them is rejected by az.
 func (h *Host) orgArgs() []string {
 	if h.org == "" {
 		return nil
@@ -98,8 +71,6 @@ func (h *Host) orgArgs() []string {
 	return []string{"--organization", h.org}
 }
 
-// scopeArgs fully scopes a command to org/project/repo. The create and list
-// commands need all three to resolve the repository.
 func (h *Host) scopeArgs() []string {
 	args := h.orgArgs()
 	if h.project != "" {
@@ -257,26 +228,6 @@ func azureOrganizationName(raw string) string {
 	return strings.TrimSuffix(host, ".visualstudio.com")
 }
 
-// runWithDescription runs an az PR command whose description is supplied
-// out-of-band through a temp file referenced as `--description @<file>`, and
-// returns the command's JSON stdout. buildArgs receives the `@<file>` token and
-// returns the full az argv, placing that token where --description's value
-// belongs. The (clamped) body is written to the file before the command runs
-// and the file is always removed afterward.
-//
-// Why a file instead of passing the body inline as `--description <body>`: on
-// Windows the az CLI is a batch shim (az.cmd) that Go executes through cmd.exe.
-// cmd.exe terminates each argument at the first newline, so a multi-line body
-// was truncated to just its first line (e.g. "## Intent"), silently dropping the
-// rest of the PR description - a Windows-only data loss (#501). A file path is a
-// single newline-free token that survives cmd.exe intact, and az reads the
-// description from the file via the "@" convention (see `az repos pr create
-// --help`). The file form additionally sidesteps Python argparse misreading body
-// lines that begin with "-"/"--"/"---" (markdown horizontal rules, diff
-// "--- a/file" hunks) as new options, which a naive per-line split would break on.
-//
-// The body is clamped to Azure DevOps' description cap before it is written, so
-// az never sees an over-length description no matter how the body was produced.
 func (h *Host) runWithDescription(ctx context.Context, body string, buildArgs func(descArg string) []string) ([]byte, error) {
 	f, err := os.CreateTemp("", "nm-pr-desc-*.md")
 	if err != nil {
@@ -390,8 +341,6 @@ func (h *Host) GetMergeableState(ctx context.Context, pr *scm.PR) (scm.Mergeable
 	return normalizeMergeableState(got.MergeStatus), nil
 }
 
-// FetchFailedCheckLogs is not yet implemented for Azure DevOps; callers gate on
-// Capabilities().FailedCheckLogs (false) and skip it.
 func (h *Host) FetchFailedCheckLogs(_ context.Context, _ *scm.PR, _ string, _ string, _ []string) (string, error) {
 	return "", scm.ErrUnsupported
 }

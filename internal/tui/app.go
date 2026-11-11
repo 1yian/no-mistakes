@@ -12,9 +12,7 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Model is the root bubbletea model for the TUI.
 type Model struct {
-	// Connection.
 	socketPath     string
 	client         *ipc.Client
 	events         <-chan ipc.Event
@@ -22,15 +20,8 @@ type Model struct {
 	runID          string
 	subscriptionID uint64
 
-	// State.
-	run *ipc.RunInfo
-	// stateRev is the highest run-state revision this model has applied. It
-	// is scoped to the current subscription generation: a fresh subscription
-	// resets it to zero and reconciles, adopting the daemon's numbering.
-	stateRev int64
-	// reconcile reads authoritative run state. Nil in production, where the
-	// IPC client is used; injectable so the contract is testable without a
-	// daemon.
+	run                  *ipc.RunInfo
+	stateRev             int64
 	reconcile            func(ctx context.Context) (*ipc.RunInfo, error)
 	reconcilePending     bool
 	reconcileAgain       bool
@@ -39,31 +30,26 @@ type Model struct {
 	reviewRetryDiff      bool
 	reviewReconcileErr   error
 	reviewDiffErr        error
-	// resubscribeTries bounds reconnect attempts for a dropped event stream.
-	resubscribeTries int
-	// fetchStepDiff reads a fix-review gate's working-tree diff. Nil in
-	// production, where the IPC client is used; injectable for tests.
-	fetchStepDiff       func(types.StepName) (string, error)
-	steps               []ipc.StepResultInfo
-	stepFindings        map[types.StepName]string            // step name → raw findings JSON
-	stepDiffs           map[types.StepName]string            // step name → raw unified diff (fetched on demand)
-	stepDiffTruncated   map[types.StepName]bool              // steps whose fetched diff was capped
-	stepDiffFetching    map[types.StepName]bool              // steps with an in-flight diff read
-	stepDiffLoaded      map[types.StepName]bool              // steps whose current diff request completed
-	stepDiffRequestID   map[types.StepName]uint64            // latest request generation per step
-	pendingDiffFetch    []stepDiffRequest                    // diff reads to issue on the next update
-	findingSelections   map[types.StepName]map[string]bool   // step name → finding ID → selected
-	findingCursor       map[types.StepName]int               // step name → current finding cursor
-	findingInstructions map[types.StepName]map[string]string // step name → finding ID → user note
-	addedFindings       map[types.StepName][]types.Finding   // user-authored findings per step
-	editor              *editorState                         // active modal editor (nil when none)
-	logs                []string
-	logPartial          string // buffered partial line (no trailing newline yet)
+	resubscribeTries     int
+	fetchStepDiff        func(types.StepName) (string, error)
+	steps                []ipc.StepResultInfo
+	stepFindings         map[types.StepName]string            // step name → raw findings JSON
+	stepDiffs            map[types.StepName]string            // step name → raw unified diff (fetched on demand)
+	stepDiffTruncated    map[types.StepName]bool              // steps whose fetched diff was capped
+	stepDiffFetching     map[types.StepName]bool              // steps with an in-flight diff read
+	stepDiffLoaded       map[types.StepName]bool              // steps whose current diff request completed
+	stepDiffRequestID    map[types.StepName]uint64            // latest request generation per step
+	pendingDiffFetch     []stepDiffRequest                    // diff reads to issue on the next update
+	findingSelections    map[types.StepName]map[string]bool   // step name → finding ID → selected
+	findingCursor        map[types.StepName]int               // step name → current finding cursor
+	findingInstructions  map[types.StepName]map[string]string // step name → finding ID → user note
+	addedFindings        map[types.StepName][]types.Finding   // user-authored findings per step
+	editor               *editorState                         // active modal editor (nil when none)
+	logs                 []string
+	logPartial           string // buffered partial line (no trailing newline yet)
 
-	// Timing.
 	stepStartTimes map[types.StepName]time.Time // when each step started running
 
-	// UI.
 	width            int
 	height           int
 	latestVersion    string
@@ -83,8 +69,6 @@ type Model struct {
 	yoloApproved     map[types.StepName]bool // steps already finalized (approved) this run
 	yoloFixed        map[types.StepName]bool // steps yolo has already requested a fix for
 
-	// Guarded local-branch synchronization. Cached state is rendered passively;
-	// only the explicit u flow calls Refresh or Apply.
 	branchSync     *branchsync.State
 	syncService    *branchsync.Service
 	syncRefresh    func() branchsync.State
@@ -95,8 +79,6 @@ type Model struct {
 	syncRefreshing bool
 }
 
-// NewModel creates a TUI model for the given run.
-// The client should already be connected to the daemon.
 func NewModel(socketPath string, client *ipc.Client, run *ipc.RunInfo) Model {
 	syntheticSteps := len(run.Steps) == 0 && shouldBackfillPipelineSteps(run.Status, run.Steps, types.AllSteps())
 	steps := normalizePipelineSteps(run.ID, run.Status, run.Steps)
@@ -409,8 +391,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// terminalTitle returns the current terminal title string based on run state.
-// Format: "<symbol> <status> - <branch_name>"
 func (m Model) terminalTitle() string {
 	branch := ""
 	if m.run != nil {
@@ -459,7 +439,6 @@ func (m Model) terminalTitle() string {
 	return "○ Pending" + suffix
 }
 
-// setTerminalTitle returns the OSC escape sequence to set the terminal title.
 func setTerminalTitle(title string) string {
 	return "\033]2;" + title + "\007"
 }
@@ -477,7 +456,6 @@ func (m *Model) resetForRun(run *ipc.RunInfo) {
 	*m = fresh
 }
 
-// Run starts the TUI program.
 func (m *Model) refreshCachedSync() {
 	if m.syncService == nil {
 		return
@@ -490,9 +468,6 @@ func (m *Model) refreshCachedSync() {
 	}
 }
 
-// Run starts the TUI and wires the same guarded synchronization service used
-// by the human and AXI commands. Opening the TUI performs cached inspection
-// only and never contacts a remote.
 func Run(socketPath string, client *ipc.Client, run *ipc.RunInfo, latestVersion string) error {
 	model := NewModel(socketPath, client, run)
 	model.latestVersion = latestVersion

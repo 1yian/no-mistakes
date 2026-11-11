@@ -6,22 +6,14 @@ import (
 	"time"
 )
 
-// RoundedRole is one review-loop role: the agent that serves it, plus an
-// optional later-round agent the operator opted into. Late serves rounds at or
-// above LateFrom; every earlier round, and any invocation whose round is
-// unknown (RunOpts.Round <= 0), stays on Agent. A zero RoundedRole keeps the
-// default agent, so an unconfigured role behaves exactly as before.
 type RoundedRole struct {
 	Agent    Agent
 	Late     Agent
 	LateFrom int
 }
 
-// ReviewRoles carries both review-loop roles with their optional later-round
-// overlays.
 type ReviewRoles struct{ Reviewer, Fixer RoundedRole }
 
-// agents lists every non-nil agent this role owns, primary first.
 func (r RoundedRole) agents() []Agent {
 	var out []Agent
 	if r.Agent != nil {
@@ -33,10 +25,6 @@ func (r RoundedRole) agents() []Agent {
 	return out
 }
 
-// pick selects the agent serving round, falling back to the default agent when
-// the role configures none. The overlay applies only to a known round, so an
-// invocation the pipeline did not number keeps the primary selection rather
-// than guessing.
 func (r RoundedRole) pick(round int, fallback Agent) Agent {
 	if r.Late != nil && r.LateFrom > 0 && round >= r.LateFrom {
 		return r.Late
@@ -47,9 +35,6 @@ func (r RoundedRole) pick(round int, fallback Agent) Agent {
 	return fallback
 }
 
-// WithReviewAgents routes only review and review-fix invocations to dedicated
-// role agents for every round. It is the round-agnostic form of
-// WithReviewRoles.
 func WithReviewAgents(primary, reviewer, fixer Agent) Agent {
 	return WithReviewRoles(primary, ReviewRoles{
 		Reviewer: RoundedRole{Agent: reviewer},
@@ -57,11 +42,6 @@ func WithReviewAgents(primary, reviewer, fixer Agent) Agent {
 	})
 }
 
-// WithReviewRoles routes only review and review-fix invocations. Empty roles
-// keep the default agent (including its fallback chain). Ownership of all
-// supplied agents transfers to the wrapper; every supplied agent must be an
-// independent instance. Only the fixer resumes sessions; review turns remain
-// fresh.
 func WithReviewRoles(primary Agent, roles ReviewRoles) Agent {
 	if len(roles.Reviewer.agents()) == 0 && len(roles.Fixer.agents()) == 0 {
 		return primary
@@ -77,10 +57,6 @@ type reviewAgents struct {
 
 func (a *reviewAgents) Name() string { return a.primary.Name() }
 
-// fixAgents lists every agent that can serve a fix turn in this run. Session
-// capability is reported for the whole set, not for the first round's fixer:
-// a later-round fixer that cannot resume must not inherit an earlier one's
-// capability, because the session it would be handed is not resumable.
 func (a *reviewAgents) fixAgents() []Agent {
 	candidates := a.fixer.agents()
 	if len(candidates) == 0 {

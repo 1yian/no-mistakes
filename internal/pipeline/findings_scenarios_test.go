@@ -7,11 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A gate response that selects, excludes, or merges findings rewrites the
-// recorded findings row. The Test step's evidence - its artifacts, its
-// scenario table, and its verdict - is not a finding and must survive that
-// rewrite intact, or answering a gate would quietly erase the record of what
-// the step actually drove.
 func TestFindingsSelectionKeepsTestEvidence(t *testing.T) {
 	t.Parallel()
 	original, err := types.MarshalFindingsJSON(types.Findings{

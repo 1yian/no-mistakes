@@ -9,11 +9,6 @@ import (
 	"testing"
 )
 
-// silentAgentScenario makes the review agent go completely silent: it produces
-// no stdout, no stderr, and never responds, exactly like the native agent that
-// burned two 30-minute budgets on one task without emitting a single byte. The
-// hang is far longer than the budget the test configures, so the pipeline - not
-// the fake - is what ends the invocation.
 func silentAgentScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "silent-agent-scenario.yaml")
@@ -53,18 +48,6 @@ func silentAgentScenario(t *testing.T) string {
 	return path
 }
 
-// TestSilentAgentTimeoutReportsMeasuredEvidence reproduces the end-user failure
-// through the stock `no-mistakes axi` surface: a pipeline agent that starts and
-// then emits nothing at all until its invocation budget expires.
-//
-// What the operator used to get was "agent timed out after 30m0s (agent silent
-// for 30m0s)" - the configured budget printed twice, with whatever the adapter
-// reported discarded. Nothing in that line was measured, so a wedged agent, a
-// busy one, and a crashed one were indistinguishable, and two silent 30-minute
-// timeouts on one task produced no evidence to act on.
-//
-// The budgets here are seconds rather than the production 30 minutes; the
-// timeout path is identical, and the test must never be "fixed" by raising them.
 func TestSilentAgentTimeoutReportsMeasuredEvidence(t *testing.T) {
 	h := NewHarness(t, SetupOpts{
 		Agent:    "claude",

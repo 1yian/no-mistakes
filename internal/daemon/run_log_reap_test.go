@@ -12,8 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// runLogFixture builds a DB plus a logs root and returns helpers for seeding
-// per-run step-log directories with a chosen age and status.
 type runLogFixture struct {
 	t    *testing.T
 	db   *db.DB
@@ -44,8 +42,6 @@ func newRunLogFixture(t *testing.T) *runLogFixture {
 	return &runLogFixture{t: t, db: d, p: p, repo: repo, root: root}
 }
 
-// seed creates a run in the given status plus its step-log directory, aged by
-// backdating the directory's modification time.
 func (f *runLogFixture) seed(branch string, status types.RunStatus, age time.Duration) string {
 	f.t.Helper()
 	run, err := f.db.InsertRun(f.repo.ID, branch, "head-"+branch, "base-"+branch)
@@ -81,10 +77,6 @@ func (f *runLogFixture) exists(runID string) bool {
 	return err == nil
 }
 
-// TestReapRunLogsHonorsRetentionAndSparesActiveRuns mirrors the evidence
-// reaper's core contract for the per-run step-log directory: a step may still
-// be appending to a pending or running run's log, so it is never touched at
-// any age.
 func TestReapRunLogsHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	f := newRunLogFixture(t)
 
@@ -109,7 +101,6 @@ func TestReapRunLogsHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	}
 }
 
-// TestReapRunLogsTrimsToTheRunCeilingOldestFirst covers the count bound.
 func TestReapRunLogsTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	f := newRunLogFixture(t)
 
@@ -127,9 +118,6 @@ func TestReapRunLogsTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	}
 }
 
-// TestReapRunLogsKeepsEverythingWhenBothBoundsAreDisabled proves the operator
-// escape hatch (the same one that already disables evidence reaping) really
-// disables this reaper too.
 func TestReapRunLogsKeepsEverythingWhenBothBoundsAreDisabled(t *testing.T) {
 	f := newRunLogFixture(t)
 
@@ -143,9 +131,6 @@ func TestReapRunLogsKeepsEverythingWhenBothBoundsAreDisabled(t *testing.T) {
 	}
 }
 
-// TestReapRunLogsLeavesDaemonLogFilesAlone confirms the reaper only ever acts
-// on the per-run subdirectories inside <NM_HOME>/logs, never the daemon's own
-// log files that share the same root (daemon.log, cli.log, ...).
 func TestReapRunLogsLeavesDaemonLogFilesAlone(t *testing.T) {
 	f := newRunLogFixture(t)
 	daemonLog := f.p.DaemonLog()
@@ -164,10 +149,6 @@ func TestReapRunLogsLeavesDaemonLogFilesAlone(t *testing.T) {
 	}
 }
 
-// TestRunCleanupReapsRunLogsAcrossTheWholeTree is the per-run half: cleaning
-// up one finished run also converges the whole logs directory on the
-// evidence retention budget, the same way it already does for evidence and
-// leftover worktrees.
 func TestRunCleanupReapsRunLogsAcrossTheWholeTree(t *testing.T) {
 	f := newRunLogFixture(t)
 	m := NewRunManager(f.db, f.p, nil)

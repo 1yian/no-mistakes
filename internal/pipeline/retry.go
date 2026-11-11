@@ -10,10 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ErrAgentInvocationFailed marks an error an agent invocation itself
-// returned while its context was still live: the provider, the transport, or
-// the agent process failed. A timeout, a cancellation, and anything a step
-// concluded from a successful invocation's output never carry it.
 var ErrAgentInvocationFailed = errors.New("agent invocation failed")
 
 type agentInvocationFailure struct{ err error }
@@ -24,10 +20,6 @@ func (f *agentInvocationFailure) Unwrap() error { return f.err }
 
 func (f *agentInvocationFailure) Is(target error) bool { return target == ErrAgentInvocationFailed }
 
-// invocationFailureAgent is the innermost step-agent decorator, so it sees the
-// adapter's own error under the invocation's own context: a deadline or a
-// cancellation has already ended that context by the time its error returns,
-// which is how both stay unmarked.
 type invocationFailureAgent struct {
 	inner agent.Agent
 }
@@ -60,28 +52,20 @@ func (a *invocationFailureAgent) NeutralizesGateInstructions() bool {
 	return agent.NeutralizesGateInstructions(a.inner)
 }
 
-// RetryCheckpoint is the boundary a failed run continues from: its failed
-// step restarts from the beginning, and the steps before it are carried.
 type RetryCheckpoint struct {
-	// Index is the failed step's position in the pipeline.
 	Index int
-	// Steps holds every step record of the failed run, in pipeline order.
 	Steps []*db.StepResult
-	// Round is the failed step's round that was in flight when it failed.
 	Round int
 }
 
-// Failed is the failed step's record.
 func (c *RetryCheckpoint) Failed() *db.StepResult { return c.Steps[c.Index] }
 
-// Retry proofs PlanRetryCheckpoint can fail.
 const (
 	RetryProofCheckpoint = "durable checkpoint"
 	RetryProofCause      = "eligible failure"
 	RetryProofEvidence   = "reusable evidence"
 )
 
-// RetryRefusal is a failed retry proof: which one, and why.
 type RetryRefusal struct {
 	Proof  string
 	Reason string
@@ -93,13 +77,6 @@ func refuseCheckpoint(proof, format string, args ...any) error {
 	return &RetryRefusal{Proof: proof, Reason: fmt.Sprintf(format, args...)}
 }
 
-// PlanRetryCheckpoint proves that run's record names exactly one safe
-// boundary to continue from, against the step sequence steps, and refuses
-// with a *RetryRefusal naming the first proof that fails. The record must hold one row per step in
-// that order: completed or skipped rows, then exactly one failed row whose
-// recorded cause is an agent invocation failure, then rows that never ran.
-// No carried row may be Test or a later step, because Test's evidence and
-// every later step's work are not kept after a run ends.
 func PlanRetryCheckpoint(database *db.DB, run *db.Run, steps []Step) (*RetryCheckpoint, error) {
 	rows, err := database.GetStepsByRun(run.ID)
 	if err != nil {

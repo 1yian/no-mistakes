@@ -14,37 +14,20 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// piAgent spawns the pi CLI for each invocation. Pi reads its prompt from
-// stdin and emits JSONL on stdout when --mode json is set. The lifecycle is
-// codex-shaped: one process per Run, no managed server.
 type piAgent struct {
-	bin       string
-	extraArgs []string
-	// disableProjectSettings is the resolved, trusted-only opt-out. When true,
-	// buildArgs suppresses pi's project-level AGENTS.md/CLAUDE.md discovery.
+	bin                    string
+	extraArgs              []string
 	disableProjectSettings bool
 	subprocessContext
-	// output caches whether this Pi binary and provider can take the strict
-	// schema-constrained output tool; see structuredOutputPath.
 	output piOutputSupport
 }
 
 func (a *piAgent) Name() string { return "pi" }
 
-// SupportsSessionResume reports Pi's durable-session capability: JSON mode
-// emits a session header with its UUID, and `--session <uuid>` reopens it.
 func (a *piAgent) SupportsSessionResume() bool { return true }
 
 func (a *piAgent) ReportsAgentAttempts() bool { return true }
 
-// NeutralizesGateInstructions reports whether pi is currently launched with the
-// target repo's project agent-instruction files suppressed. It is meaningful
-// only under the opt-out (disableProjectSettings): the gate only consults it
-// when the repo opted out. Pi's --no-context-files (-nc) disables AGENTS.md and
-// CLAUDE.md discovery for the session. buildArgs places the suppression flag
-// before user arguments so it cannot be consumed as another flag's value.
-// Verified against current pi --help: "--no-context-files, -nc Disable AGENTS.md
-// and CLAUDE.md discovery and loading".
 func (a *piAgent) NeutralizesGateInstructions() bool {
 	return a.disableProjectSettings
 }
@@ -206,11 +189,6 @@ func piStdinError(err error) error {
 	return fmt.Errorf("pi stdin: %w", err)
 }
 
-// buildArgs returns the Pi argv for one invocation. A nil session is an
-// intentionally cold step; an empty SessionRef starts a durable session; a
-// populated SessionRef resumes the UUID that no-mistakes previously recorded.
-// Under the project-settings opt-out, the context-file suppression flag comes
-// first. User extras otherwise precede managed JSON/session flags.
 func (a *piAgent) buildArgs(session *SessionRef) []string {
 	args := make([]string, 0, len(a.extraArgs)+5)
 	// Project-settings opt-out (trusted-only; see config.DisableProjectSettings):
@@ -243,9 +221,6 @@ func (a *piAgent) buildArgs(session *SessionRef) []string {
 	return args
 }
 
-// isPiSessionID accepts only the full canonical UUID Pi emits in its JSON
-// session header. It deliberately rejects paths and partial UUIDs accepted by
-// Pi's CLI because no-mistakes must never resume an ambiguous global session.
 func isPiSessionID(id string) bool {
 	if len(id) != 36 {
 		return false
@@ -293,10 +268,6 @@ func piArgTakesValue(arg string) bool {
 	}
 }
 
-// buildPiPrompt appends a JSON-output contract to the user prompt when a
-// schema is provided. On the strict path the schema is the output tool's
-// parameters; otherwise it is inlined in the prompt the same way gnhf does and
-// the final text is validated afterwards.
 func buildPiPrompt(prompt string, schema json.RawMessage, strict bool) string {
 	if len(schema) == 0 {
 		return prompt
@@ -316,9 +287,6 @@ func buildPiPrompt(prompt string, schema json.RawMessage, strict bool) string {
 		"Its parameters enforce the requested JSON Schema. Do not write a final assistant JSON or prose response instead."
 }
 
-// piParser tracks the streaming state of one Pi run. It accumulates text
-// deltas, captures the final assistant text and usage, and surfaces any
-// reported assistant error.
 type piParser struct {
 	onChunk func(string)
 
@@ -331,10 +299,8 @@ type piParser struct {
 	usage          TokenUsage
 	seenUsage      map[string]struct{}
 	assistantError string
-	// agentEnded is set once pi's agent_end event arrives: the run finished
-	// and its result is complete even if the process exit is not observed.
-	agentEnded  bool
-	outputTools map[string]string
+	agentEnded     bool
+	outputTools    map[string]string
 }
 
 func (p *piParser) parse(ctx context.Context, r io.Reader) error {
@@ -532,9 +498,6 @@ func (p *piParser) handleAssistantEvent(raw any) {
 	}
 }
 
-// finalText returns the final assistant text, preferring (in order) the
-// content of the last assistant message, the text_end-completed deltas, and
-// finally the in-flight stream buffer.
 func (p *piParser) finalText() string {
 	if text := strings.TrimSpace(textFromAssistantMessage(p.finalAssistant)); text != "" {
 		return text

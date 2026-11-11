@@ -78,14 +78,6 @@ func executablePathsMatch(a, b string) bool {
 	return strings.EqualFold(a, b)
 }
 
-// defaultResetDaemon restarts the daemon. daemonExpected records that daemon
-// artifacts existed before update's first probe, which may have cleared a dead
-// daemon's socket and PID file; that daemon is still started again.
-//
-// On Linux and macOS the start runs the newly installed binary at exe as a
-// child: the in-process daemon.Start is the old version's code and would
-// reinstall the systemd unit or LaunchAgent from the old template, so new
-// service settings would never land.
 func defaultResetDaemon(p *paths.Paths, daemonExpected bool, exe string) error {
 	if p == nil {
 		return nil
@@ -109,7 +101,6 @@ func defaultResetDaemon(p *paths.Paths, daemonExpected bool, exe string) error {
 	return nil
 }
 
-// runDaemonStart starts the daemon through `exe daemon start` and waits for it.
 func runDaemonStart(exe string) error {
 	cmd := exec.Command(exe, "daemon", "start")
 	cmd.Env = append(os.Environ(), noUpdateCheckEnv+"=1")

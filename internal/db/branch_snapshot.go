@@ -6,8 +6,6 @@ import (
 	"fmt"
 )
 
-// BranchRunSnapshot holds one run and its pinned plan inputs from the same read
-// transaction as the complete branch inventory. It contains no live Git facts.
 type BranchRunSnapshot struct {
 	Run       *Run
 	GatesJSON string
@@ -24,9 +22,6 @@ func branchStepScanTargets(step *StepResult) []any {
 	return []any{&step.ID, &step.RunID, &step.StepName, &step.StepOrder, &step.Status, &step.FindingsJSON, &step.OverrideReason, &step.ApprovalReason, &step.SkipReason}
 }
 
-// GetBranchSnapshot reads every run on exactly one repository and branch,
-// newest first under (created_at DESC, id DESC), and their step states in one
-// SQLite snapshot. No active-run preference or inventory limit is applied.
 func (d *DB) GetBranchSnapshot(ctx context.Context, repoID, branch string) ([]BranchRunSnapshot, error) {
 	tx, err := d.sql.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {

@@ -14,8 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// GitHub.com GET /apps/coderabbitai identifies its immutable app ID. GHES IDs
-// are instance-local and must be explicitly pinned in trusted configuration.
 const codeRabbitAppID = scm.CodeRabbitAppID
 
 type reviewState string
@@ -38,12 +36,6 @@ type reviewCompletion struct {
 	CheckNames []string
 }
 
-// getExternalReview uses GitHub's latest check runs at an immutable commit,
-// independently of ordinary CI's pass/skip normalization. CodeRabbit documents
-// both its CodeRabbit check and a passing "Review rate limited" check:
-// https://docs.coderabbit.ai/platforms/github-com
-// https://docs.coderabbit.ai/management/rate-limits
-// No review/comment body is read or used as an instruction or positive proof.
 func (h *Host) getExternalReview(ctx context.Context, pr *scm.PR, reviewer string) (reviewCompletion, error) {
 	result := reviewCompletion{State: reviewCompletionUnsupported}
 	if reviewer != "coderabbit" || h.host == "" {
@@ -190,9 +182,6 @@ func (h *Host) getExternalReview(ctx context.Context, pr *scm.PR, reviewer strin
 	return result, nil
 }
 
-// requiredReviewChecks folds completion and unresolved findings into the same
-// check/comment adapter used by Greptile. No separate review-provider service,
-// credentials, or findings model is involved.
 func (h *Host) requiredReviewChecks(ctx context.Context, pr *scm.PR, reviewer string, checks []scm.Check) ([]scm.Check, error) {
 	review, err := h.getExternalReview(ctx, pr, reviewer)
 	if err != nil {

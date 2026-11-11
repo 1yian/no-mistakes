@@ -62,9 +62,6 @@ func (e *Executor) validateCoverageBinding(bindings []*ipc.CoverageBinding) (*db
 	return round, nil
 }
 
-// RetainedReviewCoverage validates persisted evidence, never caller-supplied
-// coverage. The concrete review step also compares the current trusted paths
-// and resolved merge base before it asks an agent to complete the remainder.
 func RetainedReviewCoverage(round *db.StepRound, run *db.Run, stepID, trusted string) (types.Findings, error) {
 	refuse := func() (types.Findings, error) {
 		return types.Findings{}, fmt.Errorf("coverage continuation requires a valid stored same-run/head/base/trusted-scope record")

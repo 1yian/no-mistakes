@@ -235,11 +235,6 @@ func envValue(env []string, key string) (string, bool) {
 	return "", false
 }
 
-// TestResolve_AugmentsPathWithWellKnownDirs covers the core launchd/systemd
-// first-run issue: the managed daemon starts with a minimal PATH from the
-// service manager, the login-shell probe fails or silently returns a bare
-// PATH, and exec.LookPath for the agent binary fails. Well-known install
-// dirs must be merged in so Homebrew-installed agents are still discoverable.
 func TestResolve_AugmentsPathWithWellKnownDirs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -284,10 +279,6 @@ func TestResolve_AugmentsPathWithWellKnownDirs(t *testing.T) {
 	}
 }
 
-// TestResolve_DoesNotDuplicatePathEntries protects against PATH bloat when
-// the login shell already exposes some of the well-known dirs. Duplicates
-// don't break exec.LookPath, but they would grow PATH unboundedly across
-// restarts if we appended blindly.
 func TestResolve_DoesNotDuplicatePathEntries(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -321,10 +312,6 @@ func TestResolve_DoesNotDuplicatePathEntries(t *testing.T) {
 	}
 }
 
-// TestResolve_SynthesizesPathWhenMissing covers the failure mode where the
-// login shell returns an env with no PATH at all (e.g., when $SHELL is a
-// non-standard shell that doesn't source profile files). Without this, the
-// daemon would end up with an empty PATH and nothing findable.
 func TestResolve_SynthesizesPathWhenMissing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -360,10 +347,6 @@ func TestResolve_SynthesizesPathWhenMissing(t *testing.T) {
 	}
 }
 
-// TestResolve_FallbackOnShellFailure covers the case where the login shell
-// invocation itself fails (timeout, binary missing, non-zero exit). The
-// existing fallback used os.Environ() as-is; now it should also merge in
-// well-known dirs so launchd's minimal PATH is still usable.
 func TestResolve_FallbackOnShellFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -396,11 +379,6 @@ type noSuchFileError struct{}
 
 func (noSuchFileError) Error() string { return "no such file or directory" }
 
-// TestResolve_DoesNotCacheDegradedFallback covers the core #143 failure mode:
-// a single shell-resolution failure at daemon startup used to be cached for the
-// daemon's whole lifetime, so every spawned agent inherited a degraded PATH that
-// omitted version-manager dirs (nvm/fnm/volta) and could not find tools like
-// pnpm. A failed resolution must not be cached, so a later call can recover.
 func TestResolve_DoesNotCacheDegradedFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -439,9 +417,6 @@ func TestResolve_DoesNotCacheDegradedFallback(t *testing.T) {
 	}
 }
 
-// TestResolve_CachesSuccessfulResolution guards the cache fast-path: once a real
-// shell resolution succeeds it is cached, and later calls must not re-probe the
-// shell (which would add startup latency on every agent spawn).
 func TestResolve_CachesSuccessfulResolution(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -475,9 +450,6 @@ func TestResolve_CachesSuccessfulResolution(t *testing.T) {
 	}
 }
 
-// TestResolve_LogsWarningOnFallback ensures the degraded fallback is no longer
-// silent. Before this, #143 was hard to diagnose because nothing recorded that
-// the login-shell probe had failed and a degraded PATH was in use.
 func TestResolve_LogsWarningOnFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Resolve short-circuits to os.Environ() on Windows")
@@ -507,9 +479,6 @@ func TestResolve_LogsWarningOnFallback(t *testing.T) {
 	}
 }
 
-// TestShellCommandTimeout_IsRelaxed locks in a forgiving default timeout. A 2s
-// budget is too tight for an interactive login shell under cold-start/system
-// load, which is the intermittent trigger for the degraded fallback in #143.
 func TestShellCommandTimeout_IsRelaxed(t *testing.T) {
 	if shellCommandTimeout < 8*time.Second {
 		t.Fatalf("shell resolution timeout %v is too aggressive; interactive shells under load need headroom (#143)", shellCommandTimeout)

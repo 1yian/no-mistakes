@@ -561,12 +561,6 @@ func TestParseClaudeEvents_ResultCapturesRawEvent(t *testing.T) {
 	}
 }
 
-// TestClaudeAgent_BuildArgs_SuppressesProjectMemoryUnderOptOut locks in the
-// claude project-settings contract UNDER the trusted opt-out: load only
-// user-level settings/memory, never the target repo's project/local
-// CLAUDE.md/AGENTS.md or settings. Verified empirically: with project memory
-// loaded claude adopts the firstmate identity; with --setting-sources user it
-// does not.
 func TestClaudeAgent_BuildArgs_SuppressesProjectMemoryUnderOptOut(t *testing.T) {
 	ca := &claudeAgent{bin: "claude", disableProjectSettings: true}
 	args := ca.buildArgs(nil, "")
@@ -575,9 +569,6 @@ func TestClaudeAgent_BuildArgs_SuppressesProjectMemoryUnderOptOut(t *testing.T) 
 	}
 }
 
-// TestClaudeAgent_BuildArgs_NoSuppressionWithoutOptOut is the backward-compat
-// guarantee: without the opt-out, claude adds no setting-sources restriction and
-// loads its project memory exactly as before.
 func TestClaudeAgent_BuildArgs_NoSuppressionWithoutOptOut(t *testing.T) {
 	ca := &claudeAgent{bin: "claude"}
 	args := ca.buildArgs(nil, "")
@@ -588,8 +579,6 @@ func TestClaudeAgent_BuildArgs_NoSuppressionWithoutOptOut(t *testing.T) {
 	}
 }
 
-// TestClaudeAgent_BuildArgs_UserSettingSourcesOverrideWins ensures an operator
-// who pinned their own --setting-sources is not double-set even under opt-out.
 func TestClaudeAgent_BuildArgs_UserSettingSourcesOverrideWins(t *testing.T) {
 	ca := &claudeAgent{bin: "claude", disableProjectSettings: true, extraArgs: []string{"--setting-sources", "user,project"}}
 	args := ca.buildArgs(nil, "")
@@ -731,8 +720,6 @@ func TestClaudeAgent_CancellationWithBlockedStdinAndInheritedPipesIsBounded(t *t
 	}
 }
 
-// The testdata/claude_*.jsonl streams are recorded from Claude Code 2.1.289
-// against a local stand-in for the API, without the init event.
 func TestClaudeAgent_RetriesOnlyATerminalTransientAPIError(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -1016,9 +1003,6 @@ func TestClaudeAgent_NonzeroExitStillFailsWhenNativeChildrenMustComplete(t *test
 	}
 }
 
-// Issue #1659: a turn whose result is already on stdout must not idle until its
-// budget while background work holds the session open. The 10s context stands
-// in for the step budget; the helper's background work outlasts it.
 func TestClaudeAgent_BackgroundWorkAfterResult(t *testing.T) {
 	t.Setenv("NM_CLAUDE_STDIN_HELPER", "result-background-result")
 	old := claudeResultGrace

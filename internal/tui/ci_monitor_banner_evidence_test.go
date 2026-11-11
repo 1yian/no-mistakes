@@ -9,10 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestEvidence_CIMonitorInterruptedBanner renders the TUI outcome banner and
-// status line for the RunCIMonitorInterrupted terminal status (issue #361) and
-// prints them with raw ANSI so the yellow styling is reviewer-visible when the
-// captured bytes are written to a terminal.
 func TestEvidence_CIMonitorInterruptedBanner(t *testing.T) {
 	run := testRun()
 	run.Status = types.RunCIMonitorInterrupted

@@ -20,16 +20,10 @@ import (
 // what only a journey can show is the shape the pipeline actually PUBLISHES,
 // and that a remote which refuses to have its branch rewritten accepts it.
 
-// harnessRepoConfigWithExtra rebuilds the harness's default-branch
-// .no-mistakes.yaml with extra appended. rebase.strategy is trusted-only, so a
-// journey has to set it the way a maintainer does: committed on the default
-// branch, never on the pushed branch.
 func harnessRepoConfigWithExtra(extra string) string {
 	return "ignore_patterns:\n  - '*.generated.go'\n  - 'vendor/**'\nallow_repo_commands: true\n" + extra
 }
 
-// commitTrustedRepoConfig commits a .no-mistakes.yaml on main and pushes it to
-// origin, which is where the daemon reads the trusted copy from.
 func commitTrustedRepoConfig(t *testing.T, h *Harness, extra string) {
 	t.Helper()
 	h.CommitChange("main", ".no-mistakes.yaml", harnessRepoConfigWithExtra(extra), "set trusted repo config")
@@ -38,8 +32,6 @@ func commitTrustedRepoConfig(t *testing.T, h *Harness, extra string) {
 	}
 }
 
-// initFromOwnWorktree runs `no-mistakes init` off a branch of its own so the
-// journey's feature branch is never the one init was standing on.
 func initFromOwnWorktree(t *testing.T, h *Harness, name string) {
 	t.Helper()
 	h.CommitChange(name, name+".txt", "init\n", "seed "+name)
@@ -49,8 +41,6 @@ func initFromOwnWorktree(t *testing.T, h *Harness, name string) {
 	}
 }
 
-// advanceMain moves the default branch under the gated branch and publishes it,
-// which is the only condition under which the rebase step integrates anything.
 func advanceMain(t *testing.T, h *Harness, path, content, message string) string {
 	t.Helper()
 	sha := h.CommitChange("main", path, content, message)
@@ -75,8 +65,6 @@ func isAncestorIn(t *testing.T, h *Harness, dir, ancestor, descendant string) bo
 	return err == nil
 }
 
-// parentsOf returns a commit's parent SHAs in order, so first-parent identity
-// can be asserted rather than inferred.
 func parentsOf(t *testing.T, h *Harness, dir, rev string) []string {
 	t.Helper()
 	fields := strings.Fields(gitIn(t, h, dir, "rev-list", "--parents", "-n", "1", rev))
@@ -86,10 +74,6 @@ func parentsOf(t *testing.T, h *Harness, dir, rev string) []string {
 	return fields[1:]
 }
 
-// mergeOfOnFirstParentChain finds the merge commit that joined wantFirst and
-// wantSecond on rev's first-parent chain. Walking the chain rather than
-// inspecting rev itself keeps the assertion exact while still tolerating a
-// pipeline commit landing on top of the integration.
 func mergeOfOnFirstParentChain(t *testing.T, h *Harness, dir, rev, wantFirst, wantSecond string) string {
 	t.Helper()
 	for _, commit := range strings.Fields(gitIn(t, h, dir, "rev-list", "--first-parent", rev)) {
@@ -101,17 +85,6 @@ func mergeOfOnFirstParentChain(t *testing.T, h *Harness, dir, rev, wantFirst, wa
 	return ""
 }
 
-// TestRebaseMergeStrategyPublishesAMergeOfTheReviewedHeadJourney is the opt-in
-// contract end to end. A repository whose default branch sets
-// rebase.strategy: merge pushes a branch whose base has moved, and the head the
-// pipeline publishes must be a merge commit whose FIRST parent is the head the
-// operator submitted - the property the CI step's continuity rule and the
-// attestation's head binding both read.
-//
-// The remote is configured to refuse any non-fast-forward update to that branch
-// before the run, which is what makes the publication claim testable rather
-// than asserted: under the default rebase strategy the same run would have to
-// rewrite the branch the remote already carries.
 func TestRebaseMergeStrategyPublishesAMergeOfTheReviewedHeadJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	commitTrustedRepoConfig(t, h, "rebase:\n  strategy: merge\n")
@@ -170,12 +143,6 @@ func TestRebaseMergeStrategyPublishesAMergeOfTheReviewedHeadJourney(t *testing.T
 	}
 }
 
-// TestRebaseMergeStrategyPushedBranchCannotSelfSelectJourney is the trust
-// boundary, driven rather than reasoned about: the default branch says nothing
-// about rebase.strategy, and the pushed branch declares merge in its own
-// .no-mistakes.yaml. The run must integrate by rebasing anyway, so a
-// contributor cannot opt their own branch into a different evidence shape than
-// the maintainer chose.
 func TestRebaseMergeStrategyPushedBranchCannotSelfSelectJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	initFromOwnWorktree(t, h, "init-self-select")
@@ -208,11 +175,6 @@ func TestRebaseMergeStrategyPushedBranchCannotSelfSelectJourney(t *testing.T) {
 	}
 }
 
-// TestRebaseMergeStrategyUnparseableTrustedValueFailsRunClosedJourney is the
-// typo case. The maintainer's default-branch config says "merges"; the pushed
-// branch's own copy is valid, so nothing but the trusted copy is malformed. The
-// run must refuse rather than degrade to an absent trusted config and quietly
-// keep rewriting history the maintainer asked it to stop rewriting.
 func TestRebaseMergeStrategyUnparseableTrustedValueFailsRunClosedJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	commitTrustedRepoConfig(t, h, "rebase:\n  strategy: merges\n")
@@ -243,9 +205,6 @@ func TestRebaseMergeStrategyUnparseableTrustedValueFailsRunClosedJourney(t *test
 	}
 }
 
-// mergeConflictScenario is the clean default scenario plus one conflict-
-// resolution action. resolution names how the agent ends the conflict, which is
-// the whole variable the merge-shape guard judges.
 func mergeConflictScenario(t *testing.T, resolution []string, stage bool) string {
 	t.Helper()
 	action := `actions:
@@ -293,8 +252,6 @@ func mergeConflictScenario(t *testing.T, resolution []string, stage bool) string
 	return path
 }
 
-// setupMergeConflict puts the same file on a collision course between the
-// branch and the moved base, and returns the submitted head.
 func setupMergeConflict(t *testing.T, h *Harness, branch string) string {
 	t.Helper()
 	h.CommitChange("main", "shared.txt", "base\n", "add the shared file")
@@ -307,10 +264,6 @@ func setupMergeConflict(t *testing.T, h *Harness, branch string) string {
 	return submitted
 }
 
-// waitForRebaseConflictGate drives the run to the rebase step's conflict gate
-// and returns it. Under merge strategy the finding has to describe what the
-// step is actually doing, so the wording is asserted here rather than left to a
-// prompt-text check.
 func waitForRebaseConflictGate(t *testing.T, h *Harness, branch string) *ipc.RunInfo {
 	t.Helper()
 	run := waitForStepStatus(t, h, branch, types.StepRebase, types.StepStatusAwaitingApproval, 90*time.Second)
@@ -328,10 +281,6 @@ func waitForRebaseConflictGate(t *testing.T, h *Harness, branch string) *ipc.Run
 	return run
 }
 
-// TestRebaseMergeStrategyAgentResolvedConflictPublishesAMergeJourney is the
-// conflict path of the opt-in: the agent resolves the markers additively and
-// concludes with a commit, and the published head is the two-parent commit the
-// resolution can be audited against afterwards.
 func TestRebaseMergeStrategyAgentResolvedConflictPublishesAMergeJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{
 		Agent:    "claude",
@@ -371,13 +320,6 @@ func TestRebaseMergeStrategyAgentResolvedConflictPublishesAMergeJourney(t *testi
 	}
 }
 
-// TestRebaseMergeStrategyRejectsAResolutionThatDidNotMergeJourney is the
-// adversarial one. The agent ends the conflict without merging - it abandons
-// the merge and resets the branch onto the moved base, which leaves a head that
-// contains the target and passes a naive ancestry check but has dropped the
-// reviewed head. The run must fail rather than carry that head forward, and the
-// worktree must be left back on the reviewed head rather than on the rejected
-// one.
 func TestRebaseMergeStrategyRejectsAResolutionThatDidNotMergeJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{
 		Agent:    "claude",
@@ -429,10 +371,6 @@ func TestRebaseMergeStrategyRejectsAResolutionThatDidNotMergeJourney(t *testing.
 	}
 }
 
-// TestRebaseMergeStrategyRejectsAnUnconcludedMergeJourney covers the other way
-// an agent can leave the conflict: it resolves and stages the files but never
-// commits, so the merge is still in progress. Left unguarded the run would
-// carry the reviewed head forward as if the base had never moved.
 func TestRebaseMergeStrategyRejectsAnUnconcludedMergeJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{
 		Agent:    "claude",
@@ -463,16 +401,10 @@ func TestRebaseMergeStrategyRejectsAnUnconcludedMergeJourney(t *testing.T) {
 	}
 }
 
-// TestRebaseMergeStrategyGlobalDefaultAndTrustedOverrideJourney drives the
-// precedence the option promises an operator: a machine-wide default applies to
-// a repository that says nothing, and a repository that does say something wins
-// over it. Both halves run against the same daemon, so the only variable
-// between them is the trusted .no-mistakes.yaml.
 func TestRebaseMergeStrategyGlobalDefaultAndTrustedOverrideJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", GlobalConfigExtra: "rebase:\n  strategy: merge"})
 	initFromOwnWorktree(t, h, "init-global-default")
 
-	// Half one: the repository is silent, so the operator's default decides.
 	const inherits = "feature/inherits-global-merge"
 	inheritsSubmitted := h.CommitChange(inherits, "inherits.txt", "inherits\n", "add work that inherits the global default")
 	advanceMain(t, h, "advance-one.txt", "one\n", "advance main under the inheriting branch")

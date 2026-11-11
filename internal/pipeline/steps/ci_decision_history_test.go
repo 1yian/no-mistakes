@@ -27,19 +27,15 @@ import (
 // at the agent boundary, not source text.
 
 const (
-	// The frozen contract, as an authoritative `axi run --intent`.
 	ciDecisionOriginalIntent = "Route needs-decision rows to main. " +
 		"REQUIRED: preserve normal branch routing for mixed queues containing routine notifications."
 
-	// The human's later ruling, supplied through `axi respond --instructions`.
 	ciDecisionInstructions = "Deliver the WHOLE coalesced trigger batch to main whenever it " +
 		"contains a needs-decision row; never split delivery between the branch and main."
 
 	ciDecisionFindingDescription = "mixed queue splits delivery between branch and main"
 )
 
-// ciDecisionPromptFixture drives a real CIStep against a failing check and
-// captures the prompt handed to the repair agent.
 type ciDecisionPromptFixture struct {
 	sctx   *pipeline.StepContext
 	prompt string
@@ -97,8 +93,6 @@ func newCIDecisionPromptFixture(t *testing.T) *ciDecisionPromptFixture {
 	return f
 }
 
-// capture runs the monitor far enough to invoke the repair agent once and
-// returns the prompt it received.
 func (f *ciDecisionPromptFixture) capture(t *testing.T) string {
 	t.Helper()
 	// The executor binds prior-run branch decisions onto every step context
@@ -129,11 +123,6 @@ func ciDecisionStepResult(t *testing.T, sctx *pipeline.StepContext, name types.S
 	return sr.ID
 }
 
-// recordUserFixDecision writes the rows the executor writes when a human
-// answers a gate with `axi respond --action fix --findings <ids>
-// --instructions <text>`: the round keeps the findings it raised, the selected
-// ids, a "user" selection source, and the merged findings carrying the
-// per-finding instructions.
 func recordUserFixDecision(t *testing.T, sctx *pipeline.StepContext, stepResultID string, round int, findingsJSON string, selected map[string]string) {
 	t.Helper()
 	parsed, err := types.ParseFindingsJSON(findingsJSON)
@@ -167,9 +156,6 @@ func recordUserFixDecision(t *testing.T, sctx *pipeline.StepContext, stepResultI
 	}
 }
 
-// recordUserDeclinedRound writes the rows the executor writes when a human
-// resolves a gate with approve, skip, or abort: every finding it raised is
-// declined.
 func recordUserDeclinedRound(t *testing.T, sctx *pipeline.StepContext, stepResultID string, round int, findingsJSON string) {
 	t.Helper()
 	r, err := sctx.DB.InsertStepRound(stepResultID, round, "initial", &findingsJSON, nil, 10)
@@ -205,10 +191,6 @@ func ciDecisionFindingsJSON(id, description string) string {
 	return string(encoded)
 }
 
-// TestCIStep_RepairPromptCarriesDecisionFromAnEarlierStepInThisRun is the core
-// regression: a ruling the human gave at the Review gate must reach the CI
-// repair agent later in the same run, alongside - not instead of - the run's
-// original intent.
 func TestCIStep_RepairPromptCarriesDecisionFromAnEarlierStepInThisRun(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -235,9 +217,6 @@ func TestCIStep_RepairPromptCarriesDecisionFromAnEarlierStepInThisRun(t *testing
 	}
 }
 
-// TestCIStep_RepairPromptCarriesDecisionFromAnEarlierRunOnThisBranch covers the
-// cross-run channel: a decision recorded on this branch in a previous run is
-// bound onto every step context by the executor and must reach CI too.
 func TestCIStep_RepairPromptCarriesDecisionFromAnEarlierRunOnThisBranch(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -264,11 +243,6 @@ func TestCIStep_RepairPromptCarriesDecisionFromAnEarlierRunOnThisBranch(t *testi
 	}
 }
 
-// TestCIStep_RepairPromptCarriesInstructionsFromItsOwnGate covers the sharpest
-// case: the gate help the tool renders for every gate, CI included, tells the
-// operator to answer with `axi respond --action fix --findings <ids>`, and
-// --instructions carries guidance for those findings. Guidance given at the CI
-// step's own gate must reach the repair the operator just asked for.
 func TestCIStep_RepairPromptCarriesInstructionsFromItsOwnGate(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -297,9 +271,6 @@ func TestCIStep_RepairPromptCarriesInstructionsFromItsOwnGate(t *testing.T) {
 	}
 }
 
-// TestCIStep_RepairPromptCarriesDeclinedFindings covers the other half of a
-// recorded decision: a finding the human saw and chose not to fix must be
-// visible to the CI repair, so it does not implement what was declined.
 func TestCIStep_RepairPromptCarriesDeclinedFindings(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -317,11 +288,6 @@ func TestCIStep_RepairPromptCarriesDeclinedFindings(t *testing.T) {
 	}
 }
 
-// TestCIStep_RepairPromptSanitizesRecordedDecisionText proves the CI call site
-// inherits the same containment every other decision consumer has: a decision's
-// text is data. It stays inside one JSON-encoded line, so its own newlines can
-// never open a prompt line of their own and its content can never be read as
-// the surrounding prompt's structure.
 func TestCIStep_RepairPromptSanitizesRecordedDecisionText(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -358,9 +324,6 @@ func TestCIStep_RepairPromptSanitizesRecordedDecisionText(t *testing.T) {
 	}
 }
 
-// TestCIStep_RepairPromptBoundsRecordedDecisionHistory proves the CI call site
-// also inherits the prompt-budget bound: a long decision history degrades to a
-// disclosed recency window rather than an unbounded prompt.
 func TestCIStep_RepairPromptBoundsRecordedDecisionHistory(t *testing.T) {
 	t.Parallel()
 	f := newCIDecisionPromptFixture(t)
@@ -404,9 +367,6 @@ func TestCIStep_RepairPromptBoundsRecordedDecisionHistory(t *testing.T) {
 	}
 }
 
-// ciDecisionSection returns the cross-step decision section of a rendered
-// prompt: everything from its heading up to the next section, which is the
-// user-intent block this call site places immediately after it.
 func ciDecisionSection(prompt string) (string, bool) {
 	const heading = "Decisions already made by the user in this run"
 	start := strings.Index(prompt, heading)

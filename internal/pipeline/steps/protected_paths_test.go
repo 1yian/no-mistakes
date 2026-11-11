@@ -631,9 +631,6 @@ func TestProtectedPaths_Staging(t *testing.T) {
 	}
 }
 
-// A rebase onto a base that bumped a submodule moves the recorded pointer but
-// leaves a populated checkout at the old commit. Catch-all staging must not
-// commit that stale checkout back as the pointer.
 func TestStagePipelineChanges_KeepsRecordedSubmodulePointer(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -699,9 +696,6 @@ func TestStagePipelineChanges_KeepsRecordedSubmodulePointer(t *testing.T) {
 	}
 }
 
-// A rebase onto a base that removed a submodule leaves its populated checkout
-// behind, and catch-all staging would re-add it as an embedded repository the
-// base no longer registers. A submodule the change registers is still added.
 func TestStagePipelineChanges_DoesNotReAddRemovedPopulatedSubmodule(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, _ := setupGitRepo(t)

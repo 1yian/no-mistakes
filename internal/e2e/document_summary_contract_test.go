@@ -13,29 +13,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// documentTurnMarker identifies a document-pass invocation by the real prompt
-// the running binary issues: the task's "report only what you could not
-// resolve" instruction immediately followed by the Context block's branch
-// line. Review, test, and intent turns carry the branch line too but never
-// this instruction, so the marker cannot alias another step's turn.
 const documentTurnMarker = "report only what you could not resolve.\n\nContext:\n- branch: "
 
-// documentSummaryContractScenario scripts the fake agent with one document
-// response per scenario branch plus a clean catch-all for every other turn
-// (review, test, intent). The branches are:
-//
-//   - document-noop-empty-summary: zero findings, present-but-empty summary,
-//     no edits - the legitimate no-op pass that used to be refused with
-//     "missing summary" (run 01M4NVPRT28FA9PP4CB6Z7G1EH).
-//   - document-findings-empty-summary: an unresolved finding with an empty
-//     summary - summary still required.
-//   - document-absent-summary-key: no summary field at all - a shape
-//     violation in every case.
-//   - document-edits-empty-summary: the agent leaves an uncommitted edit -
-//     not a no-op, summary required, edit still committed by the pipeline.
-//   - document-self-commit-empty-summary: the agent commits its own edit, so
-//     the worktree is clean but the head moved - head movement counts as
-//     changes, summary required, the agent's commit stays.
 func documentSummaryContractScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "document-summary-contract-scenario.yaml")
@@ -106,13 +85,6 @@ func documentSummaryContractScenario(t *testing.T) string {
 	return path
 }
 
-// TestDocumentAnalyzerSummaryContractOnRealBinary drives the real no-mistakes
-// binary end to end (init -> git push -> daemon pipeline) and pins the
-// document step's summary contract: a legitimate no-op pass succeeds where it
-// used to be refused with "validate document analyzer findings: missing
-// summary", while a summary is still required whenever the pass reports
-// unresolved findings, omits the summary field, or actually changed files -
-// including an agent that committed its own edits and left a clean worktree.
 func TestDocumentAnalyzerSummaryContractOnRealBinary(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: documentSummaryContractScenario(t)})
 
@@ -233,12 +205,6 @@ func TestDocumentAnalyzerSummaryContractOnRealBinary(t *testing.T) {
 	t.Logf("self-commit pass: document step log:\n%s", selfLog)
 }
 
-// TestDocumentNoOpPassOnCodexBinary repeats the legitimate no-op pass through
-// the codex wire format - the backend whose structured `{"findings":[],
-// "summary":""}` success was refused four times in a row on the recorded
-// county-data run. The codex adapter parses structured output out of the
-// agent_message text and hands it to the same step validator, so the pass
-// must succeed there too.
 func TestDocumentNoOpPassOnCodexBinary(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "codex", Scenario: documentSummaryContractScenario(t)})
 

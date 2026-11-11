@@ -15,20 +15,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// answerPhase is one state the fake run holds for a while after the answer.
-// The last phase holds forever.
 type answerPhase struct {
 	until time.Duration
 	run   func() *ipc.RunInfo
 }
 
-// newAnswerFollowFixture serves an answer result and then walks the run
-// through phases timed from the moment the answer was recorded. A ticking event
-// stream stands in for the daemon's state events, so each phase change is
-// observed within a few ticks instead of the drive loop's slow heartbeat.
-//
-// gateReconcileTimeout, when set, is written to the fixture root's global
-// config, which is where axi answer reads the grace it gives a question park.
 func newAnswerFollowFixture(t *testing.T, gateReconcileTimeout string, result ipc.AnswerReviewQuestionResult, phases []answerPhase) (*axiTimeoutFixture, *atomic.Int32) {
 	t.Helper()
 	var answeredAt atomic.Int64
@@ -87,9 +78,6 @@ func reviewParkedOn(t *testing.T, fx *axiTimeoutFixture, status types.StepStatus
 	return reviewParkedAtRound(t, fx, status, 0, items...)
 }
 
-// reviewParkedAtRound is reviewParkedOn with the step's persisted round count,
-// which is what tells a re-park apart from the park an answer just released
-// when both carry the same status.
 func reviewParkedAtRound(t *testing.T, fx *axiTimeoutFixture, status types.StepStatus, round int, items ...types.Finding) func() *ipc.RunInfo {
 	raw := findingsJSON(t, items, "review")
 	return func() *ipc.RunInfo {
@@ -104,8 +92,6 @@ func reviewParkedAtRound(t *testing.T, fx *axiTimeoutFixture, status types.StepS
 	}
 }
 
-// reviewRunning is the run with its review step back at work, which is what
-// the gate a released answer leaves reads as.
 func reviewRunning(fx *axiTimeoutFixture) *ipc.RunInfo {
 	run := fx.running()
 	run.Steps = []ipc.StepResultInfo{{StepName: types.StepReview, Status: types.StepStatusRunning}}
@@ -156,9 +142,6 @@ func TestAxiAnswer_LastAnswerFollowsTheRunToItsNextGate(t *testing.T) {
 	}
 }
 
-// An answer that lands before the park registers resumes nothing itself; the
-// park then appears still carrying the question it closed until the gate's
-// resumer releases it. That park is not the next decision point.
 func TestAxiAnswer_LastAnswerSkipsTheStalePreAnswerPark(t *testing.T) {
 	var fx *axiTimeoutFixture
 	var stale func() *ipc.RunInfo
@@ -186,9 +169,6 @@ func TestAxiAnswer_LastAnswerSkipsTheStalePreAnswerPark(t *testing.T) {
 	}
 }
 
-// A question park still there after one gate_reconcile_timeout is a genuine
-// new question and is returned. The grace comes from the owning root's global
-// config: under the 30s default this --wait would elapse first.
 func TestAxiAnswer_GenuineReaskIsReturnedAfterTheGrace(t *testing.T) {
 	var fx *axiTimeoutFixture
 	var once sync.Once
@@ -251,10 +231,6 @@ func TestAxiAnswer_LastAnswerWaitElapsedReattachesWithoutAnsweringAgain(t *testi
 	}
 }
 
-// A question asked by the rereview inside a fix round parks as fix_review, so
-// both the released park and the next one carry that status. Keyed on the
-// review park status alone, the stale park read as already released and was
-// handed back as this answer's next decision point.
 func TestAxiAnswer_LastAnswerFollowsAFixReviewQuestionPark(t *testing.T) {
 	var fx *axiTimeoutFixture
 	var once sync.Once
@@ -283,10 +259,6 @@ func TestAxiAnswer_LastAnswerFollowsAFixReviewQuestionPark(t *testing.T) {
 	}
 }
 
-// The finalize turn can park again at the same status before any read observes
-// the review step running. Keyed on the park status alone, that new gate read
-// as the one this answer had just released, so the caller waited until --wait
-// elapsed instead of being handed the decision it has to make.
 func TestAxiAnswer_ReparkAtTheSameStatusIsReturnedAsTheNextGate(t *testing.T) {
 	var fx *axiTimeoutFixture
 	var once sync.Once
@@ -320,9 +292,6 @@ func TestAxiAnswer_ReparkAtTheSameStatusIsReturnedAsTheNextGate(t *testing.T) {
 	}
 }
 
-// An older daemon has no closed_last field, so it reads as false. It resumes
-// the reviewer only when the last open question closed, so reviewer_resumed is
-// the same signal there and must earn the same follow.
 func TestAxiAnswer_ResumedWithoutClosedLastStillFollowsTheRun(t *testing.T) {
 	var fx *axiTimeoutFixture
 	var once sync.Once

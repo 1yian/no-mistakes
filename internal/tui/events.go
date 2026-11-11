@@ -8,19 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// applyEvent applies one stream frame and reports whether the model must read
-// authoritative state.
-//
-// A stream gap means the daemon coalesced at least one state transition away
-// under buffer pressure; the only correct response is one authoritative read,
-// because the lost payload is unknowable from the stream.
-//
-// State frames are guarded by the monotonic revision: a delta applies only
-// when it is newer than what the model already holds. That is what makes a
-// delta queued before an authoritative snapshot an idempotent no-op after it,
-// so draining a backlog behind a gap cannot move state backwards. Frames with
-// no revision (an older daemon) always apply, so a new client against an old
-// daemon behaves exactly as it does today.
 func (m *Model) applyEvent(event ipc.Event) bool {
 	if event.Type == ipc.EventStreamGap {
 		m.err = nil
@@ -203,12 +190,6 @@ func (m *Model) applyEvent(event ipc.Event) bool {
 	return false
 }
 
-// applySnapshot replaces model state with an authoritative get_run snapshot.
-//
-// A snapshot older than what the model already holds is ignored, so two
-// reconciliations racing cannot move state backwards either. Findings come
-// from the snapshot's persisted step rows, which is why a coalesced
-// step_completed carrying findings is recoverable.
 func (m *Model) applySnapshot(run *ipc.RunInfo) bool {
 	if run == nil || run.StateRev < m.stateRev {
 		return false
@@ -286,8 +267,6 @@ func (m *Model) clearGateState(step types.StepName) {
 	}
 }
 
-// requestStepDiff queues one on-demand read of a fix-review gate's
-// working-tree diff. At most one request per step is in flight.
 func (m *Model) requestStepDiff(step types.StepName, replace bool) {
 	if m.stepDiffFetching[step] && !replace {
 		return
@@ -464,8 +443,6 @@ func (m *Model) setStepReportedFindings(name types.StepName, reportedFindings in
 	}
 }
 
-// stepsWithRunningElapsed returns a copy of m.steps with DurationMS set on
-// running/fixing steps based on their recorded start times.
 func (m Model) stepsWithRunningElapsed() []ipc.StepResultInfo {
 	steps := make([]ipc.StepResultInfo, len(m.steps))
 	copy(steps, m.steps)

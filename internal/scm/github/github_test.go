@@ -116,9 +116,6 @@ func TestGetChecksPassesRepoFlag(t *testing.T) {
 	}
 }
 
-// A failing gh must surface its stderr in the error: a broken gh (e.g. < v2.50
-// rejecting `pr checks --json`) is only diagnosable from the step log if the
-// provider message survives the error. See the #644 hardening intent.
 func TestGetChecksSurfacesGHErrorStderr(t *testing.T) {
 	t.Parallel()
 
@@ -311,13 +308,6 @@ func TestGetChecksDoesNotDuplicateWorkflowRunsRepresentedByRollup(t *testing.T) 
 	}
 }
 
-// The raw commit statusCheckRollup keeps every check run a commit ever had,
-// including a same-named run a later run has already superseded (e.g. a CI
-// monitor auto-fix push re-triggering the same gate check). Without a
-// latest-wins collapse the stale FAILURE stays visible forever even though a
-// later SUCCESS at the same head replaced it, which manufactures an
-// unrecoverable auto-fix loop. GetChecks must collapse to the newest
-// startedAt so the caller sees zero failing checks.
 func TestGetChecksCollapsesSupersededSameNameCheckToLatestAtOneHead(t *testing.T) {
 	t.Parallel()
 
@@ -354,15 +344,6 @@ func TestGetChecksCollapsesSupersededSameNameCheckToLatestAtOneHead(t *testing.T
 	}
 }
 
-// Order matters: appendUnrepresentedWorkflowRuns dedupes the Actions-run
-// union against the checks slice by run ID. If collapseLatestByName ran
-// BEFORE that union, the superseded run's ID would drop out of the
-// "represented" set and the union would re-add the exact same stale run
-// under its own workflow run name - resurrecting the failure the collapse
-// was supposed to hide. This test pins the union-then-collapse order: both
-// the superseded and the winning run are independently visible to the
-// workflow-run API (as they would be on a real repo), and the union must
-// recognize both as already represented rather than re-adding either.
 func TestGetChecksCollapseOrderingDoesNotLetWorkflowRunUnionResurrectSupersededCheck(t *testing.T) {
 	t.Parallel()
 
@@ -970,10 +951,6 @@ func TestCreatePRAddsDraftFlagWhenConfigured(t *testing.T) {
 	}
 }
 
-// A token limited to the repo and workflow scopes cannot run `gh pr edit`: its
-// GraphQL lookup selects Team.organization through reviewRequests, which needs
-// read:org. UpdatePR therefore sends the content as a REST PATCH, streamed on
-// stdin, and must never fall back to `gh pr edit`.
 func TestUpdatePRPatchesPullRequestOverREST(t *testing.T) {
 	t.Parallel()
 
@@ -1032,10 +1009,6 @@ func TestUpdatePRReportsRESTFailure(t *testing.T) {
 	}
 }
 
-// UpdatePR shares the same explicit-PR selector boundary as the read methods:
-// when the number is absent it must target the number in the canonical PR URL,
-// never an empty selector that makes gh resolve the cwd branch (main) from the
-// detached bare gate repo and edit the wrong PR.
 func TestUpdatePRTargetsKnownPRByURLWhenNumberMissing(t *testing.T) {
 	t.Parallel()
 
@@ -1050,7 +1023,6 @@ func TestUpdatePRTargetsKnownPRByURLWhenNumberMissing(t *testing.T) {
 	}
 }
 
-// With no configured repository the PR URL names it; the cwd is never consulted.
 func TestUpdatePRTakesRepositoryFromURLWhenHostHasNone(t *testing.T) {
 	t.Parallel()
 
@@ -1062,9 +1034,6 @@ func TestUpdatePRTakesRepositoryFromURLWhenHostHasNone(t *testing.T) {
 	}
 }
 
-// UpdatePR must fail closed exactly like the read methods: with neither a PR
-// identity nor a repository it refuses to shell out rather than letting gh
-// expand {owner}/{repo} from the cwd and edit the inferred PR.
 func TestUpdatePRFailsClosedWithoutIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -1146,9 +1115,6 @@ func TestGetChecksFallsBackToStateWhenBucketMissing(t *testing.T) {
 	}
 }
 
-// recordingCmdFactory captures the argv of every gh invocation into recorded
-// and replies with a fixed successful stdout, so tests can assert exactly which
-// PR selector reached gh instead of matching a whole command string.
 func recordingCmdFactory(stdout string, recorded *[][]string) CmdFactory {
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		*recorded = append(*recorded, append([]string{name}, args...))
@@ -1162,9 +1128,6 @@ func recordingCmdFactory(stdout string, recorded *[][]string) CmdFactory {
 	}
 }
 
-// failIfInvokedCmdFactory fails the test if gh is invoked at all. It proves that
-// a PR-targeting call fails closed (never shelling out) when the PR identity is
-// unknown, instead of running an argument-less gh that infers the cwd branch.
 func failIfInvokedCmdFactory(t *testing.T) CmdFactory {
 	t.Helper()
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -1173,19 +1136,6 @@ func failIfInvokedCmdFactory(t *testing.T) CmdFactory {
 	}
 }
 
-// The final CI check lookup must target the exact PR the pipeline already knows.
-//
-// Trigger: the CI monitor calls GetChecks with a PR the pipeline identifies by
-// URL (Number can be empty when the identity was carried as a URL only).
-// Masking condition: the daemon runs gh from the detached bare gate repo whose
-// HEAD is the default branch (main).
-// Symptom: appending an empty pr.Number produced an argument-less
-// `gh pr checks --repo <slug>`, so gh fell back to resolving the cwd branch
-// (main) and reported "no pull requests found for branch main" even though the
-// feature PR's exact-head checks are green — certification could never finish.
-//
-// The fix passes the canonical PR URL as the explicit selector when the number
-// is absent, so the target is always the known PR, never an inferred branch.
 func TestGetChecksTargetsKnownPRByURLWhenNumberMissing(t *testing.T) {
 	t.Parallel()
 
@@ -1210,8 +1160,6 @@ func TestGetChecksTargetsKnownPRByURLWhenNumberMissing(t *testing.T) {
 	}
 }
 
-// Compare with the proven explicit-PR invocation: when the number is known it is
-// passed verbatim as the selector, exactly as before.
 func TestGetChecksTargetsKnownPRByNumber(t *testing.T) {
 	t.Parallel()
 
@@ -1229,9 +1177,6 @@ func TestGetChecksTargetsKnownPRByNumber(t *testing.T) {
 	}
 }
 
-// Missing/invalid PR identity must stop safely rather than checking main or some
-// other PR: with neither number nor URL, the PR-targeting reads refuse to shell
-// out at all.
 func TestPRTargetingReadsFailClosedWithoutIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -1249,8 +1194,6 @@ func TestPRTargetingReadsFailClosedWithoutIdentity(t *testing.T) {
 	}
 }
 
-// GetPRState and GetMergeableState share the same selector boundary as
-// GetChecks, so a URL-only PR must target the URL there too.
 func TestPRStateAndMergeableTargetKnownPRByURL(t *testing.T) {
 	t.Parallel()
 
@@ -1275,8 +1218,6 @@ func TestPRStateAndMergeableTargetKnownPRByURL(t *testing.T) {
 	}
 }
 
-// A conflict-free PR behind a base that requires up-to-date branches reads
-// mergeable MERGEABLE, so only mergeStateStatus says GitHub will refuse it.
 func TestGetMergeableStateReadsMergeStateStatusBehind(t *testing.T) {
 	t.Parallel()
 
@@ -1363,11 +1304,6 @@ func TestGetChecksParsesStateAndLink(t *testing.T) {
 	}
 }
 
-// A rerun must target the exact job behind the check so a genuinely failing job
-// in the same workflow run is not re-run along with it. Real details URLs carry
-// a query (?check_suite_focus=true) or a step fragment (#step:4:12), and neither
-// is part of the job identity, so every one of these shapes must reach the same
-// single job.
 func TestRerunCheckTargetsJobFromCheckLink(t *testing.T) {
 	t.Parallel()
 
@@ -1434,14 +1370,6 @@ func TestRerunCheckTargetsWholeCancelledRun(t *testing.T) {
 	}
 }
 
-// A link this backend cannot resolve to one job must not be downgraded into a
-// whole-run rerun: that would re-run every failed job in the run, including
-// genuinely failing ones, on the strength of a link it could not read. It fails
-// closed instead, so the check escalates exactly as it would without the policy.
-//
-// The browser's plural ".../jobs/<n>" form is one of these: that number is a
-// per-run display index the API answers with 404, not the job databaseId
-// `gh run rerun --job` needs.
 func TestRerunCheckFailsClosedWithoutAnActionsJob(t *testing.T) {
 	t.Parallel()
 
@@ -1467,9 +1395,6 @@ func TestRerunCheckFailsClosedWithoutAnActionsJob(t *testing.T) {
 	}
 }
 
-// The provider refusing the rerun must reach the caller: the CI step decides
-// what to do with a failed request, and silently reporting success would make it
-// wait for a re-run that never happens.
 func TestRerunCheckPropagatesProviderError(t *testing.T) {
 	t.Parallel()
 
@@ -1571,11 +1496,6 @@ func TestFetchFailedCheckTargetLogsReportsMissingSelectedJob(t *testing.T) {
 	}
 }
 
-// A GitHub Actions action-download outage fails a job inside "Set up job",
-// before any repository step runs. PreRunFailures must flag exactly that job -
-// read structurally from the setup step's conclusion, never from log text - and
-// must never flag a job that cleared setup and failed a later (repository) step.
-// The two directions together are the masking-safety contract.
 func TestPreRunFailures_FlagsSetupFailureNotGenuine(t *testing.T) {
 	t.Parallel()
 
@@ -1606,8 +1526,6 @@ func TestPreRunFailures_FlagsSetupFailureNotGenuine(t *testing.T) {
 	}
 }
 
-// A run the provider cannot report on must leave every check unflagged, so an
-// unreadable job stays a genuine failure rather than being masked.
 func TestPreRunFailures_FailsClosedOnUnreadableRun(t *testing.T) {
 	t.Parallel()
 

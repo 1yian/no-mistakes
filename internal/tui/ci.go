@@ -10,7 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// isCIActive returns true if the CI step is currently running.
 func isCIActive(steps []ipc.StepResultInfo) bool {
 	for _, s := range steps {
 		if s.StepName == types.StepCI {
@@ -23,7 +22,6 @@ func isCIActive(steps []ipc.StepResultInfo) bool {
 	return false
 }
 
-// ciStepStatus returns the current status of the CI step.
 func ciStepStatus(steps []ipc.StepResultInfo) types.StepStatus {
 	for _, s := range steps {
 		if s.StepName == types.StepCI {
@@ -33,8 +31,6 @@ func ciStepStatus(steps []ipc.StepResultInfo) types.StepStatus {
 	return types.StepStatusPending
 }
 
-// extractPRFromLogs extracts the PR number from CI log messages.
-// Looks for the "monitoring CI for PR #42" pattern. Returns empty if not found.
 func extractPRFromLogs(logs []string) string {
 	for _, line := range logs {
 		if idx := strings.Index(line, "PR #"); idx >= 0 {
@@ -52,16 +48,12 @@ func extractPRFromLogs(logs []string) string {
 	return ""
 }
 
-// ciActivity summarizes what the CI step has been doing based on logs.
 type ciActivity = cimonitor.Activity
 
-// parseCIActivity extracts structured activity from CI log messages.
 func parseCIActivity(logs []string) ciActivity {
 	return cimonitor.ParseActivity(logs)
 }
 
-// renderCIView renders the CI-specific monitoring view.
-// Shown instead of generic findings when the CI step is active.
 func renderCIView(run *ipc.RunInfo, steps []ipc.StepResultInfo, findings string, logs []string, width int) string {
 	return renderCIViewWithSelection(run, steps, findings, logs, width, -1, 0, nil)
 }

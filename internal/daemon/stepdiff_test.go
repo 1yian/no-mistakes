@@ -84,9 +84,6 @@ func TestStepDiff_ReturnsTheWorktreeDiffOnDemand(t *testing.T) {
 	}
 }
 
-// A diff larger than the response budget is cut rather than returned whole.
-// An oversized response would blow the transport frame limit, which is exactly
-// the failure this RPC exists to avoid.
 func TestStepDiff_BoundsAnOversizedDiff(t *testing.T) {
 	huge := strings.Repeat("a very long changed line that repeats\n", 60_000)
 	m, runID := stepDiffFixture(t, huge)
@@ -113,11 +110,6 @@ func TestStepDiff_UnknownRunFailsClosed(t *testing.T) {
 	}
 }
 
-// The fix-review gate depends on this RPC, and where the run's worktree is is
-// recorded on the run - so an unrelated fault in the global config must not take
-// the diff down with it. An operator who mistypes YAML while a run is parked
-// would otherwise lose the gate's diff for a reason that has nothing to do with
-// the run.
 func TestStepDiff_ServesTheDiffWhileTheGlobalConfigIsUnreadable(t *testing.T) {
 	m, runID := stepDiffFixture(t, "agent fix\n")
 	if err := os.WriteFile(m.paths.ConfigFile(), []byte("worktree_roots: [not, a, mapping\n"), 0o644); err != nil {

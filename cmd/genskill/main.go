@@ -1,15 +1,3 @@
-// Command genskill renders the canonical no-mistakes SKILL.md from the
-// internal/skill package into skills/no-mistakes/SKILL.md. The same rendering
-// is what `no-mistakes init` installs into the user-level agent skill
-// directories, so the committed file and the installed copies never drift.
-//
-// Usage:
-//
-//	go run ./cmd/genskill           # (re)write the skill file
-//	go run ./cmd/genskill --check   # fail if the committed file is stale
-//
-// The --check form is meant for CI so the committed skill never drifts from
-// the generator, which is the single source of truth.
 package main
 
 import (

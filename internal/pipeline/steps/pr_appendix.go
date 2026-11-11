@@ -9,9 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// Closed by default: GitHub, GitLab, Gitea, Forgejo, and Azure render a
-// details block shut until a reviewer opens it. The summary is the only
-// visible label.
 const (
 	validationDetailsOpen  = "<details>\n<summary>Validation</summary>\n\n"
 	validationDetailsClose = "\n</details>"
@@ -24,8 +21,6 @@ func appendixMode(sctx *pipeline.StepContext) string {
 	return sctx.Config.PR.AppendixMode()
 }
 
-// appendixEvidence is the recorded Risk, Testing, and Pipeline tail.
-// Intent is the caller's job: it stays outside a collapsed Validation block.
 func appendixEvidence(mode string, flavor prBodyFlavor, risk, testing, pipeline string, provider scm.Provider) string {
 	switch mode {
 	case config.PRAppendixMinimal:
@@ -60,11 +55,6 @@ func wrapValidation(inner string) string {
 	return validationDetailsOpen + inner + validationDetailsClose
 }
 
-// minimalTail keeps the pipeline introduction so head-proof limitations remain
-// visible even when round history is omitted. Ordinary Bitbucket descriptions
-// carry no attestation comment; this does not invent one. An owned Bitbucket body
-// carries that comment inside a text fence, and the fence is kept so the
-// marker stays visible there.
 func minimalTail(risk, pipelineMD string, provider scm.Provider) string {
 	intro := noMistakesPRSignature
 	if rest, ok := strings.CutPrefix(pipelineMD, "## Pipeline\n\n"); ok {
@@ -157,8 +147,6 @@ func buildPRBody(body, riskLine, testingMD, pipelineMD string, sctx *pipeline.St
 	return buildPRBodyWithin(body, riskLine, testingMD, pipelineMD, sctx, provider, maxPullRequestBodyBytes)
 }
 
-// buildPRBodyWithin is buildPRBody under a byte budget below the default,
-// which the Issues section uses to reserve its own room.
 func buildPRBodyWithin(body, riskLine, testingMD, pipelineMD string, sctx *pipeline.StepContext, provider scm.Provider, maxBytes int) string {
 	var fitted string
 	switch appendixMode(sctx) {
@@ -176,9 +164,6 @@ func buildPRBodyWithin(body, riskLine, testingMD, pipelineMD string, sctx *pipel
 	return retainPRHeadProofDisclosure(fitted, pipelineMD)
 }
 
-// The pipeline introduction is generated locally. Its qualification of the
-// attestation is mandatory metadata, so truncation cannot retain just the marker.
-// If even these two facts cannot fit, the publication guard refuses the write.
 func retainPRHeadProofDisclosure(body, pipelineMD string) string {
 	rest, ok := strings.CutPrefix(pipelineMD, "## Pipeline\n\n")
 	if !ok {
@@ -225,10 +210,6 @@ func clampPRBytes(text string, max int) string {
 	return truncateTextAtLineBoundary(text, max, essentialPRBodyTruncationMarker())
 }
 
-// fitCollapsed keeps the narrative outside one closed Validation block.
-// Testing is dropped before pipeline prose, matching the ordinary budget
-// order. The attestation stays inside the block because the inner truncator
-// keeps the pipeline header.
 func fitCollapsed(prefix, risk, testing, pipeline string, limit int, units func(string) int, clamp func(string, int) string, provider scm.Provider) string {
 	untruncated := func(testingMD string) string {
 		return joinBlocks(prefix, wrapValidation(joinAppendixSections(risk, testingMD, pipeline, provider)))

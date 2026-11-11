@@ -12,15 +12,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// sessionCall records one invocation the fake adapter received.
 type sessionCall struct {
 	prompt   string
 	session  *agent.SessionRef
 	fallback bool
 }
 
-// fakeSessionAgent is a session-capable adapter that mints deterministic
-// session ids and can be scripted to fail resume attempts.
 type fakeSessionAgent struct {
 	mu           sync.Mutex
 	name         string
@@ -88,11 +85,6 @@ func sessionTestDB(t *testing.T) (*db.DB, *db.Run) {
 	return d, run
 }
 
-// TestRunSessions_RoleReusesOneSession proves the RunSessions machinery keeps
-// one durable session per role: the first turn starts it, every later turn
-// resumes the same identity. Which roles production actually resumes is
-// review.go policy, pinned in steps/review_session_test.go (fixer only;
-// review turns bypass RunSessions entirely).
 func TestRunSessions_RoleReusesOneSession(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -118,11 +110,6 @@ func TestRunSessions_RoleReusesOneSession(t *testing.T) {
 	}
 }
 
-// TestRunSessions_RolesKeepDistinctSessions proves two roles interleaved on
-// one RunSessions never exchange identities, in both directions. Legacy
-// "reviewer" rows can still coexist with fixer rows on recovered runs, so
-// cross-role isolation in the machinery remains a real property even though
-// production review turns no longer call RunSessions.
 func TestRunSessions_RolesKeepDistinctSessions(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -167,9 +154,6 @@ func TestRunSessions_RolesKeepDistinctSessions(t *testing.T) {
 	}
 }
 
-// TestRunSessions_ResumeFailureFallsBackToFreshSameRoleSession proves a
-// failed resume never skips the turn: the stored identity is dropped and a
-// fresh same-role session runs instead, marked as the fallback.
 func TestRunSessions_ResumeFailureFallsBackToFreshSameRoleSession(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -206,8 +190,6 @@ func TestRunSessions_ResumeFailureFallsBackToFreshSameRoleSession(t *testing.T) 
 	}
 }
 
-// TestRunSessions_FreshSessionFailurePropagates proves a failure that was not
-// a resume (nothing to fall back from) surfaces to the caller unchanged.
 func TestRunSessions_FreshSessionFailurePropagates(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -223,8 +205,6 @@ func TestRunSessions_FreshSessionFailurePropagates(t *testing.T) {
 	}
 }
 
-// TestRunSessions_CancelledContextDoesNotRetry proves cancellation is not
-// treated as a resume failure worth a fallback invocation.
 func TestRunSessions_CancelledContextDoesNotRetry(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -247,8 +227,6 @@ func TestRunSessions_CancelledContextDoesNotRetry(t *testing.T) {
 	}
 }
 
-// TestRunSessions_ColdWhenAgentLacksSessions proves adapters without session
-// support run cold (no Session in opts) and correctness is preserved.
 func TestRunSessions_ColdWhenAgentLacksSessions(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -267,8 +245,6 @@ func TestRunSessions_ColdWhenAgentLacksSessions(t *testing.T) {
 	}
 }
 
-// TestRunSessions_DisabledRunsCold proves session_reuse: false forces the
-// existing cold invocation path.
 func TestRunSessions_DisabledRunsCold(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -282,8 +258,6 @@ func TestRunSessions_DisabledRunsCold(t *testing.T) {
 	}
 }
 
-// TestRunSessions_NilManagerRunsCold proves steps outside the review loop
-// (or tests with no manager) run exactly as before.
 func TestRunSessions_NilManagerRunsCold(t *testing.T) {
 	fake := newFakeSessionAgent()
 	var rs *RunSessions
@@ -296,9 +270,6 @@ func TestRunSessions_NilManagerRunsCold(t *testing.T) {
 	}
 }
 
-// TestRunSessions_PersistsAcrossManagers proves the minimum session-resume
-// metadata survives a daemon process boundary: a new manager for the same run
-// resumes the stored identities, and a different run never sees them.
 func TestRunSessions_PersistsAcrossManagers(t *testing.T) {
 	d, run := sessionTestDB(t)
 	fake := newFakeSessionAgent()
@@ -370,8 +341,6 @@ func TestRunSessions_FallbackResumesWithItsActualProvider(t *testing.T) {
 	}
 }
 
-// TestRunSessions_AgentChangeDiscardsStoredSession proves a stored identity
-// from a different adapter is never fed to the current one.
 func TestRunSessions_AgentChangeDiscardsStoredSession(t *testing.T) {
 	d, run := sessionTestDB(t)
 	if err := d.UpsertRunAgentSession(run.ID, string(SessionRoleReviewer), "codex", "codex-thread"); err != nil {

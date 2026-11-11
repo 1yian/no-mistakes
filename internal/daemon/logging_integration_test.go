@@ -13,10 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestDetachedDaemonUsesBoundedDedicatedLogSinks is a production-shaped
-// regression: a real isolated daemon child starts with service-manager file
-// descriptors already open, rotates prior crash output in place, keeps healthy
-// read RPCs quiet, and retains an actionable failed-request record.
 func TestDetachedDaemonUsesBoundedDedicatedLogSinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("production descriptor inheritance path is covered by platform-neutral logstore tests")

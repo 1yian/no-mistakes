@@ -4,8 +4,6 @@ package shellenv
 
 import "errors"
 
-// ErrOutOfMemory is the Linux OOM attribution sentinel. Other platforms never
-// return it; step spawn and failure reporting stay as they are today.
 var ErrOutOfMemory = errors.New("ran out of memory")
 
 func OwnOOMScoreScript(script string) string { return script }

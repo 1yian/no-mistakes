@@ -8,20 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// This is the forensic §5 reproduction with the final assertion flipped to the
-// FIXED behavior. An explicit, authoritative intent forbids retry-only and
-// requires a guarded removal; the initial review raises an error/auto-fix race
-// finding; the fixer "resolves" it by deleting the required behavior. Before
-// the fix the intent-contradicting auto-fix completed silently. After the fix,
-// the rereview's conformance obligation surfaces the contradiction as an
-// ask-user finding, and one ask-user finding parks the run with no executor
-// change (executor.go gate). The step is modeled with a scripted step whose
-// rereview turn returns what the fixed ReviewStep returns on a contradiction.
-//
-// The park is observable as the step reaching fix_review with the run's
-// awaiting-agent marker set; the run row itself stays "running" while a gate is
-// open (there is no separate awaiting-approval run status), so the assertions
-// key off the step status and the marker, not the run status.
 func TestExecutor_AutoFixContradictingIntentParksForApproval(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

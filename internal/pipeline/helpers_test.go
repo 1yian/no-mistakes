@@ -21,7 +21,6 @@ import (
 
 // --- mock step helpers ---
 
-// mockStep is a test step that returns a configurable outcome.
 type mockStep struct {
 	name    types.StepName
 	outcome *StepOutcome
@@ -62,22 +61,11 @@ func newFailStep(name types.StepName, err error) *mockStep {
 
 // --- test helpers ---
 
-// respondFixPartial sends a fix response that selects the given findings and
-// explicitly declines every other finding the parked gate shows, which is what
-// unchecking them means now that an omission is neither a decline nor silently
-// permitted. The decline set is computed from the gate the executor actually
-// parked on (not the test's idea of it), so the response is exactly accounted
-// for and the recorded decision matches the caller's intent.
-//
-// Tests that answer a gate before it parks (retry loops) must call this inside
-// the loop so the gate is re-read on every attempt.
 func respondFixPartial(t *testing.T, exec *Executor, step types.StepName, selected ...string) error {
 	t.Helper()
 	return respondFixPartialWithOverrides(t, exec, step, selected, nil, nil)
 }
 
-// userInstructions wraps per-finding notes as the user's own instructions, the
-// way a TUI response carries them.
 func userInstructions(notes map[string]string) *FixInstructions {
 	if notes == nil {
 		return nil
@@ -85,8 +73,6 @@ func userInstructions(notes map[string]string) *FixInstructions {
 	return &FixInstructions{ByFinding: notes}
 }
 
-// respondFixPartialWithOverrides is respondFixPartial plus the per-finding
-// instructions and user-authored findings a response may carry.
 func respondFixPartialWithOverrides(t *testing.T, exec *Executor, step types.StepName, selected []string, instructions map[string]string, added []types.Finding) error {
 	t.Helper()
 	exec.mu.Lock()
@@ -113,8 +99,6 @@ func respondFixPartialWithOverrides(t *testing.T, exec *Executor, step types.Ste
 	return err
 }
 
-// earlierChosenToFix reads the parked step's rounds for the findings a human
-// already chose to fix, which is what makes a correct client omit them.
 func earlierChosenToFix(exec *Executor, stepResultID, gate string) map[string]bool {
 	if exec == nil || exec.db == nil || stepResultID == "" {
 		return nil
@@ -150,7 +134,6 @@ func setupTest(t *testing.T) (*db.DB, *paths.Paths, *db.Run, *db.Repo) {
 	return database, p, run, repo
 }
 
-// eventCollector is a thread-safe event accumulator for tests.
 type eventCollector struct {
 	mu     sync.Mutex
 	events []ipc.Event
@@ -215,7 +198,6 @@ func collectEvents(exec *Executor) *eventCollector {
 
 // --- helper types ---
 
-// adaptiveCallStep allows custom Execute logic via a function.
 type adaptiveCallStep struct {
 	name types.StepName
 	fn   func(sctx *StepContext) (*StepOutcome, error)
@@ -226,7 +208,6 @@ func (a *adaptiveCallStep) Execute(sctx *StepContext) (*StepOutcome, error) {
 	return a.fn(sctx)
 }
 
-// waitForStepEvent polls the event collector until an event with the given type and step name appears.
 func waitForStepEvent(t *testing.T, ec *eventCollector, eventType ipc.EventType, stepName types.StepName) *ipc.Event {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -240,7 +221,6 @@ func waitForStepEvent(t *testing.T, ec *eventCollector, eventType ipc.EventType,
 	return nil
 }
 
-// waitForEvent polls the event collector until an event with the given type and status appears.
 func waitForEvent(t *testing.T, ec *eventCollector, eventType ipc.EventType, status string) *ipc.Event {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -254,7 +234,6 @@ func waitForEvent(t *testing.T, ec *eventCollector, eventType ipc.EventType, sta
 	return nil
 }
 
-// waitForStepStatus polls the DB until a step reaches the expected status.
 func waitForStepStatus(t *testing.T, database *db.DB, runID string, stepName types.StepName, expected types.StepStatus) {
 	t.Helper()
 	// The executor and this poller share one SQLite connection (MaxOpenConns(1)).
@@ -281,10 +260,6 @@ func waitForStepStatus(t *testing.T, database *db.DB, runID string, stepName typ
 	t.Fatalf("step %s did not reach status %q within timeout; last seen %v", stepName, expected, last)
 }
 
-// startExecutor runs Execute in a goroutine and cancels it during cleanup so a
-// parked step closes its log file before t.TempDir removes the tree. Windows
-// refuses unlinkat on a still-open handle; leaving Execute running after a
-// failed wait was the lint.log leak in TestExecutor_AutoFixRespectsMaxAttempts.
 func startExecutor(t *testing.T, exec *Executor, run *db.Run, repo *db.Repo, workDir string) (<-chan error, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -348,7 +323,6 @@ func mustParseFindingItems(t *testing.T, raw string) []findingJSON {
 	return payload.Findings
 }
 
-// initGitRepo creates a git repo with an initial commit.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 	execGit(t, dir, "init")

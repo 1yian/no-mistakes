@@ -29,7 +29,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// EventFunc is called when a pipeline event occurs, for streaming to subscribers.
 type EventFunc func(ipc.Event)
 
 const (
@@ -37,11 +36,6 @@ const (
 	defaultGateReconcileTimeout  = config.DefaultGateReconcileTimeout
 )
 
-// FixInstructions is the per-finding guidance a fix response attaches, keyed
-// by finding ID. FromDriver marks guidance from an agent driving the run
-// through `no-mistakes axi`; it is stored apart from the user's own
-// instructions so that no later prompt presents a driver's scoping as a
-// decision the user made.
 type FixInstructions struct {
 	ByFinding  map[string]string
 	FromDriver bool
@@ -70,18 +64,10 @@ type approvalResponse struct {
 	addedFindings      []types.Finding
 	approvalReason     string
 	coverageRound      *db.StepRound
-	// approvalOverride is the unresolved condition an accepted approval
-	// records, verified while the gate was still parked.
-	approvalOverride string
-	// ignoreFindingIDs is the validated decline list of a fix response. It is
-	// not dispatch input (the decline set is derived from the selection on
-	// read), but an accepted response that selects nothing still has to be
-	// recorded as a decision: without the list the executor cannot tell an
-	// explicit all-ignored response from a gate with nothing to decide.
-	ignoreFindingIDs []string
+	approvalOverride   string
+	ignoreFindingIDs   []string
 }
 
-// Executor runs pipeline steps sequentially and coordinates approval interactions.
 type Executor struct {
 	db             *db.DB
 	paths          *paths.Paths
@@ -91,19 +77,14 @@ type Executor struct {
 	agent          agent.Agent
 	steps          []Step
 	skips          map[types.StepName]bool
-	// retrySource is the failed run Execute continues instead of starting the
-	// pipeline from the beginning (SetRetrySource).
-	retrySource string
+	retrySource    string
 
 	onEvent EventFunc
 
-	// sessions manages this run's durable review-loop agent sessions; shared
-	// carries run-scoped step-to-step results. Both are created per Execute.
 	sessions *RunSessions
 	shared   *RunShared
 	workDir  string
 
-	// Ephemeral proof only: recovered runs earn no retry credit.
 	crashRetryBaseSHA   string
 	crashRetryRecovered bool
 
@@ -113,25 +94,13 @@ type Executor struct {
 	waitingStep            types.StepName         // which step is currently awaiting approval
 	waitingApprovalRefusal string                 // non-empty: why Approve is rejected at the waiting gate
 	waitingApprovalVerify  func() (string, error) // the parked step's ApprovalOverrideVerifier, nil when it has none
-	// waitingFindings and waitingStepResultID describe the parked gate: the
-	// findings payload it showed and the step result whose rounds record what
-	// earlier rounds of this step decided. A fix response is validated against
-	// them before the gate is resolved, so the gate the caller answered is the
-	// gate that was validated. Set with e.waiting under e.mu and cleared
-	// wherever e.waiting is.
-	waitingFindings     string
-	waitingStepResultID string
-	// waitingRoundID is the round the parked gate belongs to. The response path
-	// records the decision against it before the caller is told what was
-	// recorded, so an echo never claims a decision that is not durable.
-	waitingRoundID string
+	waitingFindings        string
+	waitingStepResultID    string
+	waitingRoundID         string
 
-	gateReconcileInterval time.Duration
-	gateReconcileTimeout  time.Duration
-	onPRMerged            func(context.Context, string)
-	// ciObservationTransition wraps CI readiness and PR-state writes at a
-	// daemon-owned synchronization boundary. It is nil in standalone executor
-	// embeddings.
+	gateReconcileInterval   time.Duration
+	gateReconcileTimeout    time.Duration
+	onPRMerged              func(context.Context, string)
 	ciObservationTransition func(runID string, withdrawal, completes bool, reason string, persist func() error) error
 	ciMonitorLifecycle      func(runID string, active bool)
 	ciWake                  func(runID string) <-chan struct{}
@@ -139,8 +108,6 @@ type Executor struct {
 	gateClaimGuard          func() (release func(), ok bool)
 }
 
-// SetOnPRMerged registers a best-effort hook invoked after a merged PR state
-// is persisted. The pipeline never fails the run if the hook errors.
 func (e *Executor) SetOnPRMerged(fn func(context.Context, string)) {
 	if e == nil {
 		return
@@ -148,9 +115,6 @@ func (e *Executor) SetOnPRMerged(fn func(context.Context, string)) {
 	e.onPRMerged = fn
 }
 
-// SetCIObservationTransition serializes CI observations with daemon
-// lifecycle decisions. The transition owns the persist callback's critical
-// section; standalone executors use the direct DB path instead.
 func (e *Executor) SetCIObservationTransition(fn func(runID string, withdrawal, completes bool, reason string, persist func() error) error) {
 	if e == nil {
 		return
@@ -176,20 +140,14 @@ func (e *Executor) SetHandoffPending(fn func(runID string) bool) {
 	e.handoffPending = fn
 }
 
-// SetGateClaimGuard orders a parked gate's own resume or reconciliation
-// against the daemon: when fn refuses, the gate stays parked and is checked
-// again later; when it allows, release is called once the gate is claimed.
 func (e *Executor) SetGateClaimGuard(fn func() (release func(), ok bool)) {
 	e.gateClaimGuard = fn
 }
 
-// SetForgeContext configures the immutable provider context used by every
-// subprocess in this run. A nil context preserves ambient behavior.
 func (e *Executor) SetForgeContext(ctx *forgecontext.Context) {
 	e.forge = ctx
 }
 
-// SetSkippedSteps configures steps that should be marked skipped without running.
 func (e *Executor) SetSkippedSteps(steps []types.StepName) {
 	if len(steps) == 0 {
 		e.skips = nil
@@ -201,16 +159,10 @@ func (e *Executor) SetSkippedSteps(steps []types.StepName) {
 	}
 }
 
-// SetRetrySource makes Execute continue the failed run sourceRunID: it carries
-// the source's steps before its failed step, restarts the failed step from the
-// beginning, and runs every later step normally. Execute re-proves the
-// checkpoint against this executor's own steps and fails the run when the
-// source's record no longer matches them.
 func (e *Executor) SetRetrySource(sourceRunID string) {
 	e.retrySource = sourceRunID
 }
 
-// NewExecutor creates a pipeline executor.
 func NewExecutor(database *db.DB, p *paths.Paths, cfg *config.Config, ag agent.Agent, steps []Step, onEvent EventFunc) *Executor {
 	if onEvent == nil {
 		onEvent = func(ipc.Event) {}
@@ -234,11 +186,6 @@ func NewExecutor(database *db.DB, p *paths.Paths, cfg *config.Config, ag agent.A
 	return exec
 }
 
-// runEvidenceDir resolves where this run's test evidence is written. The
-// executor is the single owner of that answer for the pipeline: steps read it
-// from StepContext rather than recomputing a path, which is what let the
-// steering preamble and the test step drift apart while both hardcoded the
-// system temp directory.
 func (e *Executor) runEvidenceDir(runID string) string {
 	if e.paths == nil {
 		return ""
@@ -261,10 +208,6 @@ func (e *Executor) runEvidenceDir(runID string) string {
 	return e.paths.RunEvidenceDir(configured, runID)
 }
 
-// SetGateReconcileTimings overrides the interval between approval-gate
-// reconciliation checks and the deadline for each check. It is primarily used
-// by deterministic tests and specialized embeddings; non-positive values keep
-// the production defaults.
 func (e *Executor) SetGateReconcileTimings(interval, timeout time.Duration) {
 	if interval > 0 {
 		e.gateReconcileInterval = interval
@@ -274,40 +217,22 @@ func (e *Executor) SetGateReconcileTimings(interval, timeout time.Duration) {
 	}
 }
 
-// AwaitingApproval reports whether a step is blocked at an approval gate.
 func (e *Executor) AwaitingApproval() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.waiting
 }
 
-// Respond sends a gate response to the currently waiting step.
-// The step parameter must match the step currently awaiting approval.
-// Returns an error if no step is awaiting approval or if the step name doesn't match.
 func (e *Executor) Respond(step types.StepName, action types.ApprovalAction, findingIDs []string) error {
 	_, err := e.RespondWithOverrides(step, action, findingIDs, nil, nil, nil, "")
 	return err
 }
 
-// ResponseOptions carries caller-supplied audit metadata and the optional
-// complete-coverage binding. An omitted origin is unknown, including direct
-// executor responses that did not come from an IPC client.
 type ResponseOptions struct {
 	Origin   types.ResponseOrigin
 	Coverage *ipc.CoverageBinding
 }
 
-// RespondWithOverrides is like Respond but also carries explicit declines,
-// per-finding user instructions and user-authored findings. Instructions and
-// added findings are merged into the round's findings on a fix action before
-// the fix agent runs; ignoreFindingIDs are the findings the response declines,
-// and a fix response must account for every finding the gate shows unless an
-// earlier round of this step already decided it (see splitFixResponse).
-// approvalReason is only accepted for Test approval and for an abort, where it
-// is the operator's recorded reason; it is never passed to a fix agent.
-//
-// It returns the dispositions the response recorded, which the daemon echoes
-// to the caller.
 func (e *Executor) RespondWithOverrides(step types.StepName, action types.ApprovalAction, findingIDs, ignoreFindingIDs []string, instructions *FixInstructions, addedFindings []types.Finding, approvalReason string, options ...ResponseOptions) (RespondDispositions, error) {
 	var option ResponseOptions
 	if len(options) > 0 {
@@ -451,14 +376,6 @@ func (e *Executor) RespondWithOverrides(step types.StepName, action types.Approv
 			previous = filterFindingsJSON(raw, findingIDsFromSelectionJSON(*round.SelectedFindingIDs))
 		}
 		response.addedFindings = resolveAddedFindingIDs(response.addedFindings, e.waitingFindings, previous)
-		// A nonempty previous means recovery parked a round that already
-		// recorded a decision, and that round's dispatch is the one that never
-		// ran (see restorePendingDecision). The response that re-decides the
-		// gate carries the recorded selection, its instructions and its
-		// user-authored findings into the dispatch below, so accepted work is
-		// not left in the saved record with nothing reading it. Those restored
-		// gate findings are dispatched by this response, so they are reported
-		// under fixed and not also under kept.
 		var restoredGateIDs []string
 		response, restoredGateIDs = restorePendingDecision(response, previous, e.waitingFindings)
 		if err := e.persistResponseDecision(step, response, previous); err != nil {
@@ -486,12 +403,6 @@ func (e *Executor) RespondWithOverrides(step types.StepName, action types.Approv
 	return dispositions, nil
 }
 
-// roundsForFixValidation loads this step's earlier rounds for a fix response's
-// validation. It fails closed for the same reason splitFixResponse refuses an
-// unreadable gate payload: a response validated without the earlier decisions
-// records an omission as a decline and can reverse an applied fix the history
-// should have protected. The caller holds e.mu, so the step result id read here
-// is the parked gate's.
 func (e *Executor) roundsForFixValidation() ([]*db.StepRound, *RespondRefusal) {
 	if e.db == nil || e.waitingStepResultID == "" {
 		return nil, &RespondRefusal{
@@ -520,10 +431,6 @@ func (e *Executor) roundsForFixValidation() ([]*db.StepRound, *RespondRefusal) {
 	return rounds, nil
 }
 
-// Execute runs the pipeline steps sequentially for a given run.
-// The workDir is the directory where steps execute (typically a git worktree).
-// If the context is cancelled with a cause (via context.WithCancelCause),
-// the cause message is preserved as the run's error in the DB.
 func (e *Executor) Execute(ctx context.Context, run *db.Run, repo *db.Repo, workDir string) error {
 	e.workDir = workDir
 	ctx = e.runContext(ctx)
@@ -649,10 +556,6 @@ func (e *Executor) Execute(ctx context.Context, run *db.Run, repo *db.Repo, work
 	return nil
 }
 
-// planRetry proves the retry source's checkpoint against this run's steps and
-// adopts what the source carries forward: its per-run skips of steps that never
-// ran, and the review approval of a carried Review step, which still names the
-// head that step approved.
 func (e *Executor) planRetry(run *db.Run) (*RetryCheckpoint, error) {
 	source, err := e.db.GetRun(e.retrySource)
 	if err != nil {
@@ -717,19 +620,8 @@ func (e *Executor) initializeRunScopes(runID string) {
 }
 
 type stepExecutionState struct {
-	fixing bool
-	// skipFixExecution replays an already-completed fix round's review turn
-	// only, mirroring what the live loop sets alongside an answer. It exists so
-	// a recovered answer round can inherit its gate's fix-round context without
-	// re-running the fixer over already-fixed code.
-	skipFixExecution bool
-	// answering re-enters a review step whose gate parked on its reviewer's own
-	// open questions, now that every one of them has an answer. No code changed
-	// by the answer itself, but it CAN be set together with fixing: the question
-	// may have been asked by a rereview inside a fix round, in which case the
-	// gate parked as fix_review and the answer round has to keep that context or
-	// the two answer paths disagree about the step's durable status. That is
-	// what skipFixExecution above is for.
+	fixing                 bool
+	skipFixExecution       bool
 	answering              bool
 	completingCoverage     bool
 	coverageRound          *db.StepRound
@@ -740,14 +632,8 @@ type stepExecutionState struct {
 	executionMS            int64
 	currentRoundID         string
 	selectedOutstandingIDs []string
-	// outstandingFindings is the review step's append-only set of findings that
-	// are not yet positively resolved or explicitly decided. It is persisted as
-	// the parked round's findings_json, so recovering a parked gate restores the
-	// exact outstanding set the operator is deciding on. Unused by other steps.
-	outstandingFindings string
-	// retrying restarts the step a failed run failed in, at the start of the
-	// run that continues it (SetRetrySource).
-	retrying bool
+	outstandingFindings    string
+	retrying               bool
 }
 
 func (e *Executor) durableExecutionState(stepResultID string) (stepExecutionState, error) {
@@ -795,9 +681,6 @@ func ValidateRecoveredRun(database *db.DB, run *db.Run, steps []Step) error {
 	return err
 }
 
-// Resume restores a run that was durably parked at an approval gate when the
-// daemon stopped. It only accepts a fully recorded gate and otherwise returns
-// an error so startup recovery can fail the run rather than guessing.
 func (e *Executor) Resume(ctx context.Context, run *db.Run, repo *db.Repo, workDir string) error {
 	e.workDir = workDir
 	ctx = e.runContext(ctx)
@@ -1076,7 +959,6 @@ func (e *Executor) Resume(ctx context.Context, run *db.Run, repo *db.Repo, workD
 	}
 }
 
-// SetCommitIdentity binds every Git call in this executor, including recovery.
 func (e *Executor) SetCommitIdentity(identity git.CommitIdentity) {
 	e.commitIdentity = &identity
 }
@@ -1233,10 +1115,6 @@ func (e *Executor) skipRecoveredRemainder(run *db.Run, repo *db.Repo, start int)
 	return nil
 }
 
-// refuseSkippedPRWithClosingIssues fails a PR step the executor would mark
-// skipped without running it while the run carries --closes references:
-// nothing would publish them. The claim makes a concurrent reattach fail
-// closed too.
 func (e *Executor) refuseSkippedPRWithClosingIssues(run *db.Run, repo *db.Repo, name types.StepName, stepResultID string) error {
 	if name != types.StepPR {
 		return nil
@@ -1283,9 +1161,6 @@ func (e *Executor) autoFixLimit(stepName types.StepName) int {
 	return e.config.AutoFixLimit(stepName)
 }
 
-// executeStep runs a single step with approval coordination.
-// Returns whether to skip the remainder, an optional earlier restart step,
-// and any execution error.
 func (e *Executor) executeStep(ctx context.Context, step Step, sr *db.StepResult, run *db.Run, repo *db.Repo, workDir, logDir string, state stepExecutionState) (bool, types.StepName, error) {
 	stepName := step.Name()
 	logPath := filepath.Join(logDir, string(stepName)+".log")
@@ -1715,10 +1590,6 @@ rounds:
 			// The budget notice is re-derived, never a code finding whose
 			// absent file anchor can prevent positive verification.
 			outstandingFindings = excludeFindingsJSON(outstandingFindings, []string{types.FindingIDReviewFixRoundsExhausted})
-			// An answer round retracts by naming ids, never by silence - and
-			// ONLY an answer round. A fix round is held to the coverage rule,
-			// so a retraction it claimed would clear a selected finding no
-			// round ever positively verified.
 			var withdrawn []types.WithdrawnFinding
 			if sctx.FinalizingAnswers {
 				outstandingFindings, withdrawn = dropWithdrawnFindingsJSON(outstandingFindings, outcome.WithdrawnFindings)
@@ -1765,7 +1636,6 @@ rounds:
 			}
 		}
 
-		// Persist this execution round.
 		var findingsPtr *string
 		if effectiveFindings != "" {
 			findingsPtr = &effectiveFindings
@@ -2115,20 +1985,6 @@ done:
 	return skipRemaining, restartFrom, nil
 }
 
-// applyApprovalOverride is the single place both ActionApprove sites (the
-// live wait in executeStep and the daemon-restart recovery path in Resume)
-// route through before completing a step on approval. It records the
-// unresolved condition RespondWithOverrides verified while the gate was parked
-// (db.SetStepOverrideReason), so the completion is an explicit override instead
-// of a silent plain pass. ApprovalOverrideVerifier owns the error and refusal
-// contract.
-//
-// Persisting that override marker is itself fail-closed: downstream consumers
-// derive each step's override status from its durable override/approval reasons,
-// so a swallowed write failure would complete the step as an ordinary clean
-// pass - the exact false-green this feature exists to prevent. When the marker
-// cannot be written this returns the error so the caller fails the run closed
-// instead of recording that plain pass.
 func (e *Executor) applyApprovalOverride(step Step, stepResultID string, response approvalResponse) error {
 	// Every Test approval keeps its reason; db.StepResult.TestOverrideReason
 	// decides from the parked evidence whether it qualifies completion. Keep
@@ -2147,9 +2003,6 @@ func (e *Executor) applyApprovalOverride(step Step, stepResultID string, respons
 	return nil
 }
 
-// approvalVerifier binds step's ApprovalOverrideVerifier to the parked gate's
-// context, bounded by gateReconcileTimeout like the gate's other live reads, or
-// returns nil when the step has none.
 func (e *Executor) approvalVerifier(step Step, sctx *StepContext) func() (string, error) {
 	verifier, ok := step.(ApprovalOverrideVerifier)
 	if !ok {
@@ -2168,12 +2021,6 @@ func (e *Executor) approvalVerifier(step Step, sctx *StepContext) func() (string
 	}
 }
 
-// persistResponseDecision writes the durable decision a fix response reports,
-// using the same normalized selection the echo will show. It is called with the
-// gate still parked, so a failure leaves the gate exactly as it was and the
-// response unapplied. A response with no round to record against is refused
-// rather than echoed: an unrecorded decision is what the next gate reads as
-// "never decided".
 func (e *Executor) persistResponseDecision(step types.StepName, response approvalResponse, previous string) error {
 	if e.db == nil || e.waitingRoundID == "" {
 		return fmt.Errorf("record the response's decision: no round is in flight for step %s", step)
@@ -2203,24 +2050,6 @@ func (e *Executor) persistResponseDecision(step types.StepName, response approva
 	return nil
 }
 
-// restorePendingDecision folds the decision a re-parked round already recorded
-// into the response that re-decides that round, and reports the gate findings
-// it restored so the echo can name them once.
-//
-// persistResponseDecision makes a fix response's decision durable BEFORE its
-// dispatch. A daemon that stops in the window between that write and the fix
-// round comes back parked on the same round with the decision recorded and
-// never applied, so recovery parks that round again and the response that
-// answers it is the one that reaches the fixer. Without this, the accepted
-// selection's user-authored findings and per-finding instructions stay in the
-// saved record and nothing downstream ever reads them into a dispatch, even
-// though the daemon acknowledged them when they were made.
-//
-// previous is that record's payload filtered to its selection, so every item in
-// it was chosen by a response the daemon accepted. An addition the new response
-// re-states by content - a driver reissuing the same command after a restart -
-// is restored once, under the recorded identity, with the new response's
-// instructions for it, so the fixer never sees the same finding twice.
 func restorePendingDecision(response approvalResponse, previous, gate string) (approvalResponse, []string) {
 	if previous == "" {
 		return response, nil
@@ -2289,8 +2118,6 @@ func restorePendingDecision(response approvalResponse, previous, gate string) (a
 	return response, restoredGateIDs
 }
 
-// restoreRecordedNotes returns stated plus every recorded note for a finding
-// the response states no instruction about, in either stated or other.
 func restoreRecordedNotes(recorded, stated, other map[string]string) map[string]string {
 	if len(recorded) == 0 {
 		return stated
@@ -2307,23 +2134,6 @@ func restoreRecordedNotes(recorded, stated, other map[string]string) map[string]
 	return merged
 }
 
-// recordDeclinedRound persists an approve, skip, or abort resolution as a real
-// decision instead of leaving no trace.
-//
-// Before this existed, those three resolutions wrote no finding-level state at
-// all, so a round where the caller read a blocking finding and said "ship it as
-// is" was byte-identical to a round with no findings. Nothing downstream could
-// tell the two apart, and the only durable statement of what the change must do
-// stayed the user-intent prose - which is how a later step could re-derive and
-// re-apply the very change the caller had just declined.
-//
-// The decline is stored the way a partial selection already stores one: as the
-// complement of selected_finding_ids. Writing an explicit empty array with the
-// user_declined source is what makes "selected nothing" representable, since a
-// NULL column means "no decision was recorded".
-//
-// Best effort by design. This is advisory prompt context for later steps, so a
-// failed write degrades to today's behavior and must never fail the run.
 func (e *Executor) recordDeclinedRound(roundID, findingsJSON string, stepName types.StepName, roundNum int) {
 	if e == nil || e.db == nil || roundID == "" {
 		return
@@ -2400,8 +2210,6 @@ func (a *lifecycleAgent) Close() error {
 	return a.inner.Close()
 }
 
-// SupportsSessionResume forwards the wrapped adapter's session capability so
-// wrapping never hides it from the review loop's session manager.
 func (a *lifecycleAgent) SupportsSessionResume() bool {
 	return agent.SupportsSessionResume(a.inner)
 }
@@ -2457,11 +2265,6 @@ func pluralize(n int, singular, plural string) string {
 	return plural
 }
 
-// waitForApprovalOrReconcile blocks until a user action arrives, the parked
-// gate's external source of truth makes it obsolete, or the context is
-// cancelled. Reconciliation runs synchronously under a bounded child context,
-// so no watcher goroutine can outlive approval, cancellation, or shutdown.
-// The caller must set e.waiting and e.waitingStep before calling this method.
 func (e *Executor) waitForApprovalOrReconcile(ctx context.Context, step Step, sctx *StepContext, findings string, immediate bool) (approvalResponse, bool, error) {
 	defer func() {
 		e.mu.Lock()
@@ -2551,8 +2354,6 @@ func (e *Executor) waitForApprovalOrReconcile(ctx context.Context, step Step, sc
 	}
 }
 
-// claimGateReconciliationGuarded claims the gate unless the gate claim guard
-// defers it, in which case the gate stays parked.
 func (e *Executor) claimGateReconciliationGuarded() (claimed, deferred bool) {
 	if e.gateClaimGuard != nil {
 		release, ok := e.gateClaimGuard()
@@ -2577,10 +2378,6 @@ func (e *Executor) claimGateReconciliation() bool {
 	return true
 }
 
-// resumeApprovalGate asks a step whether its parked gate is now answerable.
-// Bounded and read-only, exactly like reconcileApprovalGate, and it never
-// completes a step - the action it returns is delivered as an ordinary gate
-// response.
 func (e *Executor) resumeApprovalGate(ctx context.Context, step Step, sctx *StepContext, findingsJSON string) (types.ApprovalAction, bool, error) {
 	resumer, ok := step.(ApprovalGateResumer)
 	if !ok {
@@ -2619,9 +2416,6 @@ func (e *Executor) reconcileApprovalGate(ctx context.Context, step Step, sctx *S
 	return reconciler.ReconcileApprovalGate(&copyCtx)
 }
 
-// failRun marks a run as failed and returns the error.
-// It accepts an optional context; if the context was cancelled with a cause,
-// the cause message is used as the run's error (more informative than "context canceled").
 func (e *Executor) failRun(run *db.Run, repo *db.Repo, err error, ctxs ...context.Context) error {
 	if errors.Is(err, ErrParkedAtShutdown) {
 		return err
@@ -2693,20 +2487,6 @@ func (e *Executor) completeRunWithStatus(run *db.Run, repo *db.Repo, status type
 	return nil
 }
 
-// terminalRunStatus decides which success status a finished run records.
-//
-// A run whose CI step took the opt-in release path (ci.release_after_checks_pass)
-// did not merely complete: it reached its validation verdict and deliberately
-// stopped observing the PR, so it records checks_passed. That keeps the outcome
-// honest - a caller can tell "checks passed, waiting on a human merge decision"
-// apart from a run that ended because the PR merged or closed - and keeps it
-// stable, because the merge decision was never this run's to observe.
-//
-// The verdict is read from the durable marker the release path stamps when it
-// completes the CI step, not inferred from readiness. A run that only monitored
-// the PR also records readiness, and can end with an open PR after a timeout
-// gate is approved, so readiness alone would claim the opt-in verdict for a run
-// whose default behaviour never changed.
 func (e *Executor) terminalRunStatus(run *db.Run) (types.RunStatus, error) {
 	if run == nil {
 		return "", fmt.Errorf("cannot complete a nil run")
@@ -2839,9 +2619,6 @@ func (e *Executor) emitRunEvent(eventType ipc.EventType, run *db.Run, repo *db.R
 	e.onEvent(event)
 }
 
-// completionOverrideReasons derives the run-level CI override and Test
-// exception reasons from one read of the step rows, the same way
-// daemon.runToInfo does.
 func completionOverrideReasons(steps []*db.StepResult) (ciReason, testReason string) {
 	for _, s := range steps {
 		if ciReason == "" && s.StepName == types.StepCI && s.OverrideReason != nil && *s.OverrideReason != "" {
@@ -3003,18 +2780,6 @@ func selectedFindingCount(raw string, ids []string) int {
 	return findingsCount(raw)
 }
 
-// ReviewConversationDir is where a run's review conversation files live, or
-// empty when this run has no conversation at all.
-//
-// The executor is the single owner of that answer, for the same reason it owns
-// runEvidenceDir: the path depends on the run's EFFECTIVE config
-// (review.conversation and test.evidence.local_root), which only the executor
-// holds. ReviewConversationAnswerDir below builds on it, and tests in other
-// packages resolve a run's conversation through it, rather than re-deriving it
-// from global config and drifting from where the reviewer was actually told to
-// write, or from whether it was told at all. The daemon's answer handler asks
-// ReviewConversationAnswerDir instead, because an answer may also be accepted
-// for a conversation already on disk.
 func (e *Executor) ReviewConversationDir(runID string) string {
 	if !e.ReviewConversationEnabled() {
 		return ""
@@ -3022,26 +2787,10 @@ func (e *Executor) ReviewConversationDir(runID string) string {
 	return reviewqa.Dir(e.runEvidenceDir(runID))
 }
 
-// ReviewConversationEnabled reports whether this run's effective config turns
-// the review conversation on. The daemon's answer handler asks so it can
-// refuse an answer by naming the setting that would accept one, rather than
-// reporting a missing directory.
 func (e *Executor) ReviewConversationEnabled() bool {
 	return e.config != nil && e.config.Review.Conversation
 }
 
-// answerRoundCarriedFindings is the outstanding set a finalize turn must
-// re-adjudicate, and empty on every other round type.
-//
-// The reviewer's own question rows are dropped: the carried set is taken before
-// the next round's dropReviewQuestionFindingsJSON runs, so it always still
-// carries the question-<id> row whose emission is why the gate parked. Asked to
-// re-adjudicate one, a turn that complies echoes it back through a findings
-// schema with no category field, so the echo is uncategorised, survives every
-// later drop, re-parks the gate as an ordinary ask-user warning, and instructs
-// an answer that only ever records a duplicate. A question is re-emitted from
-// the live conversation by every review turn and is resolved by its answer, so
-// nothing is lost by keeping it out of the prompt.
 func answerRoundCarriedFindings(answering bool, outstanding string) string {
 	if !answering {
 		return ""
@@ -3049,23 +2798,6 @@ func answerRoundCarriedFindings(answering bool, outstanding string) string {
 	return dropReviewQuestionFindingsJSON(outstanding)
 }
 
-// ReviewConversationAnswerDir is where an answer for this run may be appended,
-// or empty when no answer may be.
-//
-// It is the executor-side half of steps.reviewConversationReadDir and must stay
-// in step with it: one flag was answering two questions, and keying the answer
-// path on "may the reviewer ASK" is what stranded a parked run's questions when
-// review.conversation was turned off - or when a trusted-config fetch failed,
-// which recovery resolves the same way - between the ask and the answer.
-//
-// Opening this alone is not enough and was tried once: the review step also has
-// to READ the conversation, or the answer lands on disk, the gate is released,
-// and the finalize turn runs a plain review that never sees it while the CLI
-// reports the reviewer resumed. Both sides key on the file for that reason.
-//
-// The off-state guarantee is untouched: a repository that never enabled the
-// conversation has no questions file, so this returns "" and the answer is
-// refused by naming the setting exactly as before.
 func (e *Executor) ReviewConversationAnswerDir(runID string) string {
 	if e.ReviewConversationEnabled() {
 		return e.ReviewConversationDir(runID)

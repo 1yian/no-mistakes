@@ -23,8 +23,6 @@ func TestMergeFindingsJSON_KeepsDistinctFindingsWithSameAutoID(t *testing.T) {
 	}
 }
 
-// Different descriptions do not fingerprint-collide; cover both the issue's
-// sketch and the equal-description case that actually exercises deduplication.
 func TestMergeFindingsJSON_UserAdditionStaysSelected(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

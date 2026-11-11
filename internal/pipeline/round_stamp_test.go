@@ -10,7 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// roundProbeAgent records the round every invocation arrived with.
 type roundProbeAgent struct {
 	name   string
 	rounds []int
@@ -23,11 +22,6 @@ func (a *roundProbeAgent) Run(_ context.Context, opts agent.RunOpts) (*agent.Res
 	return &agent.Result{Output: json.RawMessage(`{}`)}, nil
 }
 
-// TestExecutorStampsRoundSoReviewRolesCanHandOver is the behavioral regression
-// for per-round review-role routing. The executor is the only component that
-// knows which round an invocation belongs to; before it stamped that round, a
-// configured later-round role could never take over because every invocation
-// reached the router with no round at all.
 func TestExecutorStampsRoundSoReviewRolesCanHandOver(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	early := &roundProbeAgent{name: "early-fixer"}

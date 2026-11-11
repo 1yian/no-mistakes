@@ -66,9 +66,6 @@ func TestAttributeOOMKillLeavesAPlainFailureWithoutACounterRise(t *testing.T) {
 	}
 }
 
-// TestOOMKillAttributesTheAllocatingCommandAndSparesItsNeighbor runs under a
-// scope with OOMPolicy=continue. The allocating command is attributed and the
-// neighbor command, plus this process, keep running.
 func TestOOMKillAttributesTheAllocatingCommandAndSparesItsNeighbor(t *testing.T) {
 	if os.Getenv("NM_OOM_INNER") == "1" {
 		runOOMNeighborInner(t)

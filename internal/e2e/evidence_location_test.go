@@ -12,21 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestTestEvidenceLivesUnderAppRootNotSharedTemp is the end-to-end guard for
-// the whole relocation, and the test that would have caught the original
-// defect.
-//
-// The daemon used to build its evidence root as os.TempDir()/no-mistakes-evidence.
-// Under a service unit TMPDIR is unset, so on Linux that resolved to the shared
-// /tmp - a systemd tmpfs on current Ubuntu, meaning every screenshot the test
-// step gathered was held in RAM. Nothing in this program ever removed it
-// either: the directory was a fixed name that accumulated one subdirectory per
-// run until an OS timer or a reboot happened to clear it.
-//
-// This drives a real gate push through the real daemon and asserts the three
-// things that together fix that, at the boundary a user actually experiences:
-// the run names an evidence directory under NM_HOME, every agent it launches is
-// steered to that same directory, and the shared temp location is never touched.
 func TestTestEvidenceLivesUnderAppRootNotSharedTemp(t *testing.T) {
 	// The legacy root is a shared machine-wide path that unrelated activity may
 	// already have created, so the assertion below is scoped to this run's own
@@ -100,11 +85,6 @@ func TestTestEvidenceLivesUnderAppRootNotSharedTemp(t *testing.T) {
 	}
 }
 
-// TestRunCleanupLeavesNoEmptyEvidenceDirectory is the litter half of the fix,
-// end to end. This scenario's agent reports no artifacts, so the run's evidence
-// directory is created and then left empty - which before the fix meant one
-// permanent directory per run forever. On a real machine 823 of 876 accumulated
-// directories were exactly this.
 func TestRunCleanupLeavesNoEmptyEvidenceDirectory(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: cleanReviewScenario(t)})
 	if out, err := h.Run("init"); err != nil {

@@ -12,18 +12,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// pipelineOwnedPRIntent is the reported class of acceptance criterion: a PR
-// outcome this same pipeline run owns later (push + PR steps), not something
-// source review can verify pre-push.
 const pipelineOwnedPRIntent = `REQUIRED: Open PR A unmerged`
 
-// deferredPRFinding is the invalid pre-push finding shape reported in the bug:
-// the reviewer treats "PR does not exist yet" as an intent contradiction.
 const deferredPRFinding = `The required criterion says "Open PR A unmerged," but the PR list returned zero PRs and the target commit is not present on a remote branch. PR A still needs to be opened without merging.`
 
-// writePipelineOwnedPRScenario scripts a review agent that emits the deferred
-// pipeline-owned PR finding when the review prompt matches, while every other
-// step stays clean so push/PR/CI can still complete.
 func writePipelineOwnedPRScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "pipeline-owned-pr-scenario.yaml")
@@ -112,19 +104,11 @@ func writeExternalPRScenario(t *testing.T) string {
 	return path
 }
 
-// yamlDoubleQuoted produces a YAML double-quoted scalar for a multi-line-safe
-// single-line description string.
 func yamlDoubleQuoted(s string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 	return `"` + replacer.Replace(s) + `"`
 }
 
-// TestReviewPipelineOwnedPRCriterionDoesNotPark proves the production path:
-// axi run with an authoritative intent that requires a pipeline-owned PR
-// outcome, a review agent that emits the reported "PR missing" finding, and
-// stage ordering that still runs push/PR after source review. Before the fix
-// this parked at review; after, the deferred finding is stripped and the run
-// proceeds through PR ownership.
 func TestReviewPipelineOwnedPRCriterionDoesNotPark(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: writePipelineOwnedPRScenario(t)})
 	parentURL := "https://github.com/example/no-mistakes.git"
@@ -246,8 +230,6 @@ func hasGHInvocation(invocations []ghStubInvocation, prefix ...string) bool {
 	return false
 }
 
-// TestReviewExternalPRLifecycleStillParks is the negative control: a finding
-// about a pre-existing external PR is not suppressed at pre-push review.
 func TestReviewExternalPRLifecycleStillParks(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: writeExternalPRScenario(t)})
 

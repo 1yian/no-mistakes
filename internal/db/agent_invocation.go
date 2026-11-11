@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// Agent invocation session modes recorded for local performance telemetry.
 const (
 	InvocationModeCold     = "cold"     // no durable session involved
 	InvocationModeStarted  = "started"  // began a new durable session
@@ -13,10 +12,6 @@ const (
 	InvocationModeFallback = "fallback" // fresh session after a failed resume
 )
 
-// Fallback reasons classify why a resume failed and forced a fresh-session
-// retry. They are low-cardinality and content-free (never the error text, which
-// can embed agent output), so a silent-fallback regression is both countable
-// and diagnosable from telemetry alone.
 const (
 	FallbackReasonTransient   = "transient"   // retryable provider/transport error
 	FallbackReasonParse       = "parse"       // could not parse the resumed output
@@ -26,99 +21,47 @@ const (
 	FallbackReasonOther       = "other"       // anything else
 )
 
-// AgentInvocation is one agent process invocation's local performance
-// evidence. It stores identity, timing, session mode, bounded activity counts,
-// and token usage only - never prompts, model outputs, diffs, raw command
-// arguments, or credentials - and it stays local: no per-invocation record is
-// ever sent to remote telemetry.
-//
-// Fields typed as pointers are nullable: a nil value means the datum was not
-// reported for this invocation and is recorded as unknown, never a fabricated
-// zero. Pre-existing rows created before these columns existed read back as
-// nil, so they too report unknown honestly.
 type AgentInvocation struct {
-	ID       string
-	RunID    string
-	StepName string
-	Round    int
-	// Purpose is the pipeline duty served: review, review-fix,
-	// test-evidence, housekeeping, document, lint, pr, intent, or a
-	// step-derived default.
-	Purpose         string
-	Agent           string
-	Model           string
-	ConfiguredModel *string
-	// ModelProvider is the provider that served the model (openai, anthropic,
-	// ...). Nil when the adapter cannot report it.
-	ModelProvider *string
-	// SessionMode is one of the InvocationMode constants.
-	SessionMode string
-	// SessionKey is a privacy-safe fingerprint (truncated SHA-256) of the
-	// adapter-native session identity, so session reuse is auditable without
-	// storing the raw resumable identity in a second place.
-	SessionKey string
-	// FallbackReason classifies why a fallback invocation happened (one of the
-	// FallbackReason constants). Nil unless SessionMode is fallback.
-	FallbackReason  *string
-	StartedAt       int64
-	CompletedAt     int64
-	DurationMS      int64
-	ExitStatus      string // ok | error | cancelled
-	FailureCategory string // parse | exit | spawn | cancelled | other ("" when ok)
-	// InputTokens, OutputTokens, and CacheReadTokens are the adapter's raw
-	// usage counters. Nil when the adapter did not report usage, including a
-	// failed or cancelled invocation that never produced a usage event.
-	InputTokens     *int
-	OutputTokens    *int
-	CacheReadTokens *int
-	// CacheCreationTokens is the provider's cache-creation cost. Nil when the
-	// provider does not surface it (codex), distinguishing "not reported" from a
-	// genuine zero.
-	CacheCreationTokens *int
-	// FreshInputTokens is InputTokens minus CacheReadTokens: the non-cached
-	// portion of this invocation's input. Nil when no usage was reported.
-	FreshInputTokens *int
-	// ReasoningTokens is the model's hidden-reasoning output tokens, when the
-	// provider reports them. Nil when not reported.
-	ReasoningTokens *int
-	// SubprocessWaitMS is the wall-clock this invocation spent inside tool
-	// subprocesses; DurationMS minus it is model/reasoning time. Nil when the
-	// adapter reported no activity metrics.
-	SubprocessWaitMS *int64
-	// Delta* are the per-round token amounts for resumed durable sessions whose
-	// raw counters are cumulative: current cumulative minus the same session's
-	// prior cumulative. For cold/started/fallback rows they equal the raw
-	// counters. Nil when no usage was reported.
+	ID                   string
+	RunID                string
+	StepName             string
+	Round                int
+	Purpose              string
+	Agent                string
+	Model                string
+	ConfiguredModel      *string
+	ModelProvider        *string
+	SessionMode          string
+	SessionKey           string
+	FallbackReason       *string
+	StartedAt            int64
+	CompletedAt          int64
+	DurationMS           int64
+	ExitStatus           string // ok | error | cancelled
+	FailureCategory      string // parse | exit | spawn | cancelled | other ("" when ok)
+	InputTokens          *int
+	OutputTokens         *int
+	CacheReadTokens      *int
+	CacheCreationTokens  *int
+	FreshInputTokens     *int
+	ReasoningTokens      *int
+	SubprocessWaitMS     *int64
 	DeltaInputTokens     *int
 	DeltaOutputTokens    *int
 	DeltaCacheReadTokens *int
-	// ModelRoundtrips is the count of model-authored items (messages + tool
-	// calls) - a live-stream proxy for productive model round-trips. Nil when
-	// the adapter reported no activity metrics.
-	ModelRoundtrips *int
-	// ToolCalls is the count of whole tool invocations. Nil when unknown.
-	ToolCalls *int
-	// Tool*Calls is the bounded per-category sub-command histogram. Because a
-	// compound command counts once per sub-command, their sum can exceed
-	// ToolCalls. Nil when the adapter reported no activity metrics.
-	ToolWaitCalls     *int
-	ToolTestLintCalls *int
-	ToolEditCalls     *int
-	ToolReadCalls     *int
-	ToolGitCalls      *int
-	ToolOtherCalls    *int
-	// WorkloadFiles and WorkloadLines record the bounded size of the change this
-	// invocation worked over. Nil for invocations with no meaningful workload
-	// (or steps that do not supply it).
-	WorkloadFiles *int
-	WorkloadLines *int
-	// FindingCount is the number of findings in this invocation's structured
-	// output. Nil when the output is not findings-shaped.
-	FindingCount *int
+	ModelRoundtrips      *int
+	ToolCalls            *int
+	ToolWaitCalls        *int
+	ToolTestLintCalls    *int
+	ToolEditCalls        *int
+	ToolReadCalls        *int
+	ToolGitCalls         *int
+	ToolOtherCalls       *int
+	WorkloadFiles        *int
+	WorkloadLines        *int
+	FindingCount         *int
 }
 
-// agentInvocationColumns is the canonical column order shared by insert and
-// select so the placeholder list and scan destinations cannot drift apart.
 const agentInvocationColumns = `id, run_id, step_name, round, purpose, agent, model, model_provider, configured_model,
 	session_mode, session_key, fallback_reason,
 	started_at, completed_at, duration_ms, subprocess_wait_ms, exit_status, failure_category,
@@ -129,7 +72,6 @@ const agentInvocationColumns = `id, run_id, step_name, round, purpose, agent, mo
 	tool_wait_calls, tool_test_lint_calls, tool_edit_calls, tool_read_calls, tool_git_calls, tool_other_calls,
 	workload_files, workload_lines, finding_count`
 
-// agentInvocationInsertPlaceholders has one '?' per agentInvocationColumns entry.
 const agentInvocationInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?,
 	?, ?, ?,
 	?, ?, ?, ?, ?, ?,
@@ -140,8 +82,6 @@ const agentInvocationInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?,
 	?, ?, ?, ?, ?, ?,
 	?, ?, ?`
 
-// InsertAgentInvocation records one completed agent invocation. Nil pointer
-// fields are stored as SQL NULL (database/sql dereferences non-nil pointers).
 func (d *DB) InsertAgentInvocation(inv AgentInvocation) (*AgentInvocation, error) {
 	inv.ID = newID()
 	_, err := d.sql.Exec(
@@ -163,10 +103,6 @@ func (d *DB) InsertAgentInvocation(inv AgentInvocation) (*AgentInvocation, error
 	return &inv, nil
 }
 
-// HasAgentInvocationPurpose reports whether a step recorded an invocation with
-// the given purpose. Presentation surfaces use this persisted evidence to
-// identify work shared across logical pipeline steps without changing the
-// pipeline's execution model.
 func (d *DB) HasAgentInvocationPurpose(runID, stepName, purpose string) (bool, error) {
 	columns, err := d.readProjection("agent_invocations", "run_id, step_name, purpose", new(string), new(string), new(string))
 	if err != nil {
@@ -186,7 +122,6 @@ func (d *DB) HasAgentInvocationPurpose(runID, stepName, purpose string) (bool, e
 	return found, nil
 }
 
-// GetAgentInvocationsByRun returns a run's invocations in execution order.
 func (d *DB) GetAgentInvocationsByRun(runID string) ([]AgentInvocation, error) {
 	rows, err := d.sql.Query(
 		`SELECT `+agentInvocationColumns+` FROM agent_invocations WHERE run_id = ? ORDER BY started_at, id`,
@@ -230,12 +165,6 @@ func scanAgentInvocation(row scanner) (AgentInvocation, error) {
 	return inv, nil
 }
 
-// LatestSessionCumulative returns the most recent prior invocation's cumulative
-// token counters for the same run and non-empty session key. It is how the
-// pipeline computes a resumed session's per-round delta (current cumulative
-// minus this prior). found is false when the session has no prior invocation
-// (cold, started, or a fresh fallback), in which case the current counters are
-// already per-round.
 func (d *DB) LatestSessionCumulative(runID, sessionKey string) (input, output, cacheRead int, found bool) {
 	if sessionKey == "" {
 		return 0, 0, 0, false
@@ -257,9 +186,6 @@ func (d *DB) LatestSessionCumulative(runID, sessionKey string) (input, output, c
 	return int(in.Int64), int(out.Int64), int(cache.Int64), true
 }
 
-// AgentInvocationAggregate summarizes invocations for one purpose, powering
-// the read-only performance report. Nullable sums preserve unknown when no row
-// reported that metric. MetricsRows reports activity-metric coverage.
 type AgentInvocationAggregate struct {
 	Purpose             string
 	Count               int
@@ -285,13 +211,9 @@ type AgentInvocationAggregate struct {
 	ToolReadCalls       *int64
 	ToolGitCalls        *int64
 	ToolOtherCalls      *int64
-	// MetricsRows counts invocations in the group whose adapter reported
-	// activity metrics (model_roundtrips is non-NULL).
-	MetricsRows int
+	MetricsRows         int
 }
 
-// AgentInvocationAggregates returns per-purpose aggregates across all runs,
-// largest total duration first.
 func (d *DB) AgentInvocationAggregates() ([]AgentInvocationAggregate, error) {
 	rows, err := d.sql.Query(`
 		SELECT purpose,
@@ -347,8 +269,6 @@ func (d *DB) AgentInvocationAggregates() ([]AgentInvocationAggregate, error) {
 	return aggregates, rows.Err()
 }
 
-// RunInvocationSummary is the low-cardinality per-run rollup used for the
-// bounded terminal remote summary (counts only - no ids, paths, or models).
 type RunInvocationSummary struct {
 	Count           int
 	Resumed         int
@@ -356,7 +276,6 @@ type RunInvocationSummary struct {
 	TotalDurationMS int64
 }
 
-// AgentInvocationSummaryForRun returns the run's invocation rollup.
 func (d *DB) AgentInvocationSummaryForRun(runID string) (RunInvocationSummary, error) {
 	var s RunInvocationSummary
 	err := d.sql.QueryRow(`

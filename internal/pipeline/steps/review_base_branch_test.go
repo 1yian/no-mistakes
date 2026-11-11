@@ -12,11 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// setupIntegrationTargetRepo builds the explicit-target shape: main (1 file)
-// -> integration (+2 files) -> feature (+1 file), with HEAD on feature and a
-// hermetic origin (the worktree itself, via ensureHermeticOrigin) so base
-// resolution fetches stay local. Returns workDir, mainTip, integrationTip,
-// headSHA.
 func setupIntegrationTargetRepo(t *testing.T) (workDir, mainTip, integrationTip, headSHA string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -55,13 +50,6 @@ func cleanFindingsCovering(t *testing.T, paths ...string) []byte {
 	return findingsJSON
 }
 
-// TestReviewStep_ScopesAgainstRecordedExplicitTarget pins the review-base fix:
-// when the run records an explicit integration target (runs.pr_base_branch),
-// the review step must scope against that target - the same effective base the
-// rebase, PR, and CI steps use - not the repository default branch. Scoping
-// against main here would draft the integration branch's files into the
-// review (3 reviewable files instead of 1) and park the head for approval on
-// coverage the reviewer was never asked to produce.
 func TestReviewStep_ScopesAgainstRecordedExplicitTarget(t *testing.T) {
 	t.Parallel()
 	dir, mainTip, integrationTip, headSHA := setupIntegrationTargetRepo(t)
@@ -102,9 +90,6 @@ func TestReviewStep_ScopesAgainstRecordedExplicitTarget(t *testing.T) {
 	}
 }
 
-// TestReviewStep_ScopesAgainstDefaultBranchWithoutExplicitTarget guards the
-// fallback: with no recorded explicit target, review scoping is unchanged and
-// still covers the full branch delta against the repository default branch.
 func TestReviewStep_ScopesAgainstDefaultBranchWithoutExplicitTarget(t *testing.T) {
 	t.Parallel()
 	dir, mainTip, _, headSHA := setupIntegrationTargetRepo(t)

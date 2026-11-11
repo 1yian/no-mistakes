@@ -2,8 +2,6 @@ package config
 
 import "testing"
 
-// ci.rebase_behind is off unless asked for, the trusted repository value wins
-// over the operator's in both directions, and a pushed branch cannot set it.
 func TestCIRebaseBehind_OffByDefaultAndTrustedOnly(t *testing.T) {
 	t.Parallel()
 	const on = "ci:\n  rebase_behind: true\n"

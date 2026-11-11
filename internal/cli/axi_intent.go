@@ -11,15 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Intent travels as one base64 push option. Git's pkt-line payload is at most
-// 65516 bytes (https://git-scm.com/docs/gitprotocol-common#_pkt_line_format).
-// Round down to complete base64 quanta after accounting for the option prefix.
 const maxAxiRunIntentBytes = (65516 - len(intentPushOptionPrefix)) / 4 * 3
 
-// resolveAxiRunIntent runs before opening run resources. Presence, not value,
-// selects the transport: explicit empty input must never become inference or
-// an implicit reattach. With neither flag, leave the active-run lookup to decide
-// whether intent is required, without touching stdin.
 func resolveAxiRunIntent(cmd *cobra.Command, intent, file string) (string, error) {
 	hasIntent := cmd.Flags().Changed("intent")
 	hasFile := cmd.Flags().Changed("intent-file")
@@ -72,9 +65,6 @@ func readAxiIntent(r io.Reader) ([]byte, error) {
 	return validateAxiIntentSize(data)
 }
 
-// readAxiIntentContext keeps stdin-backed AXI inputs within the command's
-// cancellation and wait deadline. Closing a closable reader is what unblocks
-// an in-flight pipe read when the context ends.
 func readAxiIntentContext(ctx context.Context, r io.Reader) ([]byte, error) {
 	type result struct {
 		data []byte
@@ -114,8 +104,6 @@ func readAxiIntentFile(path string) ([]byte, error) {
 	return readAxiRegularFile(path, "intent", readAxiIntent)
 }
 
-// readAxiRegularFile reads a caller-named input file with read, which owns the
-// size limit. kind names the input in refusals.
 func readAxiRegularFile(path, kind string, read func(io.Reader) ([]byte, error)) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err != nil {

@@ -12,31 +12,17 @@ import (
 	"time"
 )
 
-// groupProbeInterval is the cadence ShellCommandGroupActive re-probes a
-// command's process group or job on while its settle window runs.
 const groupProbeInterval = 25 * time.Millisecond
 
-// groupMemberReportLimit bounds how many surviving members the active
-// verdict names. A pathological agent could leave dozens of children; the
-// error only needs enough to identify them.
 const groupMemberReportLimit = 4
 
-// groupMemberCommandLimit bounds each reported member's command text so the
-// error stays a single readable line.
 const groupMemberCommandLimit = 120
 
-// groupMember names one process still inside a command's process group or
-// job after the leader exited. command is the member's command line on Unix
-// or its image path on Windows; it is empty when the platform probe could
-// not read it.
 type groupMember struct {
 	pid     int
 	command string
 }
 
-// formatGroupMembers renders the surviving members an active verdict names:
-// "pid 39456 (sleep 1.2), pid 66195", bounded to groupMemberReportLimit with
-// a trailing "and N more" when the list was longer.
 func formatGroupMembers(members []groupMember) string {
 	names := make([]string, 0, min(len(members), groupMemberReportLimit)+1)
 	for i, m := range members {
@@ -63,12 +49,6 @@ type shellOutputPipe struct {
 	dst    io.Writer
 }
 
-// RunShellCommand starts cmd with StartShellCommand, waits for it, and
-// terminates any surviving command-group descendants.
-//
-// Use this instead of cmd.Run after ConfigureShellCommand or
-// ConfigureCooperativeShellCommand so clean exits and ordinary errors get the
-// same process-tree cleanup as context cancellation.
 func RunShellCommand(cmd *exec.Cmd) error {
 	pipes, err := prepareShellOutputPipes(cmd)
 	if err != nil {
@@ -85,9 +65,6 @@ func RunShellCommand(cmd *exec.Cmd) error {
 	return AttributeOOMKill(oomBase, oomOK, cmd.Wait())
 }
 
-// OutputShellCommand is the process-tree-cleaning counterpart to cmd.Output.
-// It requires cmd.Stdout to be unset, captures stdout, and delegates lifecycle
-// cleanup to RunShellCommand.
 func OutputShellCommand(cmd *exec.Cmd) ([]byte, error) {
 	if cmd.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")
@@ -98,9 +75,6 @@ func OutputShellCommand(cmd *exec.Cmd) ([]byte, error) {
 	return stdout.Bytes(), err
 }
 
-// CombinedOutputShellCommand is the process-tree-cleaning counterpart to
-// cmd.CombinedOutput. It requires cmd.Stdout and cmd.Stderr to be unset,
-// captures both streams, and delegates lifecycle cleanup to RunShellCommand.
 func CombinedOutputShellCommand(cmd *exec.Cmd) ([]byte, error) {
 	if cmd.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")

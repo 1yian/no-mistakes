@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// evidenceReadingResumer is an ApprovalGateResumer with ReviewStep's shape: it
-// resolves the run's evidence directory from the StepContext and can only
-// resume once it has one, exactly as ReviewStep.ResumeApprovalGate resolves the
-// conversation directory from reviewqa.Dir(sctx.EvidenceDir).
 type evidenceReadingResumer struct {
 	name      types.StepName
 	fn        func(sctx *StepContext) (*StepOutcome, error)
@@ -48,19 +44,6 @@ func (s *evidenceReadingResumer) evidenceDirs() []string {
 	return append([]string(nil), s.seen...)
 }
 
-// TestExecutor_RecoveredGateResumerReceivesTheRunsEvidenceDir drives the
-// DAEMON RESTART path, which is the only path that got this wrong and the only
-// path a gate resumer exists for: a park lasts tens of minutes to hours, so a
-// restart inside that window is precisely the window ReviewStep's resumer
-// closes.
-//
-// Resume builds its own StepContext for the recovered gate rather than reusing
-// executeStep's, and that literal omitted EvidenceDir. A resumer that reads the
-// run's evidence then resolves an empty path and declines on every tick,
-// silently - it returns (false, nil) for a missing directory exactly as it does
-// for a conversation with nothing to resume - so the recovered gate parks
-// forever with no error anywhere. The live loop sets EvidenceDir, so a test
-// driving Execute passes on the broken code and proves nothing.
 func TestExecutor_RecoveredGateResumerReceivesTheRunsEvidenceDir(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {

@@ -8,21 +8,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Push is repository publication policy, sourced only from trusted config.
 type Push struct {
 	ExternalPublisher *ExternalPublisher `yaml:"external_publisher"`
 }
 
-// ExternalPublisher reserves publication when any literal path exists in the
-// proposed commit. The repository supplies the explanation and delivery route.
 type ExternalPublisher struct {
 	Paths  []string `yaml:"paths"`
 	Reason string   `yaml:"reason"`
 	Remedy string   `yaml:"remedy"`
 }
 
-// UnmarshalYAML rejects misspelled policy keys rather than silently permitting
-// publication. Other repository settings retain their existing parser behavior.
 func (p *Push) UnmarshalYAML(node *yaml.Node) error {
 	type plain Push
 	var parsed plain
@@ -60,7 +55,6 @@ func knownPushFields(node *yaml.Node, names ...string) error {
 	return nil
 }
 
-// Validate also protects publication callers constructing Config directly.
 func (p Push) Validate() error {
 	gate := p.ExternalPublisher
 	if gate == nil {

@@ -16,7 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// antigravityAgent spawns the agy CLI for each invocation.
 type antigravityAgent struct {
 	subprocessContext
 	bin       string
@@ -27,14 +26,8 @@ func (a *antigravityAgent) Name() string { return "antigravity" }
 
 func (a *antigravityAgent) ReportsAgentAttempts() bool { return true }
 
-// SupportsSessionResume reports antigravity's durable-session capability:
-// stream-json events carry the conversation identity, and
-// `--conversation <id>` reopens that conversation headless.
 func (a *antigravityAgent) SupportsSessionResume() bool { return true }
 
-// SupportsSessionProvider accepts sessions minted under either spelling of
-// the provider name, so a session recorded before a config rename still
-// resumes.
 func (a *antigravityAgent) SupportsSessionProvider(provider string) bool {
 	return provider == "antigravity" || provider == "agy"
 }
@@ -67,8 +60,6 @@ func (a *antigravityAgent) buildArgs(prompt, schemaPath, sessionID string) []str
 	return args
 }
 
-// antigravityUserSetPrintTimeout reports whether extraArgs already specifies
-// --print-timeout, in which case buildArgs does not override it.
 func antigravityUserSetPrintTimeout(extraArgs []string) bool {
 	for i, arg := range extraArgs {
 		if arg == "--print-timeout" || strings.HasPrefix(arg, "--print-timeout=") {
@@ -182,8 +173,6 @@ type antigravityParser struct {
 	errorMessage string
 }
 
-// Typed view of `agy --output-format stream-json`. One JSON object per line;
-// every event names the conversation serving it.
 type agyStreamEvent struct {
 	Event          string         `json:"event"`
 	ConversationID string         `json:"conversation_id"`
@@ -224,8 +213,6 @@ type agyFunctionArg struct {
 	Arguments string `json:"arguments,omitempty"`
 }
 
-// agyToolInfo carries the invoked tool's parameters either as a pre-rendered
-// JSON string or as a structured value, so Parameters stays raw until render.
 type agyToolInfo struct {
 	Parameters json.RawMessage `json:"parameters,omitempty"`
 }
@@ -241,9 +228,6 @@ type agyResultData struct {
 	Usage            *agyUsageData   `json:"usage,omitempty"`
 }
 
-// Every counter is a pointer so absence of a key stays distinguishable
-// from a provider-reported zero; only keys actually present in a payload
-// overwrite the accumulated usage.
 type agyUsageData struct {
 	InputTokens         *int `json:"input_tokens"`
 	OutputTokens        *int `json:"output_tokens"`
@@ -253,9 +237,6 @@ type agyUsageData struct {
 	TotalTokens         *int `json:"total_tokens"`
 }
 
-// agyPayloadText renders a raw JSON payload for the stream: a JSON string is
-// unwrapped verbatim; any other value is compacted in place, preserving the
-// field order agy emitted.
 func agyPayloadText(raw json.RawMessage) (string, bool) {
 	if len(raw) == 0 {
 		return "", false
@@ -400,14 +381,6 @@ func (p *antigravityParser) finalText() string {
 	}
 }
 
-// applyAgyUsage merges an agy usage payload into TokenUsage: each counter
-// overwrites only when this payload reports it, so the last reported value
-// wins per field and absent keys never regress earlier values to zero.
-// Presence of thinking_tokens or cache_creation_tokens, not their values,
-// sets the matching Reported flag so genuine zeros stay distinguishable
-// from an adapter that never exposes the field. cache_creation_tokens is
-// honored only on the terminal result payload, matching the historical
-// step_update handling.
 func applyAgyUsage(target *TokenUsage, src *agyUsageData, includeCacheCreation bool) {
 	if src == nil {
 		return

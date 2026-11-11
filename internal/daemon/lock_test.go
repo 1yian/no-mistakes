@@ -71,8 +71,6 @@ func TestAcquireSingletonLock_ReportsExistingHolder(t *testing.T) {
 	}
 }
 
-// TestSingletonLock_ReleaseNilSafe verifies Release is a safe no-op on a nil
-// receiver, matching the pattern used for a failed-acquire defer.
 func TestSingletonLock_ReleaseNilSafe(t *testing.T) {
 	var lock *singletonLock
 	lock.Release() // must not panic

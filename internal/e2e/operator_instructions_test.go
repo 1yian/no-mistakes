@@ -22,12 +22,6 @@ const (
 	testStepMarker         = "You are validating a code change by driving the product itself."
 )
 
-// TestOperatorInstructionsJourney drives the real daemon with review,
-// documentation, and live-validation guidance that lives only in the
-// operator's global config: a global rule for every repository and a
-// repository_overrides entry for this one. Each reaches its gate agent in a
-// labeled section ahead of the repository's own trusted rule, which still
-// applies.
 func TestOperatorInstructionsJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithPathInstructions)

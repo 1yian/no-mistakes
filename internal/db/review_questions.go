@@ -6,22 +6,13 @@ import (
 	"time"
 )
 
-// MaxBranchReviewAnswers bounds how many settled review questions are loaded
-// for one branch. Every loaded answer is rendered verbatim into a review
-// prompt, so this is a prompt-budget ceiling, not a correctness limit: a
-// branch with a longer conversation carries its most recent answers.
 const MaxBranchReviewAnswers = 40
 
-// ReviewAnswer is one question a review turn asked on this branch and the
-// answer a human gave it.
 type ReviewAnswer struct {
 	RepoID     string
 	Branch     string
 	QuestionID string
 	RunID      string
-	// AskOrdinal is 1-based: the Nth time this question id was asked in this
-	// run. It is part of the key because an agent reuses an id, and each ask
-	// is a different question a human answered separately.
 	AskOrdinal int
 	Question   string
 	Options    []string
@@ -33,30 +24,6 @@ type ReviewAnswer struct {
 	UpdatedAt  int64
 }
 
-// RecordReviewAnswer persists one answered review question for a branch.
-//
-// The write is an upsert keyed by (repo, branch, question, run, ask): a
-// corrected answer to the SAME ask replaces the earlier one rather than
-// accumulating, which matches the file protocol where the last answers.ndjson
-// line for an ask wins.
-//
-// run_id is part of the key because question ids are chosen by the agent and
-// are unique only by accident. Without it, run B's "q1" overwrote run A's
-// settled "q1" on the same branch, so the settled-questions section lost A's
-// decision and the reviewer re-asked it - and the surviving row paired the new
-// question text with the old answer, recording an exchange that never
-// happened. The answer is still about the branch and still reaches every later
-// cold reviewer; what is per-run is the identity of the question asked, not the
-// scope of its answer.
-//
-// ask_ordinal is in the key for the same reason one level down, WITHIN a run: a
-// cold rereview in a fix round is shown only the still-open questions, so it
-// starts numbering at q1 again for a genuinely different question, and
-// reviewqa.Load correctly treats that as a re-ask rather than a correction. The
-// store has to agree, or answering the second q1 replaced the first's row and a
-// human's decision vanished from the do-not-re-raise set and from the PR body,
-// silently - which also contradicted the design doc's promise that nothing
-// deletes these rows.
 func (d *DB) RecordReviewAnswer(a ReviewAnswer) error {
 	if a.RepoID == "" || a.Branch == "" || a.QuestionID == "" {
 		return fmt.Errorf("record review answer: repo, branch and question id are required")
@@ -103,9 +70,6 @@ func (d *DB) RecordReviewAnswer(a ReviewAnswer) error {
 	return nil
 }
 
-// GetBranchReviewAnswers returns the settled review questions for a branch,
-// most recently answered first, bounded by limit. The truncated result reports
-// whether older answers exist beyond the returned recency window.
 func (d *DB) GetBranchReviewAnswers(repoID, branch string, limit int) ([]ReviewAnswer, bool, error) {
 	if limit <= 0 {
 		limit = MaxBranchReviewAnswers

@@ -17,10 +17,6 @@ func setSysProcAttr(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
 
-// listDaemonProcesses enumerates running processes via ps and returns the ones
-// that look like `no-mistakes daemon run --root <root>`. It powers the
-// pgrep-style collision detection in reconcileCollidingDaemons. `ps` is used
-// (rather than /proc) so the same approach works on Linux and macOS.
 func listDaemonProcesses() ([]daemonProcessInfo, error) {
 	cmd := exec.Command(psExecutable(), "-ww", "-eo", "pid=,command=")
 	env := upsertEnv(os.Environ(), "LC_ALL", "C")
@@ -32,8 +28,6 @@ func listDaemonProcesses() ([]daemonProcessInfo, error) {
 	return parseDaemonProcessOutput(string(out), splitUnixProcessLine), nil
 }
 
-// splitUnixProcessLine parses one line of `ps -eo pid=,command=` output into a
-// pid and the trailing command line.
 func splitUnixProcessLine(line string) (int, string, bool) {
 	trimmed := strings.TrimLeft(line, " \t")
 	if trimmed == "" {

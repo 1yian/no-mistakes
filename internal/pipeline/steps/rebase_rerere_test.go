@@ -8,12 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// With rerere.enabled and rerere.autoupdate in the operator's git config, a
-// conflict git has seen before is resolved and staged from the recorded
-// resolution, yet rebase and merge still exit 1 with no unmerged paths left.
-// The step must not depend on that ambient setting: it still reports the
-// conflict, or hands it to the agent when fixing, instead of failing with
-// "exit status 1" or "no conflicts detected".
 func TestRebaseStep_RerereAutoupdateStillReportsConflict(t *testing.T) {
 	t.Parallel()
 	for _, strategy := range []string{"", config.RebaseStrategyMerge} {

@@ -15,21 +15,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm/gitlab"
 )
 
-// gitlabEvidenceUploader posts one local image to the GitLab project that owns
-// the merge request. *gitlab.Host implements it. Tests inject a stub.
 type gitlabEvidenceUploader interface {
 	UploadProjectFile(ctx context.Context, path string) (gitlab.ProjectUpload, error)
 }
 
-// gitlabEvidenceSection uploads this run's images and returns one Evidence
-// section. GitLab only. A later render strips the previous section and writes
-// this one again, reusing an upload when the file hash was already sent.
-//
-// With test.evidence.link_base_url set, every entry names its file as a link
-// under that base (evidence_links.go, shared with the Testing section). When
-// uploads are off, that is the whole entry: the section lists the run's
-// images as links and nothing leaves the machine. When uploads are on, the
-// link replaces the path mention and the uploaded embed follows it as before.
 func (s *PRStep) gitlabEvidenceSection(sctx *pipeline.StepContext, provider scm.Provider) string {
 	if provider != scm.ProviderGitLab || sctx == nil || sctx.Repo == nil {
 		return ""
@@ -171,8 +160,6 @@ func gitlabEvidenceUploadEnabled(sctx *pipeline.StepContext) (bool, string) {
 	return true, ""
 }
 
-// gitlabEvidenceNotUploaded lists a file the section could not embed; mention
-// is the entry's already-rendered file name (link or code span).
 func gitlabEvidenceNotUploaded(mention, reason string) string {
 	reason = strings.Join(strings.Fields(reason), " ")
 	if reason == "" {
@@ -215,10 +202,6 @@ type gitlabEvidenceProblem struct {
 	reason string
 }
 
-// gitlabEvidenceImages lists the image files under runDir, sorted by their
-// path relative to the evidence parent. With digest set, each image is read
-// and hashed for the upload cache; without it, no image content is read and
-// digest stays empty.
 func gitlabEvidenceImages(runDir string, digest bool) (images []gitlabEvidenceImage, problems []gitlabEvidenceProblem, err error) {
 	root := filepath.Clean(runDir)
 	parent := filepath.Dir(root)

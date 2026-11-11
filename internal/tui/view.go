@@ -460,7 +460,6 @@ func renderFooter(done bool, showHelp bool, confirmAbort bool, yolo bool, run *i
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// shortPRLabel extracts a compact label like "PR #42" from a PR URL.
 func shortPRLabel(url string) string {
 	// GitHub: .../pull/42, GitLab: .../merge_requests/42, Bitbucket: .../pull-requests/42
 	for _, prefix := range []string{"/pull/", "/merge_requests/", "/pull-requests/"} {

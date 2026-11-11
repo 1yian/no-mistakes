@@ -24,19 +24,8 @@ var errCIAttestationUnsettled = errors.New("CI repair attestation is unsettled")
 
 var errCIFixAgentCrash = errors.New("CI fix agent crashed")
 
-// errAttestationWriteFailed marks a failure specifically inside
-// attestHeadBeforePush (PR discovery or the attestation write itself), as
-// opposed to any other publishRunHead failure (review-approved-head
-// continuity, the force-push decision, the git push, remote verification,
-// the gate mirror, or the durable publication write). publishRepair uses
-// errors.Is against this to decide whether to apply the CI-specific
-// errCIAttestationUnsettled treatment; the ordinary Push step just
-// propagates whatever publishRunHead returns.
 var errAttestationWriteFailed = errors.New("pipeline attestation write failed")
 
-// ciFixerClassRules is shared by every CI-repair prompt path so failing-check,
-// combined, and merge-conflict-only repairs follow the Review fixer's same
-// invariant-complete discipline.
 const ciFixerClassRules = `- Do not watch or poll CI runs. Never run gh run watch (including --exit-status), gh-axi run watch, or an equivalent command. Never repeatedly query run, job, or check status in a polling loop. You may retrieve a failing job's logs once when that helps diagnose the failure. Finish with your fix as local changes in the worktree and return. Never push, force-push, or otherwise publish: the no-mistakes pipeline commits and publishes the repair through its guarded path, and its own CI monitoring then takes over. Do not wait for CI to finish.
 - Before changing code, state for each finding the invariant it violates (what must always hold, in one sentence) and enumerate every place in the changed area where that same invariant must hold: every axis, direction, and representation; every sibling call path, command, action, and state transition; every consumer of the same input, field, or record. Fix the invariant at all of those places in this round, with the same small correction, or at the one shared boundary that makes all of them hold. A fix that closes only the reported site and leaves a sibling site reachable is incomplete; the next review will report the sibling.
 - Do not grow the fix into machinery: closing sibling sites with the same small edit, or moving a check to one shared boundary, is the fix; adding handling, state, fallbacks, retries, or a subsystem to manage symptoms is not. Prefer addressing a deeper architectural reason and simplifying it, than introducing machinery to handle the symptoms.
@@ -57,22 +46,6 @@ const ciMergeConflictFixRules = `- Resolve the merge conflicts by applying the m
 ` + ciFixerClassRules + `
 		- Verify the rebase completes cleanly before finishing.`
 
-// repairFromFindings runs one CI fix round over the findings the executor
-// selected for it (sctx.PreviousFindings): the auto-fix subset of the last
-// settled observation for an automatic round, or whatever the human selected
-// at the gate, with their instructions, for a user-requested one. It is the
-// CI step's counterpart of the review step's fixer turn.
-//
-// It returns a non-nil outcome when the round ends this execution: a
-// protected-path refusal, a fix agent that burned its whole invocation
-// budget, a repair whose attestation could not be settled, a repair that must
-// revalidate from Review, or the agent's conclusion that no code change is
-// warranted - the last two of those park the selected findings as ask-user,
-// because a question the agent has already declined to answer with code is a
-// human's to answer. A nil outcome means monitoring resumes: either the
-// repair was published and the provider must re-run the checks against it,
-// or the agent produced nothing and the next settled observation re-emits
-// the same findings so the executor can retry while auto_fix.ci allows.
 func (s *CIStep) repairFromFindings(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR) (*pipeline.StepOutcome, error) {
 	targets, err := parseCIFixTargets(sctx.PreviousFindings)
 	if err != nil {
@@ -222,13 +195,6 @@ func (s *CIStep) repairFromFindings(sctx *pipeline.StepContext, host scm.Host, p
 	return nil, nil
 }
 
-// autoFixCI runs the agent to fix CI failures and/or merge conflicts, then
-// records the repair under the run's uniform continuity rule: published
-// immediately through the guarded push path when its continuity with the
-// reviewed head is provable, held for revalidation when it is not or when
-// ci.revalidate_repairs asks for it outright. See recordRepair.
-// The result reports whether the recorded head advanced and whether the repair
-// must revalidate; a zero result means the agent produced no changes.
 func (s *CIStep) autoFixCI(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, targets ciFixTargets) (ciRepairResult, error) {
 	ctx := sctx.Ctx
 	failingNames := targets.checkNames()
@@ -261,7 +227,6 @@ func (s *CIStep) autoFixCI(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR
 		}
 	}
 
-	// Build prompt based on what issues are present
 	var promptIntro string
 	var promptRules string
 	switch {
@@ -388,10 +353,6 @@ CI logs:
 	return repair, nil
 }
 
-// fetchCILogOutput returns the selected checks' log evidence. A failed
-// retrieval is marked in the evidence and the repair proceeds without it; the
-// only error is a provider plugin's contract violation (pluginPollFailsStep),
-// which fails the step like every other plugin call.
 func fetchCILogOutput(ctx context.Context, host scm.Host, pr *scm.PR, branch, headSHA string, targets []scm.CheckTarget, maxBytes int) (string, error) {
 	if maxBytes <= 0 || len(targets) == 0 {
 		return "", nil
@@ -540,11 +501,6 @@ func extractCIFixConclusion(result *agent.Result) (ciFixConclusion, error) {
 	return conclusion, nil
 }
 
-// ciFixAgentBudgetOutcome converts an auto-fix invocation that exhausted its
-// agent budget into a bounded ask-user gate, and returns nil for every other
-// result so ordinary transient fix failures keep their existing warn-and-retry
-// behaviour. Only a proven full-budget burn parks: it is the one failure that
-// is guaranteed to cost the same again on the next poll.
 const maxReviewBotDescriptionsPromptBytes = 32 * 1024
 
 func ciInstructionsPromptSection(sctx *pipeline.StepContext) string {
@@ -642,10 +598,6 @@ func (s *CIStep) ciFixAgentBudgetOutcome(sctx *pipeline.StepContext, issueDesc s
 	return ciFixAgentTimeoutOutcome(issueDesc, strings.Join(leftover, " "), err)
 }
 
-// dirtyRunWorktree reports the run worktree path when the timed-out agent left
-// uncommitted work there, so the gate can say where it is instead of letting it
-// disappear with the worktree at cleanup. Best effort: an unreadable status
-// simply omits the detail.
 func dirtyRunWorktree(sctx *pipeline.StepContext) string {
 	status, err := stepGitRun(sctx, "status", "--porcelain")
 	if err != nil || strings.TrimSpace(status) == "" {
@@ -654,24 +606,15 @@ func dirtyRunWorktree(sctx *pipeline.StepContext) string {
 	return sctx.WorkDir
 }
 
-// ciRepairResult reports what a repair did to the run. The monitor needs both
-// facts: whether the recorded head advanced at all, and whether the repair was
-// held for revalidation instead of published.
 type ciRepairResult struct {
-	// HeadAdvanced is true when the run's recorded head moved to the repair.
-	HeadAdvanced bool
-	// Revalidate is true when the repair was NOT published and the pipeline
-	// must re-run before Push may publish it.
-	Revalidate bool
-	// ReviewCarried is true when a revalidating repair kept the run's review
-	// approval as a proven pure replay, so revalidation starts at Test.
+	HeadAdvanced       bool
+	Revalidate         bool
 	ReviewCarried      bool
 	ConflictBaseSHA    string
 	NoCodeChangeNeeded bool
 	Summary            string
 }
 
-// restartFrom is the step a revalidating repair restarts validation at.
 func (r ciRepairResult) restartFrom() types.StepName {
 	if r.ReviewCarried {
 		return types.StepTest
@@ -679,7 +622,6 @@ func (r ciRepairResult) restartFrom() types.StepName {
 	return types.StepReview
 }
 
-// commitAndPush remains as the narrow test seam for the default summary.
 func (s *CIStep) commitAndPush(sctx *pipeline.StepContext) (ciRepairResult, error) {
 	return s.commitRepair(sctx, "", nil)
 }
@@ -788,11 +730,6 @@ func (s *CIStep) commitRepair(sctx *pipeline.StepContext, summary string, produc
 	return s.recordRepair(sctx, headSHA)
 }
 
-// ciHeadAwaitsRecording reports whether a fix round that committed nothing
-// itself still has a head for recordRepair: one the agent committed, or a
-// repair already recorded locally but never published, such as the commit of a
-// fix agent that ran out of budget. Without the second case a later round that
-// adds nothing would leave that repair stranded behind the old published head.
 func ciHeadAwaitsRecording(sctx *pipeline.StepContext, headSHA string) bool {
 	if headSHA != sctx.Run.HeadSHA {
 		return true
@@ -801,19 +738,10 @@ func ciHeadAwaitsRecording(sctx *pipeline.StepContext, headSHA string) bool {
 	return err == nil && run != nil && run.LastPushedSHA != nil && !strings.EqualFold(strings.TrimSpace(*run.LastPushedSHA), headSHA)
 }
 
-// ciRevalidatesRepairs reports whether this run must re-run the whole pipeline
-// from Review after the CI step repairs a failing check, rather than publishing
-// the repair and continuing to monitor. It is the resolved ci.revalidate_repairs
-// policy (global config, overridden by the repository's trusted default-branch
-// config). The repair recorder uses it to choose immediate publication or
-// revalidation, and the CI monitor logs the resolved policy.
 func ciRevalidatesRepairs(sctx *pipeline.StepContext) bool {
 	return sctx.Config != nil && sctx.Config.CI.RevalidateRepairs
 }
 
-// ciRepairPolicyDescription names the configured policy in the CI step log, so
-// an operator reading a run after the fact can tell which of the two paths a
-// repair took without cross-referencing the config that was in force.
 func ciRepairPolicyDescription(sctx *pipeline.StepContext) string {
 	if ciRevalidatesRepairs(sctx) {
 		return "always restart validation from Review after a repair"
@@ -821,29 +749,6 @@ func ciRepairPolicyDescription(sctx *pipeline.StepContext) string {
 	return "publish a repair whose continuity with the reviewed head is provable, otherwise restart validation from Review"
 }
 
-// recordRepair binds a freshly produced CI repair commit to the run.
-//
-// One uniform rule decides how, and it applies to every CI-fix path - automatic
-// and manual alike, CI failure and merge conflict alike:
-//
-//	A repair is published without revalidating only when its continuity with the
-//	reviewed, published head can be PROVEN. When that continuity cannot be
-//	proven, the repair revalidates from Review.
-//
-// ci.revalidate_repairs governs intent identically on every path: true asks for
-// revalidation outright, false asks to publish when it is safe to do so. Merge
-// conflict repairs are not carved out - they simply always land in the
-// cannot-be-proven half, because a rebase makes the repaired head a
-// non-descendant of the reviewed head, resolving a conflict changes the
-// commit's patch-id, and no content-based guard can separate "rebased and
-// resolved" from "dropped the work". Provenance cannot stand in for that proof
-// either: the repair that deleted a reviewed commit in the reproduction behind
-// this rule was authored by the CI repair agent itself. Who wrote the repair
-// says nothing about what it did to the reviewed commits.
-//
-// Once recording or publication succeeds, the run's recorded head advances;
-// the two paths differ in whether the repair is published now or held until
-// Review has approved it.
 func (s *CIStep) recordRepair(sctx *pipeline.StepContext, headSHA string) (ciRepairResult, error) {
 	if ciRevalidatesRepairs(sctx) {
 		return s.recordLocalRepair(sctx, headSHA)
@@ -873,12 +778,6 @@ func (s *CIStep) recordRepair(sctx *pipeline.StepContext, headSHA string) (ciRep
 	return s.publishRepair(sctx, headSHA)
 }
 
-// recordReplayedRepair keeps a rebase repair local and moves the run's review
-// approval to it when it is a provable pure replay of the approved commits
-// onto base (see pureReplayGap). The reviewed diff is unchanged, so only the
-// steps that depend on the base - Test onward - re-run. It reports carried =
-// false, having recorded nothing, whenever the proof does not hold, so the
-// caller takes the ordinary revalidation path.
 func (s *CIStep) recordReplayedRepair(sctx *pipeline.StepContext, headSHA, base string) (ciRepairResult, bool, error) {
 	run, err := sctx.DB.GetRun(sctx.Run.ID)
 	if err != nil {
@@ -913,15 +812,6 @@ func (s *CIStep) recordReplayedRepair(sctx *pipeline.StepContext, headSHA, base 
 	return ciRepairResult{HeadAdvanced: true, Revalidate: true, ReviewCarried: true}, true, nil
 }
 
-// ciRepairContinuityGap returns why the repaired head cannot be proven to
-// continue the run's reviewed, published head, or "" when it can. It reads the
-// same durable review authority the publication guard enforces
-// (reviewApprovedHead), so the decision to publish and the guard that permits
-// the push can never disagree.
-//
-// Fail closed: an unreadable run, a missing or malformed approval, and an
-// unverifiable ancestry all count as unproven, because the cost of being wrong
-// is force-pushing away commits the pipeline was trusted with.
 func ciRepairContinuityGap(sctx *pipeline.StepContext, headSHA string) string {
 	run, err := sctx.DB.GetRun(sctx.Run.ID)
 	if err != nil {
@@ -940,12 +830,6 @@ func ciRepairContinuityGap(sctx *pipeline.StepContext, headSHA string) string {
 	return ""
 }
 
-// recordLocalRepair keeps the repair local because revalidation was requested
-// or continuity could not be proven. It revokes the run's review authority, so
-// the Push step's
-// assertReviewApprovedPushHead guard refuses to publish the repaired head until
-// Review has approved it again. The CI monitor turns that into a restart at
-// Review.
 func (s *CIStep) recordLocalRepair(sctx *pipeline.StepContext, headSHA string) (ciRepairResult, error) {
 	if err := updateNonSharedBranchRef(sctx, headSHA); err != nil {
 		return ciRepairResult{}, err
@@ -965,19 +849,6 @@ func (s *CIStep) recordLocalRepair(sctx *pipeline.StepContext, headSHA string) (
 	return ciRepairResult{HeadAdvanced: true, Revalidate: true}, nil
 }
 
-// publishRepair publishes a continuity-proven repair immediately when
-// ci.revalidate_repairs is false. It uses publishRunHead - the same guarded path
-// the Push step uses, so force-push lease safety, remote verification, and the
-// push binding all still apply. Gate-mirror synchronization settles before the
-// head and push binding are recorded. The run's review approval is deliberately
-// not revoked: recordRepair has already proven that this head equals or descends
-// from the approved head,
-// and publishRunHead enforces the same descendant-only rule. The monitor stays
-// on this run to watch the checks re-run against the published head.
-//
-// publishRunHead records nothing until the remote push, the gate mirror, and
-// the database write have all succeeded, so a partial failure leaves the run on
-// the pre-repair head and the next fix attempt re-enters this path.
 func (s *CIStep) publishRepair(sctx *pipeline.StepContext, headSHA string) (ciRepairResult, error) {
 	if err := publishRunHead(sctx, headSHA, headSHA, nil); err != nil {
 		if errors.Is(err, errAttestationWriteFailed) {
@@ -989,38 +860,6 @@ func (s *CIStep) publishRepair(sctx *pipeline.StepContext, headSHA string) (ciRe
 	return ciRepairResult{HeadAdvanced: true}, nil
 }
 
-// attestHeadBeforePush writes this run's pipeline attestation for headSHA
-// into any existing PR body BEFORE that head is pushed, so no check racing
-// the push can ever observe a legitimate head without a matching
-// attestation. See publishRunHead for why this ordering - not a post-push
-// write - is the fix for the push-then-attest race: every known consumer of
-// the shared require-no-mistakes action pins an immutable revision whose
-// verifier reads the PR body from the frozen `synchronize` event payload, so
-// no post-push write, however fast, can ever land before that payload is
-// read. Attesting first means the payload already carries the correct
-// attestation for the head it describes.
-//
-// steps is nil for a CI repair published without revalidation (carry the
-// existing attestation's own step statuses forward, since review/test/
-// document are deliberately not re-run for that repair - see
-// ciRepairContinuityGap) and the run's own current steps for the ordinary
-// Push step (which always runs after this run's review/test/document have
-// already completed).
-//
-// It is a no-op - not an error - when: the provider has no supported raw
-// content contract;
-// the branch is the configured PR base branch (the PR step never manages a
-// PR there either, see effectivePRBaseBranch); the SCM host is unavailable
-// (matches the PR step's own skip semantics); or no PR exists yet for this
-// branch. It never mints an attestation for a PR that was not raised through
-// no-mistakes - restampPRAttestationWithSteps already enforces that. Any
-// other failure (PR discovery errors, a provider plugin whose status
-// handshake broke its contract - the PR step fails on that too, see
-// pluginContractBroken - or a discoverable PR whose write does not
-// settle) is wrapped in errAttestationWriteFailed and returned, keeping the
-// provider error in the chain so a CI repair can tell a provider plugin
-// contract violation (which fails the step) from an unsettled write (which
-// parks).
 func attestHeadBeforePush(sctx *pipeline.StepContext, headSHA string, steps []*db.StepResult) error {
 	provider := resolvedProvider(sctx)
 	if !supportsPRTemplates(provider) {
@@ -1074,22 +913,10 @@ func attestationPolicyFrom(sctx *pipeline.StepContext) pipelineAttestationPolicy
 	return policy
 }
 
-// restampPRAttestation re-reads the current PR body, rewrites only the live
-// pipeline-attestation marker to newHeadSHA, and writes the body back without
-// sending a title. It does not insert an attestation that was not already
-// there. A host without PRContentReader is skipped with a warning rather than
-// failed: missing-reader is not a settlement miss. All currently supported
-// providers have readers; this keeps the optional-interface fallback intact.
 func restampPRAttestation(ctx context.Context, host scm.Host, pr *scm.PR, newHeadSHA string, logfn func(string)) error {
 	return restampPRAttestationWithSteps(ctx, host, pr, newHeadSHA, nil, logfn, pipelineAttestationPolicy{})
 }
 
-// restampPRAttestationWithSteps is restampPRAttestation with an explicit step
-// list and the current trusted attestation policy. A nil steps keeps whatever
-// statuses the existing attestation already carried; a non-nil steps replaces
-// them outright. allow_test_command_override always comes from policy, never
-// from the previous attestation. See attestHeadBeforePush for why a caller
-// picks one steps argument over the other.
 func restampPRAttestationWithSteps(ctx context.Context, host scm.Host, pr *scm.PR, newHeadSHA string, steps []*db.StepResult, logfn func(string), policy pipelineAttestationPolicy) error {
 	reader, ok := host.(scm.PRContentReader)
 	if !ok || pr == nil {

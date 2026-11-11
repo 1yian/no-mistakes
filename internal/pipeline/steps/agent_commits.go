@@ -10,25 +10,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// errAgentCommitsNotLinear marks agent commits that are not a plain chain of
-// single-parent commits on the recorded head, so their messages cannot be
-// rewritten without restructuring history.
 var errAgentCommitsNotLinear = errors.New("agent commits are not a linear chain from the recorded head")
 
-// conformAgentCommits applies the repository's commit settings to commits a fix
-// agent made itself. When the agent runs `git commit`, the worktree is clean and
-// the pipeline would otherwise adopt the agent's subject and trailers as they
-// are, bypassing commit.fix_message and commit.trailers.
-//
-// The rewrite is anchored to the head the run has recorded, the same anchor
-// assertPipelineHeadContinuity and ciHeadAwaitsRecording use: every commit above
-// sctx.Run.HeadSHA is work the pipeline has not recorded yet, including commits
-// an earlier failed agent turn left behind. Only a linear, non-merge chain on
-// that head is rewritten. Trees, author attribution and author dates are kept.
-// Rewritten commits use the run's bound committer. HEAD moves with a
-// compare-and-swap against the head observed. An unexpected shape or a git
-// failure returns an error with the agent's commits
-// untouched, so the change is never dropped and never published unshaped.
 func conformAgentCommits(sctx *pipeline.StepContext, stepName types.StepName, render func() (string, error)) error {
 	anchor := strings.TrimSpace(sctx.Run.HeadSHA)
 	if anchor == "" {
@@ -114,11 +97,6 @@ func conformAgentCommits(sctx *pipeline.StepContext, stepName types.StepName, re
 	return nil
 }
 
-// publishedChainIndex returns the index in chain of the commit the remote
-// branch already points at, or -1. Only a CI repair publishes before the run
-// records its head, so other steps skip the remote query. A query failure is
-// an error: the commits are then left untouched rather than risk rewriting
-// published history.
 func publishedChainIndex(sctx *pipeline.StepContext, stepName types.StepName, chain []string) (int, error) {
 	if stepName != types.StepCI {
 		return -1, nil
@@ -139,8 +117,6 @@ func publishedChainIndex(sctx *pipeline.StepContext, stepName types.StepName, ch
 	return -1, nil
 }
 
-// headDescendsFrom reports whether anchor is an ancestor of head. Exit status 1
-// is git's answer "no"; any other failure is an error.
 func headDescendsFrom(sctx *pipeline.StepContext, anchor, head string) (bool, error) {
 	_, err := stepGitRun(sctx, "merge-base", "--is-ancestor", anchor, head)
 	var exit *exec.ExitError
@@ -150,8 +126,6 @@ func headDescendsFrom(sctx *pipeline.StepContext, anchor, head string) (bool, er
 	return err == nil, err
 }
 
-// agentCommitChain lists the commits in anchor..head oldest first and
-// requires them to be a single-parent chain that starts at anchor.
 func agentCommitChain(sctx *pipeline.StepContext, anchor, head string) ([]string, error) {
 	out, err := stepGitRun(sctx, "rev-list", "--reverse", "--parents", anchor+".."+head)
 	if err != nil {

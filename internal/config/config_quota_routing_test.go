@@ -9,9 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestQuotaRoutingOffByDefault pins the opt-in default: without the block the
-// feature is off and the knobs carry their documented defaults, and the merge
-// into an effective config keeps them global-only.
 func TestQuotaRoutingOffByDefault(t *testing.T) {
 	cfg, err := LoadGlobal(filepath.Join(t.TempDir(), "absent.yaml"))
 	if err != nil {
@@ -75,9 +72,6 @@ func TestQuotaRoutingRejectsBadDurations(t *testing.T) {
 	}
 }
 
-// TestQuotaRoutingIsRepositoryOnlyRefused pins the trust boundary: a pushed
-// branch must never be able to reorder this machine's agent list, so the key
-// cannot even appear in repository configuration.
 func TestQuotaRoutingIsRepositoryOnlyRefused(t *testing.T) {
 	_, err := LoadRepoFromBytes([]byte("quota_routing:\n  enabled: true\n"))
 	if err == nil || !strings.Contains(err.Error(), "quota_routing") {
@@ -116,8 +110,6 @@ func TestQuotaProviderMustNameARealAgent(t *testing.T) {
 	}
 }
 
-// TestQuotaProviderSurvivesOnAnOtherwiseEmptyProfile pins that a
-// quota_provider-only entry is not dropped by the zero-profile filter.
 func TestQuotaProviderSurvivesOnAnOtherwiseEmptyProfile(t *testing.T) {
 	cfg, err := LoadGlobalFromBytes([]byte("quota_routing:\n  enabled: true\nagent_config:\n  grok:\n    quota_provider: openrouter\n"))
 	if err != nil {

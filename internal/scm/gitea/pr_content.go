@@ -10,11 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// Read the REST pull object through tea's authenticated transport, not the
-// formatted pulls view/list whose fields and JSON types differ. The raw API
-// uses number/title/body (Gitea modules/structs/pull.go at
-// 8c0911669b9070c3638c48e4241928a25f07b3a4), NOT the formatted view's index
-// field. Never substitute rendered HTML for body.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	id, err := giteaPRNumber(pr)
 	if err != nil {

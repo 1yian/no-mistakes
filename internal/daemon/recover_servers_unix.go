@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// terminateOrphanProcessGroup sends SIGTERM then SIGKILL to the entire
-// process group led by pid. Managed servers are spawned with Setpgid so
-// their pgid equals their pid, and killing the group reaps any helper
-// children (language servers, sub-shells) the server may have spawned.
 func terminateOrphanProcessGroup(pid int) error {
 	pgid, err := syscall.Getpgid(pid)
 	if err != nil {

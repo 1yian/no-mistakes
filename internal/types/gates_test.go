@@ -24,8 +24,6 @@ func TestCustomGateStepName_RoundTrips(t *testing.T) {
 	}
 }
 
-// A gate runs immediately after its anchor, so it must share the anchor's
-// order: a restart that resets from the anchor has to reset the gate with it.
 func TestCustomGateStepName_OrdersWithItsAnchor(t *testing.T) {
 	if got, want := CustomGateStepName(StepTest, "g").Order(), StepTest.Order(); got != want {
 		t.Fatalf("gate order = %d, want the anchor's %d", got, want)
@@ -35,11 +33,6 @@ func TestCustomGateStepName_OrdersWithItsAnchor(t *testing.T) {
 	}
 }
 
-// A fabricated anchor must not be trusted to place a step, so a malformed name
-// never resolves as a gate. That does send Order() to its default 0, which is
-// why nothing may mint such a name in the first place: the encoding is only
-// produced from a validated gate, and everything that reads one - ordering,
-// the log path, the CLI - goes through this decoder.
 func TestCustomGateAnchor_RejectsMalformedNames(t *testing.T) {
 	for _, name := range []StepName{
 		"gate.",
@@ -59,9 +52,6 @@ func TestCustomGateAnchor_RejectsMalformedNames(t *testing.T) {
 	}
 }
 
-// The label is what an operator types at `axi logs --step`, and the step name
-// is joined straight onto the run's log directory, so a label carrying a
-// separator or a traversal segment must not decode as a gate at all.
 func TestCustomGateAnchor_RejectsLabelsThatCouldEscapeALogPath(t *testing.T) {
 	for _, name := range []StepName{
 		"gate.test.../../../etc/passwd",
@@ -94,14 +84,6 @@ func TestValidCustomGateLabel(t *testing.T) {
 	}
 }
 
-// The executor derives a step's log file directly from its step name, so a
-// gate step name has to be a legal filename component on every supported
-// platform. This reproduces the ':' regression: on Windows, Win32 parses
-// '<name>:<stream>:<type>' as an NTFS alternate data stream, CreateFileW
-// rejects "gate:test:mutation-budget.log" with ERROR_INVALID_NAME, and every
-// run in a gates-configured repository fails at that step before the gate's
-// own check ever runs. The reserved-character assertion runs on every platform
-// so the defect cannot come back on a leg that would not fail natively.
 func TestCustomGateStepName_IsUsableAsAStepLogFilename(t *testing.T) {
 	filename := string(CustomGateStepName(StepTest, "mutation-budget")) + ".log"
 

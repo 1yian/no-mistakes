@@ -101,12 +101,6 @@ func TestFindMainRepoRootNotFound(t *testing.T) {
 	}
 }
 
-// addSubmodule wires up an absorbed submodule at <super>/<name> pointing at
-// the repo at <remoteDir>, commits the new submodule, and returns the
-// submodule's working tree. The path layout matches `git submodule add`:
-//   - <super>/<name>                        working tree
-//   - <super>/.git/modules/<name>           absorbed git dir
-//   - core.worktree = ../../../../<name>    relative inside the absorbed git dir
 func addSubmodule(t *testing.T, superDir, name, remoteDir string) string {
 	t.Helper()
 	// Use an absolute path so the clone does not depend on the superproject
@@ -129,12 +123,6 @@ func addSubmodule(t *testing.T, superDir, name, remoteDir string) string {
 	return filepath.Join(superDir, name)
 }
 
-// TestFindMainRepoRootSubmodule reproduces issue #328: in an absorbed
-// submodule checkout, the git common dir is <super>/.git/modules/<name>, so
-// the historical "parent of commonDir" heuristic points at the superproject's
-// modules directory. The function must instead resolve to the submodule's
-// own working tree (via core.worktree) so callers read the submodule's
-// remotes, not the superproject's.
 func TestFindMainRepoRootSubmodule(t *testing.T) {
 	ctx := context.Background()
 	superDir := initTestRepo(t)
@@ -179,10 +167,6 @@ func TestFindMainRepoRootSubmodule(t *testing.T) {
 	}
 }
 
-// TestFindMainRepoRootNestedSubmodule is the same fix one level deeper:
-// a submodule inside a submodule has its git dir at
-// <super>/.git/modules/a/modules/b. The function must still resolve to the
-// innermost submodule's working tree.
 func TestFindMainRepoRootNestedSubmodule(t *testing.T) {
 	ctx := context.Background()
 	superDir := initTestRepo(t)
@@ -206,10 +190,6 @@ func TestFindMainRepoRootNestedSubmodule(t *testing.T) {
 	}
 }
 
-// TestFindMainRepoRootFromWorktreeStillResolvesToMain is the linked-worktree
-// regression guard for the three-way fix. Linked worktrees keep their git
-// common dir at <main>/.git, so the historical "parent of commonDir" answer
-// stays correct and must not regress.
 func TestFindMainRepoRootFromWorktreeStillResolvesToMain(t *testing.T) {
 	ctx := context.Background()
 	mainRepo := initTestRepo(t)
@@ -286,10 +266,6 @@ func TestPushWithOptionsForwardsPushOptions(t *testing.T) {
 	}
 }
 
-// An up-to-date push sends receive-pack no ref update, and receive-pack exits
-// without reading the push options git still writes after that, so the push
-// can die of SIGPIPE. It must succeed without opening a receive-pack session;
-// the failing receive-pack command makes any session fail every time.
 func TestPushCommitWithOptionsUpToDateOpensNoReceivePackSession(t *testing.T) {
 	ctx := context.Background()
 	src := initTestRepo(t)

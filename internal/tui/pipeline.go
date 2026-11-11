@@ -12,7 +12,6 @@ import (
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// stepStatusIcon returns the visual indicator for a step's status.
 func stepStatusIcon(status types.StepStatus) string {
 	return stepStatusIndicator(status, 0)
 }
@@ -44,7 +43,6 @@ func stepStatusIndicator(status types.StepStatus, spinnerFrame int) string {
 	}
 }
 
-// stepStatusStyle returns the lipgloss style for a step's status indicator.
 func stepStatusStyle(status types.StepStatus) lipgloss.Style {
 	switch status {
 	case types.StepStatusRunning, types.StepStatusFixing:
@@ -62,7 +60,6 @@ func stepStatusStyle(status types.StepStatus) lipgloss.Style {
 	}
 }
 
-// runStatusStyled returns the run status string styled per DESIGN.md Color Roles.
 func runStatusStyled(status types.RunStatus) string {
 	var style lipgloss.Style
 	switch status {
@@ -80,7 +77,6 @@ func runStatusStyled(status types.RunStatus) string {
 	return style.Render(string(status))
 }
 
-// stepLabel returns the human-readable label for a step name.
 func stepLabel(name types.StepName) string {
 	switch name {
 	case types.StepIntent:
@@ -106,7 +102,6 @@ func stepLabel(name types.StepName) string {
 	}
 }
 
-// formatDuration formats milliseconds into a human-readable duration.
 func formatDuration(ms int64) string {
 	d := time.Duration(ms) * time.Millisecond
 	if d < time.Second {
@@ -115,8 +110,6 @@ func formatDuration(ms int64) string {
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
-// renderPipelineView renders the step list with status indicators inside a boxed section.
-// When height < 30, connector lines between steps are suppressed to save vertical space.
 func renderPipelineView(run *ipc.RunInfo, steps []ipc.StepResultInfo, width int, spinnerFrame int, height int) string {
 	if run == nil {
 		return "No active run."
@@ -209,10 +202,6 @@ func appendRightLabel(line, label string, width int) string {
 	return line + strings.Repeat(" ", gap) + label
 }
 
-// renderActionBar renders the approval prompt and action keys as a standalone element.
-// Per DESIGN.md: "Sits below the pipeline box, above findings/diff"
-// showDiff controls whether the 'd' key label says "findings" (to toggle back) or "diff".
-// Selection actions are hidden in diff mode since they don't apply.
 func renderActionBar(steps []ipc.StepResultInfo, showSelectionActions bool, allowFix bool, showDiff bool, selectedCount int, totalCount int, confirmAbort bool, hasDiff bool, approvalReady bool, retryAvailable bool) string {
 	step := awaitingStep(steps)
 	if step == nil {
@@ -288,8 +277,6 @@ func renderApprovalActions(showSelectionActions bool, allowFix bool, showDiff bo
 	return result
 }
 
-// singleLineReason joins the non-blank lines of durable multiline reasons so
-// the outcome banner stays on one line.
 func singleLineReason(reason string) string {
 	var parts []string
 	for _, line := range strings.Split(reason, "\n") {
@@ -300,8 +287,6 @@ func singleLineReason(reason string) string {
 	return strings.Join(parts, "; ")
 }
 
-// renderOutcomeBanner returns a styled one-line banner when the run is done.
-// Empty string when the run is still in progress.
 func renderOutcomeBanner(run *ipc.RunInfo, steps []ipc.StepResultInfo) string {
 	if run == nil {
 		return ""
@@ -371,13 +356,11 @@ func renderOutcomeBanner(run *ipc.RunInfo, steps []ipc.StepResultInfo) string {
 	}
 }
 
-// helpEntry is a key-description pair for the help overlay.
 type helpEntry struct {
 	key  string
 	desc string
 }
 
-// renderHelpOverlay renders a help box showing keybindings relevant to the current state.
 func renderHelpOverlay(width int, run *ipc.RunInfo, hasAwaitingStep bool, showDiff bool, hasDiff bool, done bool, yolo bool) string {
 	boldKey := lipgloss.NewStyle().Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ansiBrightBlack))
@@ -489,7 +472,6 @@ func renderHelpOverlay(width int, run *ipc.RunInfo, hasAwaitingStep bool, showDi
 	return renderBox("Help", content.String(), width)
 }
 
-// awaitingStep returns the step that is currently awaiting user action, if any.
 func awaitingStep(steps []ipc.StepResultInfo) *ipc.StepResultInfo {
 	for i := range steps {
 		if steps[i].Status == types.StepStatusAwaitingApproval || steps[i].Status == types.StepStatusFixReview {

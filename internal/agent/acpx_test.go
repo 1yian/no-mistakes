@@ -176,10 +176,6 @@ func TestAcpxUsageFieldsToTokenUsage(t *testing.T) {
 	}
 }
 
-// TestAcpxUsageFields_JSONFieldAliases unmarshals JSON carrying a single
-// alternative token-field name and verifies it lands in the correct
-// TokenUsage slot. This catches silent regressions from JSON tag typos,
-// which direct-struct tests (above) cannot detect.
 func TestAcpxUsageFields_JSONFieldAliases(t *testing.T) {
 	cases := []struct {
 		name string

@@ -24,8 +24,6 @@ func stepNames(steps []pipeline.Step) []string {
 	return names
 }
 
-// The core sequence must survive gate insertion intact: same members, same
-// relative order. A gate can lengthen a run, never reshape it.
 func TestWithCustomGates_InsertsAfterAnchorAndPreservesCore(t *testing.T) {
 	t.Parallel()
 	got := stepNames(WithCustomGates(AllSteps(), []config.Gate{
@@ -75,9 +73,6 @@ func TestCustomGateStep_CommandPassRunsClean(t *testing.T) {
 	}
 }
 
-// A failing gate parks for a human rather than auto-fixing: a repair must be
-// authorized, so the pipeline never starts one on its own initiative. The
-// fix-round tests below cover the authorized path.
 func TestCustomGateStep_CommandFailureParksForHuman(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -106,8 +101,6 @@ func TestCustomGateStep_CommandFailureParksForHuman(t *testing.T) {
 	}
 }
 
-// fileGateCommand builds a gate command that fails until name exists in the
-// worktree, so a test can prove the gate re-ran against the repaired tree.
 func fileGateCommand(name string) string {
 	if runtime.GOOS == "windows" {
 		return "if exist " + name + " (exit 0) else (exit 7)"
@@ -115,10 +108,6 @@ func fileGateCommand(name string) string {
 	return "test -f " + name + " || exit 7"
 }
 
-// Answering a gate's park with `fix` used to re-run the identical check against
-// an unchanged worktree, so the verdict could not move: one full extra
-// execution for a guaranteed-identical outcome. The gate now runs a fix turn
-// first and then re-checks, so an authorized repair actually clears it.
 func TestCustomGateStep_CommandGateFixRoundRepairsThenReChecks(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -167,9 +156,6 @@ func TestCustomGateStep_CommandGateFixRoundRepairsThenReChecks(t *testing.T) {
 	}
 }
 
-// A fix turn that does not actually satisfy the gate must re-park, and the
-// re-parked verdict must come from re-running the check, not from replaying the
-// stale findings.
 func TestCustomGateStep_CommandGateFixRoundThatDoesNotSatisfyTheGateReParks(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -208,8 +194,6 @@ func TestCustomGateStep_CommandGateFixRoundThatDoesNotSatisfyTheGateReParks(t *t
 	}
 }
 
-// A gate must never repair on the pipeline's own initiative. Without an
-// explicit `fix` authorization the step runs its check and nothing else.
 func TestCustomGateStep_WithoutFixAuthorizationRunsNoFixTurn(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -240,9 +224,6 @@ func TestCustomGateStep_WithoutFixAuthorizationRunsNoFixTurn(t *testing.T) {
 	}
 }
 
-// A gate runs immediately AFTER its anchor and shares its step order, so the
-// published attestation has to place it there. A lexicographic tie-break put
-// every gate ahead of the core step it actually ran after.
 func TestBuildPipelineAttestation_ListsAGateAfterItsAnchor(t *testing.T) {
 	t.Parallel()
 	steps := []*db.StepResult{

@@ -1,25 +1,3 @@
-// Package reviewqa owns the review conversation's on-disk protocol: the
-// questions a review turn emits while it works, and the answers an operator
-// writes back.
-//
-// Two append-only newline-delimited JSON files live in the run's evidence
-// directory. Append-only is the durability story: a crash mid-write loses at
-// most the trailing line, a reader can tail either file while a writer is
-// appending, and neither side needs a lock. The reviewer writes questions with
-// the file tools it already has, which is why there is no MCP server here - one
-// per run would be a process, a handshake and a per-adapter support matrix for
-// a capability the agent already has.
-//
-// So this package deliberately writes ANSWERS only (AppendAnswer, for the
-// daemon's answer handler) and never questions: the reviewer is the sole writer
-// of questions.ndjson, and every field its prompt's worked example omits - kind
-// and weight whenever the model trims the example - has to be absent-tolerant
-// on the READ side. A Go writer here would have defaulted
-// those fields and left the tolerant branches unexercised, so tests append the
-// raw lines the agent actually emits instead.
-//
-// User-facing semantics are owned by
-// docs/src/content/docs/concepts/review-conversation.md.
 package reviewqa
 
 import (
@@ -34,51 +12,24 @@ import (
 	"time"
 )
 
-// Kinds a questions.ndjson line can carry.
 const (
 	KindQuestion = "question"
 	KindRetract  = "retract"
 )
 
-// WeightMinor is the only weight this package reads. Only major questions are
-// ever emitted: the reviewer decides minor ones itself (captain's ruling of
-// 2026-09-15, routing by weight unchanged), so a minor line is a protocol
-// violation and is reported rather than silently escalated. An absent weight is
-// therefore treated as major, which is why there is no constant for it - one
-// existed, was never referenced anywhere in the tree, and Go does not report an
-// unused constant.
 const WeightMinor = "minor"
 
-// File names inside the conversation directory.
 const (
 	QuestionsFile = "questions.ndjson"
 	AnswersFile   = "answers.ndjson"
 )
 
-// Bounds on what is read from either file. They exist because every loaded
-// entry is rendered into an agent prompt and into `axi` output, so an agent
-// that appends in a loop must degrade to a truncated conversation rather than
-// an unbounded one.
-//
-// The two bounds behave oppositely and both matter. maxLines counts accepted
-// lines and keeps the NEWEST of them, because a later line supersedes an
-// earlier one with the same id. maxFileBytes stops the scan instead, so a file
-// over that size keeps its LEADING bytes and a trailing retraction or answer
-// may not be read at all.
 const (
 	maxLines     = 2000
 	maxFileBytes = 4 << 20 // 4 MiB
 	maxLineBytes = 64 << 10
 )
 
-// Question is one line of questions.ndjson. A KindRetract line carries only ID,
-// Kind and Reason.
-//
-// The timestamps the protocol lets the reviewer write (asked_at on a question,
-// at on a retraction) are deliberately absent here: nothing reads them, and the
-// ordering that matters comes from the append order of the two files, not from
-// a clock the reviewer controls. Unknown fields decode away, so a line that
-// carries them still parses.
 type Question struct {
 	ID       string   `json:"id"`
 	Kind     string   `json:"kind"`
@@ -91,16 +42,6 @@ type Question struct {
 	Reason   string   `json:"reason,omitempty"`
 }
 
-// Answer is one line of answers.ndjson.
-//
-// AskOrdinal is which ASK of that id this answer settles, 1-based, stamped by
-// the writer with the id's ask count at the moment of the append. It is what
-// tells a correction to an already-settled ask apart from an answer to a later
-// re-ask of the same id: the two files are appended independently, so at load
-// time two asks and two answers are otherwise indistinguishable between those
-// two sequences, and reading them as the second let a genuinely different
-// question arrive pre-answered. It is absent (0) only in an answer for an id
-// nobody has asked, which settles nothing, ever.
 type Answer struct {
 	ID         string `json:"id"`
 	Answer     string `json:"answer"`
@@ -109,77 +50,29 @@ type Answer struct {
 	AskOrdinal int    `json:"ask_ordinal,omitempty"`
 }
 
-// Entry is a question resolved against every later line about the same id:
-// the newest question wins, a retraction closes it, and the newest answer for
-// it is attached.
 type Entry struct {
 	Question
 	Answer    *Answer
 	Retracted bool
 }
 
-// Open reports whether this entry still blocks the review step: a live
-// question with no answer.
 func (e Entry) Open() bool { return !e.Retracted && e.Answer == nil }
 
-// Answered reports whether a live question has an answer.
 func (e Entry) Answered() bool { return !e.Retracted && e.Answer != nil }
 
-// Ask is ONE question line and the answer that settled it, paired by ordinal:
-// the Nth time an id was asked is paired with the Nth answer for that id.
-//
-// It exists because Entry deliberately collapses to the LATEST state of an id -
-// which is what the gate needs - while the durable answer store must keep every
-// decision a human gave. An agent reuses an id (a cold rereview in a fix round
-// is shown only the still-open questions, so it starts numbering at q1 again),
-// so without per-ask pairing the second q1's answer overwrote the first's and a
-// human's recorded decision vanished from the do-not-re-raise set.
 type Ask struct {
-	// Ordinal is 1-based: the Nth time this id was asked in this conversation.
 	Ordinal  int
 	Question Question
 	Answer   *Answer
 }
 
-// Conversation is one run's questions in the order they were first asked.
 type Conversation struct {
-	Entries []Entry
-	// Notes carries bounded, operator-readable reasons a line was dropped:
-	// malformed JSON, a missing id, a minor-weight question, an answer for an
-	// id nobody asked. Never an error - a half-written trailing line is
-	// expected while the reviewer is still appending.
-	Notes []string
-	// Asks is every accepted question LINE in file order, each paired with the
-	// answer that settled it. Entries collapse an id to its latest state; Asks
-	// does not, which is what lets the durable store keep both decisions when
-	// an id is re-asked.
-	Asks []Ask
-	// QuestionsIncomplete reports that the scan never reached the end of
-	// questions.ndjson, so a later ask of any id is unknowable and nothing in
-	// this load is settled. The reader fails toward OPEN on it; the WRITER
-	// refuses on it, because an answer stamped against a history that is not
-	// all there could never close its question and would park the gate
-	// forever with the operator told they had answered it.
+	Entries             []Entry
+	Notes               []string
+	Asks                []Ask
 	QuestionsIncomplete bool
 }
 
-// SettledAsks returns every (question, answer) pair this conversation has
-// settled, oldest first, including earlier asks of an id that was later
-// re-asked. Entry-based accessors report only the latest state of each id.
-//
-// A RETRACTED ask is never settled, whatever answer landed on it. The reviewer
-// withdraws a question it has answered for itself, and an operator who saw that
-// question before the retraction can still answer it - the window is the whole
-// time the reviewer keeps working. That answer stays recorded on disk, like any
-// orphan or duplicate, but it must not become a durable branch decision: the
-// only consumer of this list writes review_questions, whose rows reach every
-// later reviewer as questions not to re-raise and are never deleted.
-//
-// Only the LAST ask of a retracted id is skipped, because that is the ask the
-// retraction closed. An earlier ask of the same id was a different question,
-// and a human's decision on it would otherwise vanish - an id asked, answered,
-// re-asked and then retracted inside one turn is recorded once, at the end of
-// that turn.
 func (c Conversation) SettledAsks() []Ask {
 	retracted := make(map[string]bool, len(c.Entries))
 	for _, e := range c.Entries {
@@ -206,13 +99,10 @@ func (c Conversation) SettledAsks() []Ask {
 	return out
 }
 
-// Open returns the entries that still block the step.
 func (c Conversation) Open() []Entry { return c.filter(Entry.Open) }
 
-// Answered returns the live, answered entries.
 func (c Conversation) Answered() []Entry { return c.filter(Entry.Answered) }
 
-// Withdrawn returns the retracted entries.
 func (c Conversation) Withdrawn() []Entry {
 	return c.filter(func(e Entry) bool { return e.Retracted })
 }
@@ -227,16 +117,8 @@ func (c Conversation) filter(keep func(Entry) bool) []Entry {
 	return out
 }
 
-// DirName is the conversation directory's name inside the run's evidence
-// directory. It is exported because the conversation shares that directory
-// with the run's TEST evidence, which is publishable: the PR step excludes this
-// name from the evidence-branch walk, and naming it here keeps the exclusion
-// and the location from drifting apart.
 const DirName = "review"
 
-// Dir is the review conversation directory for a run, given that run's
-// evidence directory. Empty in, empty out: an embedding with no evidence
-// directory has no conversation, and callers treat that as "no questions".
 func Dir(evidenceDir string) string {
 	if strings.TrimSpace(evidenceDir) == "" {
 		return ""
@@ -244,9 +126,6 @@ func Dir(evidenceDir string) string {
 	return filepath.Join(evidenceDir, DirName)
 }
 
-// Load reads a conversation directory. A missing directory or a missing file
-// is an empty conversation, not an error: the reviewer creates the files only
-// when it has something to say.
 func Load(dir string) (Conversation, error) {
 	var conv Conversation
 	if strings.TrimSpace(dir) == "" {
@@ -399,12 +278,6 @@ func Load(dir string) (Conversation, error) {
 	return conv, nil
 }
 
-// classifyQuestionLine decides what one questions.ndjson line is, applying the
-// acceptance rules in one place.
-//
-// A non-empty note is a stateless rejection, already phrased for the operator.
-// Otherwise ok reports whether the line is an ASK; the one line that is neither
-// is a retraction, whose effect depends on state this function does not have.
 func classifyQuestionLine(line string) (Question, string, bool) {
 	var q Question
 	if err := json.Unmarshal([]byte(line), &q); err != nil {
@@ -436,18 +309,6 @@ func classifyQuestionLine(line string) (Question, string, bool) {
 	return q, "", true
 }
 
-// settlingAnswer returns the answer stamped for this ask of one id - the latest
-// of them, so a correction to the same ask replaces - or nil while that ask is
-// still open.
-//
-// An UNSTAMPED answer settles nothing. It used to pair positionally, for "a
-// file written before ask_ordinal existed", but no such file can exist:
-// answers.ndjson arrives with the field and the daemon is its only writer. The
-// one thing that branch really reached was the orphan - an answer for an id
-// nobody has asked yet, which is written unstamped because there is no ask to
-// stamp - and there it settled the first LATER ask of that id, pre-answering a
-// genuinely different question, which is the defect the stamp exists to close.
-// An orphan stays recorded and inert instead.
 func settlingAnswer(answers []Answer, ordinal int) *Answer {
 	var settling *Answer
 	for _, a := range answers {
@@ -458,7 +319,6 @@ func settlingAnswer(answers []Answer, ordinal int) *Answer {
 	return settling
 }
 
-// AppendAnswer appends one answer, creating the directory on first use.
 func AppendAnswer(dir string, a Answer) error {
 	if strings.TrimSpace(a.ID) == "" {
 		return errors.New("review answer requires a question id")
@@ -497,15 +357,6 @@ func appendLine(dir, name string, payload any) error {
 	return nil
 }
 
-// readLines returns the non-empty lines of an ndjson file, newest-last and
-// bounded. A missing file is no lines and no error.
-//
-// It reports its two bounds separately because the caller treats them
-// differently per file. dropped says the maxLines cap removed a leading prefix;
-// incomplete says the scan never reached the end of the file (the maxFileBytes
-// cut, or a scanner error). For questions.ndjson both mean the same thing - the
-// history cannot be read in full, so nothing settles - while a dropped ANSWER
-// line only leaves its ask open, which is already the safe direction.
 func readLines(path string) (kept []string, dropped, incomplete bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {

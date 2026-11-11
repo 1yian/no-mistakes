@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/winproc"
 )
 
-// Issue #1653: the bootstrap-log fallback is only for output without a usable
-// handle. A daemon started with real stdout/stderr (the detached start path's
-// bootstrap log file, a terminal, a supervisor's pipes) keeps writing there.
 func TestPrepareRunStdioLeavesUsableOutputAlone(t *testing.T) {
 	root := t.TempDir()
 	exe, err := os.Executable()

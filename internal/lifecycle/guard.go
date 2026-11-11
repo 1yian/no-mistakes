@@ -9,7 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// ActiveRuns returns all pending/running pipeline runs from the local state DB.
 func ActiveRuns(p *paths.Paths) ([]*db.Run, error) {
 	if p == nil {
 		return nil, nil

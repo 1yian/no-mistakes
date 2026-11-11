@@ -63,9 +63,6 @@ func TestPROmitIntentSuppressionIsTightenOnly(t *testing.T) {
 	}
 }
 
-// Under the caller-side omission the PR-drafting turns receive no intent text
-// at all, on both the ordinary narrative path and the repository-template
-// path: withhold, never scan. Every other step prompt keeps the full intent.
 func TestPROmitIntentWithholdsIntentFromDraftingTurns(t *testing.T) {
 	t.Parallel()
 	const secret = "Private goal: replace the vendor before the contract renews."
@@ -166,8 +163,6 @@ func TestPRPublishIntentSuppressionCoversDefaultAgentAndFallback(t *testing.T) {
 	}
 }
 
-// A supplied description is author narrative, not intent: the Intent section
-// still lands in the appendix under the same publication controls.
 func TestPRSuppliedBodyPublishesIntentUnderTheSameControls(t *testing.T) {
 	t.Parallel()
 	for _, omit := range []bool{false, true} {

@@ -10,18 +10,6 @@ import (
 	"testing"
 )
 
-// TestAxiRewrittenRemoteRecoveryThenFreshRunJourney drives the published-branch
-// rewrite journey with the real binary, fake agent, isolated daemon, and local
-// bare push target: a pipeline run publishes a fix commit, someone force-pushes
-// a rewrite of that branch outside the pipeline, `axi sync --recover` rebinds
-// the push binding and anchors the superseded pipeline head under
-// refs/no-mistakes/recover-rewritten/<run>/<generation>, and a fresh `axi run`
-// of the rewritten head must then be accepted rather than refused because the
-// gate's private mirror still holds the superseded head.
-//
-// The adversarial half proves the anchor is a preservation credit only: a
-// private-only gate commit that no recovery anchor reaches must still refuse
-// the fresh submission, naming that commit and not the anchored one.
 func TestAxiRewrittenRemoteRecoveryThenFreshRunJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: branchSyncScenario(t)})
 	h.CommitChange("init-rewritten", "seed.txt", "seed\n", "seed rewritten init")

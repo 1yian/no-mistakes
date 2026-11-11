@@ -12,32 +12,14 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ErrReviewDidNotPassGreen is returned when ingest is asked to label a run
-// whose review did not complete with a non-blocking (green) pass. A parked or
-// blocking review is a different class: it found something, so it is not a
-// post-PR miss.
 var ErrReviewDidNotPassGreen = errors.New("review did not pass green")
 
-// IngestResult reports which captured case received post-PR-miss gold.
 type IngestResult struct {
 	CaseID string
 	Added  int
 	Total  int
 }
 
-// ParsePostPRMissFinding accepts one finding object. ID and description are
-// required; they are the eval matcher keys. This is the typed source of truth
-// for a confirmed post-PR miss. no-mistakes does not read firstmate ledgers
-// or scrape GitHub review comments.
-//
-// Severity and action are checked against the finding vocabulary that
-// internal/types owns. A hand-written miss is the one place a finding's
-// severity reaches the corpus without passing through a pipeline agent, and
-// that severity becomes gold and then a composition stratum on the dashboards,
-// so free text here would surface as an invented finding type. Action is
-// validated and then deliberately dropped: gold carries no action, and
-// silently ignoring a value the caller believed was meaningful is worse than
-// refusing one that is not part of the vocabulary.
 func ParsePostPRMissFinding(raw string) (FindingGold, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -75,10 +57,6 @@ func ParsePostPRMissFinding(raw string) (FindingGold, error) {
 	}, nil
 }
 
-// IngestPostPRMiss captures a run that already passed review green, then
-// writes confirmed post-PR misses as false-negative gold on the last green
-// review pass. Capture of an existing case is a no-op, so later ingest still
-// attaches gold. Duplicate finding IDs are no-ops.
 func IngestPostPRMiss(ctx context.Context, store *Store, p *paths.Paths, database *db.DB, runID string, misses []FindingGold) (IngestResult, error) {
 	if store == nil || p == nil || database == nil {
 		return IngestResult{}, fmt.Errorf("eval miss ingest requires a store, paths, and database")

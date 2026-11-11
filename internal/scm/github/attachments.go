@@ -85,7 +85,6 @@ var (
 	}
 )
 
-// UserAsset describes a local file that passed gh's attach rules.
 type UserAsset struct {
 	Path        string
 	ContentType string
@@ -94,10 +93,6 @@ type UserAsset struct {
 	fileInfo    fs.FileInfo
 }
 
-// SupportsUserAttachments reports whether host can serve the unofficial
-// user-attachments upload endpoint. Empty host is github.com (the Host
-// constructor leaves it empty for github.com remotes). GHEC tenants (*.ghe.com)
-// are included; GitHub Enterprise Server is not.
 func SupportsUserAttachments(host string) bool {
 	h := normalizeGitHubHost(host)
 	if h == "" || h == "github.com" || h == "github.localhost" || h == "garage.github.com" {
@@ -121,8 +116,6 @@ func userAssetUploadPrefix(host string) string {
 	return "https://uploads." + h + "/"
 }
 
-// ValidateUserAsset applies gh 2.99.0's client-side attach rules. A failure
-// here must not produce a user-attachments URL.
 func ValidateUserAsset(path string) (UserAsset, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -196,7 +189,6 @@ func classifyGitHubToken(token string) (githubTokenClass, string) {
 	}
 }
 
-// UserAssetClient posts one validated file to the unofficial upload endpoint.
 type UserAssetClient struct {
 	HTTP         *http.Client
 	UploadPrefix string
@@ -212,9 +204,6 @@ func (c *UserAssetClient) httpClient() *http.Client {
 	return &http.Client{Timeout: userAssetUploadTimeout}
 }
 
-// UploadFile sends asset and returns the user-attachments URL. The URL is
-// checked against gh's response shape before it is returned so a surprising
-// payload cannot become a dead link in a PR body.
 func (c *UserAssetClient) UploadFile(ctx context.Context, asset UserAsset) (string, error) {
 	if c == nil {
 		return "", errors.New("user-attachments client is not configured")
@@ -319,18 +308,8 @@ func userAttachmentHostOK(got, expected string) bool {
 	return got == expected || got == "github.com"
 }
 
-// ErrUserAssetTokenUnavailable wraps every upload error caused by the token
-// resolution of a UserAssetSession, so a caller with more files to upload can
-// stop after the first one instead of failing each file the same way.
 var ErrUserAssetTokenUnavailable = errors.New("no usable GitHub token for user-attachments")
 
-// UserAssetSession uploads the files of one PR render. It runs `gh auth token`
-// at most once and shares the result with every upload: on a machine where gh
-// sits behind a credential vault that asks a human before it discloses the raw
-// token, a per-file resolution asked once per screenshot and, after the first
-// refusal, kept asking for every remaining file. A failed resolution is kept
-// too, so later uploads return ErrUserAssetTokenUnavailable without a new
-// prompt. A session is not safe for concurrent use.
 type UserAssetSession struct {
 	host     *Host
 	resolved bool
@@ -338,22 +317,14 @@ type UserAssetSession struct {
 	tokenErr error
 }
 
-// NewUserAssetSession starts a token-sharing upload session for one PR render.
 func (h *Host) NewUserAssetSession() *UserAssetSession {
 	return &UserAssetSession{host: h}
 }
 
-// UploadUserAsset validates path and uploads it as a GitHub user-attachment
-// against this Host's repository, resolving the token for this call alone.
-// Callers with several files use NewUserAssetSession. Any error is fail-closed:
-// keep today's PR rendering rather than inventing a URL.
 func (h *Host) UploadUserAsset(ctx context.Context, path string) (string, error) {
 	return h.NewUserAssetSession().UploadUserAsset(ctx, path)
 }
 
-// UploadUserAsset validates path and uploads it with the session's token.
-// Callers must treat any error as fail-closed: keep today's PR rendering rather
-// than inventing a URL.
 func (s *UserAssetSession) UploadUserAsset(ctx context.Context, path string) (string, error) {
 	h := s.host
 	if h == nil {

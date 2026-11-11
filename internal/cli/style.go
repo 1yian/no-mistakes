@@ -15,7 +15,6 @@ var (
 	sBold   = lipgloss.NewStyle().Bold(true)
 )
 
-// runStatusStyle returns a styled string for the given run status.
 func runStatusStyle(status types.RunStatus) string {
 	s := string(status)
 	switch status {

@@ -15,25 +15,18 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// perfRecordingAgent decorates the step agent to persist one local
-// agent_invocations row per invocation: identity, purpose, session mode,
-// timing, exit status, and token usage. Recording is local-only and
-// best-effort: a failed insert never fails the invocation, and no
-// per-invocation record leaves the machine.
 type perfRecordingAgent struct {
 	inner    agent.Agent
 	db       *db.DB
 	runID    string
 	stepName types.StepName
-	// round returns the 1-based round the current invocation belongs to.
-	round func() int
+	round    func() int
 }
 
 func (a *perfRecordingAgent) Name() string { return a.inner.Name() }
 
 func (a *perfRecordingAgent) Close() error { return a.inner.Close() }
 
-// SupportsSessionResume forwards the wrapped adapter's session capability.
 func (a *perfRecordingAgent) SupportsSessionResume() bool {
 	return agent.SupportsSessionResume(a.inner)
 }
@@ -117,10 +110,6 @@ func (a *perfRecordingAgent) record(ctx context.Context, opts agent.RunOpts, age
 	}
 }
 
-// recordResult folds a successful (or partially successful) result's identity,
-// usage, per-round token deltas, and bounded activity metrics into inv. Every
-// field the adapter did not report is left nil so it is stored as unknown
-// rather than a fabricated zero.
 func (a *perfRecordingAgent) recordResult(inv *db.AgentInvocation, sessionKey string, result *agent.Result) {
 	if result == nil {
 		return
@@ -191,9 +180,6 @@ func (a *perfRecordingAgent) recordResult(inv *db.AgentInvocation, sessionKey st
 	}
 }
 
-// countOutputFindings returns the number of findings in a structured output
-// payload and whether the payload was findings-shaped at all (had a "findings"
-// key). It never retains any finding content - only the count.
 func countOutputFindings(output json.RawMessage) (int, bool) {
 	if len(output) == 0 {
 		return 0, false
@@ -237,8 +223,6 @@ func invocationSessionMode(opts agent.RunOpts, result *agent.Result, runErr erro
 	}
 }
 
-// invocationSessionKey fingerprints the session identity so reuse is
-// auditable without storing the raw resumable id in the telemetry table.
 func invocationSessionKey(opts agent.RunOpts, result *agent.Result) string {
 	id := ""
 	if result != nil && result.SessionID != "" {
@@ -253,9 +237,6 @@ func invocationSessionKey(opts agent.RunOpts, result *agent.Result) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// classifyInvocationFailure buckets an invocation error into a
-// low-cardinality category. Only the category is stored - never the error
-// text, which can embed agent output.
 func classifyInvocationFailure(err error) string {
 	msg := err.Error()
 	switch {
@@ -270,9 +251,6 @@ func classifyInvocationFailure(err error) string {
 	}
 }
 
-// classifyFallbackReason buckets the error that failed a session resume into a
-// low-cardinality reason (see db.FallbackReason*). Like classifyInvocationFailure
-// it stores only the category, never the error text.
 func classifyFallbackReason(err error) string {
 	if err == nil {
 		return db.FallbackReasonOther

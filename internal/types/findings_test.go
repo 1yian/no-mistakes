@@ -239,9 +239,6 @@ func TestAutoFixableFindings_NoOpExcluded(t *testing.T) {
 	}
 }
 
-// An empty/missing action must NOT be auto-fixed. It fails closed to ask-user
-// (park) so an unclassified finding routes to a human instead of being
-// silently auto-applied.
 func TestAutoFixableFindings_EmptyActionIsNotAutoFixable(t *testing.T) {
 	f := Findings{
 		Items: []Finding{
@@ -258,8 +255,6 @@ func TestAutoFixableFindings_EmptyActionIsNotAutoFixable(t *testing.T) {
 	}
 }
 
-// A finding with no action field (a non-schema path that omits it) must fail
-// closed: never auto-fixed, always caught as ask-user so it parks for a human.
 func TestEmptyActionFindingFailsClosedToAskUser(t *testing.T) {
 	raw := `{"findings":[{"severity":"error","description":"unclassified finding with no action"}]}`
 	f, err := ParseFindingsJSON(raw)
@@ -517,8 +512,6 @@ func TestFinding_Action_Values(t *testing.T) {
 	}
 }
 
-// A finding's ID is trimmed when it arrives: surrounding whitespace is not part
-// of the identity the gate shows and a response names.
 func TestNormalizeFindingsTrimsFindingIDs(t *testing.T) {
 	got := NormalizeFindings(Findings{Items: []Finding{
 		{ID: " R1 ", Description: "padded"},

@@ -65,8 +65,6 @@ func TestProvisionGateDoesNotStampUnsupportedHookIsolation(t *testing.T) {
 	}
 }
 
-// resolveSymlinks resolves symlinks in a path (needed on macOS where
-// /var → /private/var but git returns resolved paths).
 func resolveSymlinks(t *testing.T, p string) string {
 	t.Helper()
 	resolved, err := filepath.EvalSymlinks(p)
@@ -76,8 +74,6 @@ func resolveSymlinks(t *testing.T, p string) string {
 	return resolved
 }
 
-// copyDirTree recursively copies src into dst (creating dst). It is a portable
-// stand-in for `cp -R`, which is unavailable on Windows.
 func copyDirTree(t *testing.T, src, dst string) {
 	t.Helper()
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -103,7 +99,6 @@ func copyDirTree(t *testing.T, src, dst string) {
 	}
 }
 
-// setupTestRepo creates a git repo with an origin remote and returns its resolved path.
 func setupTestRepo(t *testing.T) string {
 	t.Helper()
 
@@ -275,10 +270,6 @@ func TestInitRepoID(t *testing.T) {
 	}
 }
 
-// TestInitIsIdempotent verifies that re-running Init on an already-initialized
-// repo succeeds, reports that it was not newly created, and leaves a single
-// repo record and an intact gate. This is what lets existing users re-run init
-// to adopt new capabilities (e.g. the agent skill) without hitting an error.
 func TestInitRefusesManagedValidationWorktreeBeforePartialMutation(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -573,9 +564,6 @@ func TestInitRefreshUsesPersistedRepoID(t *testing.T) {
 	}
 }
 
-// TestInitRepairsBrokenGate verifies that re-running Init restores gate wiring
-// that was torn down out from under it (e.g. a deleted hook or remote), so init
-// doubles as a repair command.
 func TestInitRepairsBrokenGate(t *testing.T) {
 	workDir := setupTestRepo(t)
 	nmRoot := t.TempDir()
@@ -615,11 +603,6 @@ func TestInitRepairsBrokenGate(t *testing.T) {
 	}
 }
 
-// TestInitReattachesGateAfterWorkingDirRename verifies that renaming or moving
-// a working directory does not break init idempotency: the leftover no-mistakes
-// remote identifies the existing gate, and re-running init from the new
-// location reattaches it (same repo ID, same bare repo, run history intact)
-// instead of failing with "remote already exists".
 func TestInitReattachesGateAfterWorkingDirRename(t *testing.T) {
 	workDir := setupTestRepo(t)
 	nmRoot := t.TempDir()
@@ -689,10 +672,6 @@ func TestInitReattachesGateAfterWorkingDirRename(t *testing.T) {
 	}
 }
 
-// TestInitCreatesFreshGateForCopiedWorkingDir verifies that when a working
-// directory is copied (the original still exists), init treats the copy as a
-// new repo: it gets its own gate and the copied no-mistakes remote is
-// repointed, while the original repo's gate is left untouched.
 func TestInitCreatesFreshGateForCopiedWorkingDir(t *testing.T) {
 	workDir := setupTestRepo(t)
 	nmRoot := t.TempDir()
@@ -740,9 +719,6 @@ func TestInitCreatesFreshGateForCopiedWorkingDir(t *testing.T) {
 	}
 }
 
-// TestInitRepointsOrphanGateRemoteOnFreshInit verifies that a leftover
-// no-mistakes remote pointing into our repos dir with no matching DB record
-// (a half-ejected gate) is repointed to the fresh gate instead of failing.
 func TestInitRepointsOrphanGateRemoteOnFreshInit(t *testing.T) {
 	workDir := setupTestRepo(t)
 	nmRoot := t.TempDir()
@@ -1017,12 +993,6 @@ func TestEjectCleansUpWorktrees(t *testing.T) {
 	}
 }
 
-// TestEjectCleansUpWorktreesInConfiguredRoot covers a repository whose run
-// worktrees the operator placed in a directory of their own (worktree_roots).
-// Eject removes the directories named by this repository's own run rows, and
-// nothing else: not the root, not the operator's files, and not a directory
-// that merely looks like a run worktree but belongs to no run of this
-// repository.
 func TestEjectCleansUpWorktreesInConfiguredRoot(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -1080,8 +1050,6 @@ func TestEjectCleansUpWorktreesInConfiguredRoot(t *testing.T) {
 	}
 }
 
-// yamlPath quotes a path for YAML so a Windows drive letter is not read as a
-// mapping and its separators survive as literal backslashes.
 func yamlPath(path string) string {
 	return `"` + strings.ReplaceAll(path, `\`, `\\`) + `"`
 }
@@ -1110,14 +1078,6 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// TestInit_PostReceiveSurvivesHooksPathPoisoning reproduces issue #122.
-// Husky and similar tools run `git config core.hookspath .husky/_` from
-// inside a worktree of the gate bare repo. That write lands in the bare's
-// shared local config and silently disables the post-receive hook, so
-// subsequent pushes complete but never trigger a pipeline.
-//
-// The gate repo must isolate its own core.hookspath so external writes to
-// the shared config can't reach it.
 func TestInit_PostReceiveSurvivesHooksPathPoisoning(t *testing.T) {
 	workDir := setupTestRepo(t)
 	nmRoot := t.TempDir()
@@ -1169,13 +1129,6 @@ func TestInit_PostReceiveSurvivesHooksPathPoisoning(t *testing.T) {
 	}
 }
 
-// TestInitRedactsCredentialURL asserts that an origin URL carrying embedded
-// credentials (e.g. a fine-grained PAT) is stored redacted in the DB and in the
-// returned repo record, while the bare gate's "origin" remote keeps the full
-// credentialled URL so worktrees carved from it can still authenticate pushes.
-//
-// The upstream host is an unreachable loopback address so DefaultBranch's
-// ls-remote fails fast and falls back to "main" without real network I/O.
 func TestInitRedactsCredentialURL(t *testing.T) {
 	workDir := setupTestRepo(t)
 	const token = "ghp_secret_DO_NOT_LEAK"

@@ -128,13 +128,6 @@ func TestLoadRecoveredConfig_BoundsFetchAndFailsClosed(t *testing.T) {
 	}
 }
 
-// TestLoadTrustedRepoConfig_FailClosedOnFetchFailure is the regression test for
-// the supply-chain RCE review item #1: when the default-branch fetch fails,
-// startRun passes an empty trustedSHA, and loadTrustedRepoConfig MUST return
-// nil even though a (potentially stale) origin/<default> ref is still present
-// in the worktree's shared refs. Reading that stale ref would run a command
-// the live default branch has already removed. EffectiveRepoConfig then forces
-// empty commands, so the stale command does not run.
 func TestLoadTrustedRepoConfig_FailClosedOnFetchFailure(t *testing.T) {
 	ctx := context.Background()
 
@@ -206,12 +199,6 @@ func TestLoadTrustedRepoConfig_FailClosedOnFetchFailure(t *testing.T) {
 	}
 }
 
-// TestLoadTrustedRepoConfig_PinnedSHAReadsFreshDefaultBranch proves the
-// complementary side of review item #1: when the fetch succeeds, the trusted
-// config is read at the exact resolved SHA (not the origin/<default> ref
-// name), so it reflects the freshly fetched default-branch tip rather than a
-// stale ref value. Advancing the default branch and re-fetching must yield the
-// new command, not the old one.
 func TestLoadTrustedRepoConfig_PinnedSHAReadsFreshDefaultBranch(t *testing.T) {
 	ctx := context.Background()
 

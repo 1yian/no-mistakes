@@ -15,76 +15,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Scenario is a list of canned responses matched against the prompt text.
-// The first entry whose Match substring appears in the prompt wins. The
-// final unconditional response is the default (matches everything).
 type Scenario struct {
 	Actions []Action `yaml:"actions"`
 }
 
-// Action describes a single canned response. Match is a substring tested
-// against the prompt; an empty Match always matches and is treated as a
-// catch-all when listed last. Edits are applied to the working directory
-// before the response is emitted, so subsequent pipeline steps see the
-// changes (this is how a "fix" round actually mutates files).
 type Action struct {
 	Match string `yaml:"match"`
 
-	// Structured is the JSON body returned in the structured-output slot
-	// (claude/grok result.structured_output, opencode.info.structured, or the
-	// agent_message.text payload for codex). Encoded back to JSON when
-	// emitted, so YAML authors can write it inline without escaping.
 	Structured map[string]any `yaml:"structured,omitempty"`
 
-	// StructuredRaw is emitted as the structured-output slot verbatim.
-	// It is useful for testing parser fallback paths with non-object JSON.
 	StructuredRaw string `yaml:"structured_raw,omitempty"`
 
-	// Text is the human-readable response shown alongside structured
-	// output. Defaults to a generic acknowledgement.
 	Text string `yaml:"text,omitempty"`
 
-	// Edits are file modifications applied in CWD before responding.
 	Edits []Edit `yaml:"edits,omitempty"`
 
-	// Stage lists paths to git-add after edits are applied.
 	Stage []string `yaml:"stage,omitempty"`
 
-	// Git runs git invocations in CWD after edits and staging, each entry the
-	// argument list for one `git` call. File edits alone cannot express HOW an
-	// agent ended an in-progress operation, which is exactly what the rebase
-	// step's merge-shape guard judges: concluding a merge with
-	// `git commit --no-edit`, abandoning it with `git merge --abort`, or
-	// replacing it with a rebase are three different histories from the same
-	// resolved files. A scenario needs to be able to produce each one.
 	Git [][]string `yaml:"git,omitempty"`
 
-	// DelayMS pauses before responding, for e2e tests that need an observable active run.
 	DelayMS int `yaml:"delay_ms,omitempty"`
 
-	// AskQuestions are raw questions.ndjson lines the fake reviewer appends to
-	// the run's review conversation before responding, which is how a real
-	// reviewer asks while it works. The directory is read out of the prompt
-	// (see conversation.go), never from the scenario, so this cannot write
-	// anywhere the product did not name.
 	AskQuestions []string `yaml:"ask_questions,omitempty"`
 
-	// WriteEvidence are test-evidence files written into the run's evidence
-	// directory, which the test prompt names and which lives outside the
-	// worktree by design.
 	WriteEvidence []EvidenceFile `yaml:"write_evidence,omitempty"`
 }
 
-// EvidenceFile is one test-evidence file written under the evidence directory
-// the prompt names, relative to it.
 type EvidenceFile struct {
 	Path    string `yaml:"path"`
 	Content string `yaml:"content"`
 }
 
-// Edit performs a Replace of Old with New in Path. If Old is empty the
-// whole file is overwritten with New. If the file does not exist it is
-// created.
 type Edit struct {
 	Path string `yaml:"path"`
 	Old  string `yaml:"old,omitempty"`
@@ -106,11 +67,6 @@ func loadScenario(path string) (*Scenario, error) {
 	return &s, nil
 }
 
-// defaultScenario returns an "everything is clean" response that satisfies
-// every JSON schema no-mistakes hands to an agent: empty findings array,
-// low risk, and for the test step a populated tested array plus the
-// live-validation contract (one passing scenario and a go verdict) the step
-// now requires of every evidence turn.
 func defaultScenario() *Scenario {
 	return &Scenario{
 		Actions: []Action{{
@@ -143,11 +99,6 @@ func defaultScenario() *Scenario {
 	}
 }
 
-// Match returns the first action whose Match substring is contained in the
-// prompt. An empty Match matches everything, so a single trailing entry
-// can serve as the catch-all. The process working directory is the
-// worktree no-mistakes pointed the agent at; MatchInDir is the variant for
-// adapters whose worktree arrives with the request instead.
 func (s *Scenario) Match(prompt string) Action {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -156,9 +107,6 @@ func (s *Scenario) Match(prompt string) Action {
 	return s.MatchInDir(wd, prompt)
 }
 
-// MatchInDir is Match for a worktree named explicitly. A review turn whose
-// canned response omits reviewed_paths gets the worktree's own reviewable
-// changed-file set filled in (see reviewCoverageForPrompt).
 func (s *Scenario) MatchInDir(wd, prompt string) Action {
 	for _, a := range s.Actions {
 		if a.Match == "" || strings.Contains(prompt, a.Match) {
@@ -168,23 +116,8 @@ func (s *Scenario) MatchInDir(wd, prompt string) Action {
 	return Action{Text: "no matching scenario"}
 }
 
-// reviewPromptMarker opens every review turn's prompt (initial review and
-// each post-fix rereview); the fix turn and every other step use different
-// openers and are left alone.
 const reviewPromptMarker = "Review the code changes and return structured findings"
 
-// withReviewCoverage is the fixture-side stand-in for the coverage record a
-// real reviewer reports. The production Review step fails closed when a
-// clean round omits reviewed_paths (it parks for approval instead of
-// certifying an unread head), so a canned review response that does not
-// spell out reviewed_paths would park every e2e journey at the review gate.
-// A scenario that names reviewed_paths itself - partial, empty, or
-// fabricated - is passed through untouched so coverage tests can still
-// exercise the gate; only an absent field is filled, and only on a review
-// turn. The fill is the same set the step computes for that round: the
-// pipeline's coverage checklist, or for older prompts the changed files minus
-// the prompt's ignore patterns. This escape lives in the fake agent alone;
-// there is no production default that stands in for a missing record.
 func withReviewCoverage(wd, prompt string, a Action) Action {
 	if !strings.Contains(prompt, reviewPromptMarker) || a.StructuredRaw != "" {
 		return a
@@ -208,14 +141,6 @@ func withReviewCoverage(wd, prompt string, a Action) Action {
 	return a
 }
 
-// reviewCoverageForPrompt derives the reviewable changed-file set for a
-// review prompt: `git diff --name-only <base commit>` against the worktree
-// (which equals base..HEAD when the tree is clean, in both the initial review
-// and the post-fix rereview), filtered by the prompt's ignore patterns with
-// the same matching rules the pipeline applies (basename glob for a bare
-// pattern, prefix for `dir/**`, full-path glob otherwise). Paths are
-// returned as an empty, non-nil slice when nothing is reviewable so the
-// field is still reported.
 func reviewCoverageForPrompt(wd, prompt string) ([]string, error) {
 	if _, tail, present := strings.Cut(prompt, "\nChanged files this review is held to ("); present {
 		_, tail, _ = strings.Cut(tail, "\n")
@@ -262,8 +187,6 @@ func reviewCoverageForPrompt(wd, prompt string) ([]string, error) {
 	return paths, nil
 }
 
-// promptContextValue reads a `- <key>: <value>` line from the prompt's
-// Context block.
 func promptContextValue(prompt, key string) string {
 	prefix := "- " + key + ": "
 	for _, line := range strings.Split(prompt, "\n") {
@@ -274,9 +197,6 @@ func promptContextValue(prompt, key string) string {
 	return ""
 }
 
-// ignoredByPatterns mirrors the pipeline's matchIgnorePattern
-// (internal/pipeline/steps/common_diff.go) so the fake reviewer's coverage is
-// the exact set the step holds it to.
 func ignoredByPatterns(file string, patterns []string) bool {
 	for _, pattern := range patterns {
 		if strings.HasSuffix(pattern, "/**") {
@@ -332,9 +252,6 @@ func applyActionInDir(wd string, action Action) error {
 	return runGitInDir(wd, action.Git)
 }
 
-// runGitInDir runs each scenario git invocation in wd. A failure is returned
-// rather than logged: a scenario that says "conclude the merge" and silently
-// did not would make the pipeline's own guard look like the thing under test.
 func runGitInDir(wd string, invocations [][]string) error {
 	for _, args := range invocations {
 		if len(args) == 0 {
@@ -494,8 +411,6 @@ func scenarioPathWithinWorkingDirectory(wd, path string) error {
 	return nil
 }
 
-// structuredJSON marshals an action's Structured map. Empty structured
-// becomes an empty object so the parser sees something parseable.
 func (a Action) structuredJSON() []byte {
 	if a.StructuredRaw != "" {
 		return []byte(a.StructuredRaw)

@@ -13,13 +13,10 @@ import (
 	"time"
 )
 
-// ClaudeReaderName is the agent name used in cache keys and DB rows.
 const ClaudeReaderName = "claude"
 
-// claudeReader reads Claude Code transcripts from the selected account's projects/.
 type claudeReader struct{}
 
-// NewClaudeReader returns a Reader for Claude Code transcripts.
 func NewClaudeReader() Reader { return &claudeReader{} }
 
 func (r *claudeReader) Name() string { return ClaudeReaderName }
@@ -147,15 +144,11 @@ func (r *claudeReader) Load(_ context.Context, s *Session) error {
 	return nil
 }
 
-// claudeMetadata is the small subset returned by claudePeekMetadata.
 type claudeMetadata struct {
 	CWD            string
 	FirstTimestamp time.Time
 }
 
-// claudePeekMetadata reads the first non-attachment record from a transcript
-// file to extract its cwd and start time. Returns nil without an error when
-// the file is empty or contains no parseable records.
 func claudePeekMetadata(path string) (*claudeMetadata, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -195,15 +188,11 @@ func claudePeekMetadata(path string) (*claudeMetadata, error) {
 	return nil, nil
 }
 
-// claudeRecord is the parsed shape of one .jsonl line we care about.
 type claudeRecord struct {
 	uuid    string
 	message *Message
 }
 
-// parseClaudeRecord returns a Message for user and assistant turns. It
-// returns ok=true with message=nil for records we want to track for
-// LastMsgKey/uuid purposes but should not include in Messages.
 func parseClaudeRecord(line []byte) (claudeRecord, bool) {
 	var raw struct {
 		Type      string          `json:"type"`
@@ -256,8 +245,6 @@ func parseClaudeRecord(line []byte) (claudeRecord, bool) {
 	return rec, true
 }
 
-// parseClaudeUserMessage extracts text and tool_result file paths from a
-// user record. content may be a plain string or an array of typed items.
 func parseClaudeUserMessage(raw json.RawMessage) (string, []string) {
 	if len(raw) == 0 {
 		return "", nil
@@ -278,9 +265,6 @@ func parseClaudeUserMessage(raw json.RawMessage) (string, []string) {
 			return s, nil
 		}
 	}
-	// Array form: each item may be {type: "text", text: "..."} or
-	// {type: "tool_result", content: ...}. We drop tool_result *text*
-	// entirely - it's tool output, not user intent.
 	var items []map[string]any
 	if err := json.Unmarshal(msg.Content, &items); err != nil {
 		return "", nil
@@ -297,8 +281,6 @@ func parseClaudeUserMessage(raw json.RawMessage) (string, []string) {
 	return sb.String(), nil
 }
 
-// parseClaudeAssistantMessage extracts assistant text and any file paths
-// referenced via tool_use input fields. Thinking blocks are dropped.
 func parseClaudeAssistantMessage(raw json.RawMessage) (string, []string) {
 	if len(raw) == 0 {
 		return "", nil
@@ -328,9 +310,6 @@ func parseClaudeAssistantMessage(raw json.RawMessage) (string, []string) {
 	return sb.String(), paths
 }
 
-// extractToolPaths pulls plausible file paths from tool input fields.
-// Agent tools use several key names for path-like values; cover the common
-// variants here so transcript readers can share the same extraction logic.
 func extractToolPaths(input map[string]any) []string {
 	var out []string
 	for _, key := range []string{"file_path", "filePath", "path", "notebook_path"} {
@@ -354,8 +333,6 @@ func extractToolPaths(input map[string]any) []string {
 	return out
 }
 
-// isClaudeSyntheticUserText filters out the meta strings the Claude CLI
-// inserts as fake "user" messages: slash-command echoes, caveats, etc.
 func isClaudeSyntheticUserText(text string) bool {
 	t := strings.TrimSpace(text)
 	if strings.HasPrefix(t, "<command-name>") {

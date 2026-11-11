@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// A rejected frame must not even attempt a write to the daemon.
 type frameWriteProbe struct {
 	net.Conn
 	writes int

@@ -157,7 +157,6 @@ func TestModel_View_FindingsViewportApplied(t *testing.T) {
 
 func TestDiffBoxTitle_ShowsScrollPosition(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.ANSI)
-	// Create a diff with enough lines to scroll.
 	var diffLines []string
 	diffLines = append(diffLines, "diff --git a/foo.go b/foo.go", "--- a/foo.go", "+++ b/foo.go", "@@ -1,20 +1,20 @@")
 	for i := 1; i <= 30; i++ {

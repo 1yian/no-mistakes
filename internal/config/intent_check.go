@@ -19,7 +19,6 @@ const (
 	maxIntentCheckBytes      = 8192
 )
 
-// IntentCheckRaw is the YAML policy for deterministic intent screening.
 type IntentCheckRaw struct {
 	Mode     string   `yaml:"mode" json:"mode,omitempty"`
 	Terms    []string `yaml:"terms" json:"terms,omitempty"`
@@ -28,11 +27,8 @@ type IntentCheckRaw struct {
 	compiledPatterns []*regexp.Regexp
 }
 
-// IntentCheck is the resolved, additive policy used by the daemon.
 type IntentCheck = IntentCheckRaw
 
-// validateIntentCheck normalizes and compiles the policy while loading config,
-// so malformed trusted rules fail before a run can start.
 func validateIntentCheck(check *IntentCheckRaw) error {
 	return validateIntentCheckWithLimits(check, maxIntentCheckRules, maxIntentCheckBytes)
 }
@@ -78,7 +74,6 @@ func validateIntentCheckWithLimits(check *IntentCheckRaw, maxRules, maxBytes int
 	return nil
 }
 
-// MergeIntentChecks adds policy rules and keeps the strongest configured mode.
 func MergeIntentChecks(checks ...IntentCheckRaw) IntentCheck {
 	merged := IntentCheckRaw{Mode: IntentCheckOff}
 	for _, check := range checks {
@@ -103,7 +98,6 @@ func intentCheckModeRank(mode string) int {
 	}
 }
 
-// Match returns rule identifiers only; it never returns the matched text.
 func (check IntentCheckRaw) Match(text string) []string {
 	if check.Mode == IntentCheckOff {
 		return nil
@@ -129,8 +123,6 @@ func (check IntentCheckRaw) Match(text string) []string {
 	return matches
 }
 
-// ParseIntentCheckYAML reads only the intent policy so unrelated config fields
-// cannot prevent admission from enforcing it.
 func ParseIntentCheckYAML(data []byte) (IntentCheck, error) {
 	var repo struct {
 		Intent struct {
@@ -146,7 +138,6 @@ func ParseIntentCheckYAML(data []byte) (IntentCheck, error) {
 	return repo.Intent.Check, nil
 }
 
-// ParseIntentCheckJSON validates a policy snapshot loaded from run storage.
 func ParseIntentCheckJSON(data []byte) (IntentCheck, error) {
 	var check IntentCheckRaw
 	if err := json.Unmarshal(data, &check); err != nil {

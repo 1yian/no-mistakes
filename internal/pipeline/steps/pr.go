@@ -22,24 +22,13 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// PRStep creates or updates a pull request via the provider CLI or API.
 type PRStep struct {
-	// host overrides the SCM boundary for tests of publication composition.
-	// Production always constructs the configured provider below.
-	host scm.Host
-	// mediaUploader uploads image/video evidence at PR render time. Nil uses
-	// the GitHub host's user-attachments client. Tests inject a stub so they
-	// never talk to live GitHub.
+	host          scm.Host
 	mediaUploader userAssetUploader
-	// titleReplaced is set on the create path's copy when a supplied title
-	// will replace the drafted one, so the drafted title is neither validated
-	// nor formatted: discarded text must not block publishing.
 	titleReplaced bool
 
 	headProofUnavailable string
-	// gitlabUploader uploads image evidence to a GitLab project. Nil uses the
-	// GitLab host. Tests inject a stub so they never talk to live GitLab.
-	gitlabUploader gitlabEvidenceUploader
+	gitlabUploader       gitlabEvidenceUploader
 }
 
 type prContent struct {
@@ -100,11 +89,9 @@ var prTitleBriefSchema = json.RawMessage(`{
 
 const (
 	githubPullRequestBodyHardLimitChars = 65536
-	// Count bytes, not runes, so multi-byte markdown still stays under
-	// GitHub's character limit with room for provider-side formatting drift.
-	pullRequestBodySafetyBufferBytes = 2048
-	maxPullRequestBodyBytes          = githubPullRequestBodyHardLimitChars - pullRequestBodySafetyBufferBytes
-	minLatestPipelineUpdateBytes     = 256
+	pullRequestBodySafetyBufferBytes    = 2048
+	maxPullRequestBodyBytes             = githubPullRequestBodyHardLimitChars - pullRequestBodySafetyBufferBytes
+	minLatestPipelineUpdateBytes        = 256
 )
 
 type pipelineUpdateGroup struct {
@@ -173,8 +160,6 @@ func (s *PRStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, err
 		sctx.Log(s.headProofUnavailable)
 	}
 
-	// Capture live author content before model drafting. An unreadable
-	// provider cannot promise template preservation.
 	var template string
 	if name := configuredPRTemplate(sctx); name != "" {
 		if _, ok := host.(scm.PRContentReader); !ok {
@@ -404,11 +389,6 @@ func (s *PRStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, err
 	return &pipeline.StepOutcome{PRURL: created.URL}, nil
 }
 
-// retargetExistingPRIfNeeded moves an already-open PR onto a per-run
-// --base-branch override when the live forge base disagrees. Repo-config
-// pr.base_branch changes still do not retarget: requested is empty in that
-// path, so title and body update in place and CI keeps following the live
-// forge base.
 func retargetExistingPRIfNeeded(sctx *pipeline.StepContext, host scm.Host, existing *scm.PR, requested string) error {
 	requested = strings.TrimSpace(requested)
 	if requested == "" || existing == nil {
@@ -440,11 +420,6 @@ func retargetExistingPRIfNeeded(sctx *pipeline.StepContext, host scm.Host, exist
 	return nil
 }
 
-// bindExistingPR prefers the run's persisted PR URL over a branch-only
-// FindPR hit after GetPRState proves that identity is still open. A closed
-// or merged persisted PR is stale: title/body update the discovered PR, and
-// a per-run --base-branch retarget is refused rather than moving either
-// object. First-attach (no persisted URL) keeps the discovered PR.
 func bindExistingPR(sctx *pipeline.StepContext, host scm.Host, discovered *scm.PR) (*scm.PR, error) {
 	owned := runPRURL(sctx)
 	if owned == "" {
@@ -501,11 +476,6 @@ func prFromOwnedURL(owned string) *scm.PR {
 	return pr
 }
 
-// requireOwnedPRIdentity fails closed unless the PR about to be mutated is
-// proven to be the run's persisted review object. Retarget uses this before
-// any base move. Title/body update of a first-attach FindPR hit (no
-// persisted URL) still proceeds so a later pr.base_branch change updates
-// the open PR instead of opening a duplicate.
 func requireOwnedPRIdentity(sctx *pipeline.StepContext, existing *scm.PR) error {
 	owned := runPRURL(sctx)
 	if owned == "" {
@@ -553,17 +523,6 @@ func describePR(pr *scm.PR) string {
 	return ""
 }
 
-// buildPRContent drafts the pull request title and body and then applies the
-// publication redaction boundary. New template bodies and author-preserving
-// updates use composeOwnedPRContent, which calls the same redactPRContent owner
-// before stamping its integrity guard. This covers every source: agent-authored
-// prose, extracted user intent, findings, fix summaries, step errors, artifact
-// paths, artifact captions, and captured output embedded from evidence files.
-//
-// The scrub deliberately sits here rather than at each of those sources. A
-// per-source scrub is a set of guards that has to be complete to work, and the
-// next rendering path somebody adds is not going to have one; a boundary scrub
-// covers sources nobody has written yet.
 func (s *PRStep) buildPRContent(sctx *pipeline.StepContext, branch, baseBranch, baseSHA string, provider scm.Provider, bodyLimit int) (prContent, error) {
 	if name := configuredPRTemplate(sctx); name != "" {
 		if !supportsPRTemplates(provider) {
@@ -601,12 +560,6 @@ func (s *PRStep) buildPRContent(sctx *pipeline.StepContext, branch, baseBranch, 
 	return redacted, nil
 }
 
-// redactPRContent removes the run worktree paths, the operator's home
-// directory, and the control characters gh rewrites on read, from the content
-// about to be published.
-// Ordinary drafts call it after length caps; neither step grows the text. Owned
-// composition calls it before its integrity guard and non-truncating size check
-// so publication cannot invalidate that guard.
 func redactPRContent(content prContent, runWorktree, worktreesRoot string) prContent {
 	content.Title = safepath.RedactText(safepath.RedactWorktrees(neutralizePRControls(content.Title), runWorktree, worktreesRoot))
 	content.Body = safepath.RedactText(safepath.RedactWorktrees(neutralizePRControls(content.Body), runWorktree, worktreesRoot))
@@ -923,10 +876,6 @@ func renderPRTitle(sctx *pipeline.StepContext, title string) (string, error) {
 	return sctx.Config.PR.RenderTitle(branch, title)
 }
 
-// buildPipelineSection queries step results and rounds from the DB and
-// produces the deterministic pipeline, risk, and testing sections. These are
-// scoped to this run's own steps and rounds, so they already describe only
-// the final terminal state each step reached in this run.
 func (s *PRStep) buildPipelineSection(sctx *pipeline.StepContext, provider scm.Provider) (pipelineMD, riskLine, testingMD, evidenceMD string) {
 	return s.buildPipelineSectionFor(sctx, provider, false)
 }
@@ -982,8 +931,6 @@ func (s *PRStep) buildPipelineSectionFor(sctx *pipeline.StepContext, provider sc
 	return pipelineMD, riskLine, testingMD, evidenceMD
 }
 
-// unwrapNestedPRBody detects when the agent returned the body as a
-// serialized prContent JSON string and extracts the real markdown body.
 func unwrapNestedPRBody(body string) string {
 	if len(body) == 0 || body[0] != '{' {
 		return body
@@ -999,13 +946,6 @@ func unwrapNestedPRBody(body string) string {
 	return body
 }
 
-// appendGeneratedSections appends deterministic sections after the agent's body
-// and applies the PR body length guard.
-// prBodyBudgetPromptSection tells the drafting agent about a host's PR-body
-// character cap so it keeps its "## What Changed" section short. The Intent,
-// Risk, Testing, and Pipeline sections are appended deterministically, so the
-// agent only controls a slice of the budget; this nudge keeps that slice small.
-// Returns "" when the provider has no practical limit (bodyLimit <= 0).
 func prBodyBudgetPromptSection(bodyLimit int) string {
 	if bodyLimit <= 0 {
 		return ""
@@ -1013,13 +953,6 @@ func prBodyBudgetPromptSection(bodyLimit int) string {
 	return fmt.Sprintf("\n\n- This repository's host caps the entire PR description at %d characters. The Intent, Risk Assessment, and Pipeline sections are appended automatically; a Testing section is included when budget allows. Keep the \"## What Changed\" section to a few short bullet points.", bodyLimit)
 }
 
-// assemblePRBody composes the final PR body from its sections and keeps it
-// within bodyLimit (0 = unlimited). When the full body overruns the cap it
-// first drops the Testing section - the only one that embeds artifact and log
-// file contents and is therefore effectively unbounded - so the body sheds
-// log dumps while keeping its Intent, What Changed, Risk, and Pipeline
-// narrative intact. prependIntentSectionWithinLimit is the final backstop
-// when even that core overruns.
 func assemblePRBodyFull(sctx *pipeline.StepContext, whatChanged, riskLine, testingMD, pipelineMD string, bodyLimit int, provider scm.Provider) string {
 	sections := appendGeneratedSections(whatChanged, riskLine, testingMD, pipelineMD, provider)
 	full := prependIntentSection(sections, sctx)
@@ -1120,24 +1053,6 @@ func appendGeneratedSectionsToCleanBody(body, riskLine, testingMD, pipelineMD st
 	return appendGeneratedSectionsToCleanBodyWithinLimit(body, riskLine, testingMD, pipelineMD, maxPullRequestBodyBytes, provider)
 }
 
-// appendGeneratedSectionsToCleanBodyWithinLimit is the single choke point that
-// decides which attestation comment a body consumer sees.
-//
-// pipelineMD carries the run's real attestation. Every other component -
-// what-changed, intent, risk, and above all the Testing section, which embeds
-// artifact captions, captured output, and whole files read from the evidence
-// directory - is agent-derived and can carry a foreign attestation comment. The
-// compliance check (.github/actions/require-no-mistakes/verify.py) scans the raw
-// body and binds the FIRST marker it finds to the PR head, so a foreign copy
-// placed before pipelineMD fails a PR the pipeline did produce.
-//
-// The neutralization is applied HERE rather than at each render path on
-// purpose. The first attempt at this fix escaped the marker inside
-// escapePipelineFoldMarkers, which is per-render-path; it neutralized the
-// artifact-fence and tested-detail copies and missed another path, and PR #831
-// still shipped three live foreign markers ahead of the real one. Fencing is no
-// defense either - verify.py reads raw text, so a marker inside a ```text block
-// counts exactly the same.
 func appendGeneratedSectionsToCleanBodyWithinLimit(body, riskLine, testingMD, pipelineMD string, maxBytes int, provider scm.Provider) string {
 	body = neutralizeAttestationMarkers(provider, body)
 	riskLine = neutralizeAttestationMarkers(provider, riskLine)
@@ -1841,11 +1756,6 @@ func isGeneratedSectionHeading(line string) bool {
 	}
 }
 
-// prependIntentSection prepends a "## Intent" section sourced from the
-// already-extracted user intent. The intent text is reused verbatim (after
-// the same secret/adversarial scrubbing the agent prompt path applies)
-// rather than being paraphrased by the agent. Returns body unchanged when
-// no intent is available or publication is disabled.
 func prependIntentSection(body string, sctx *pipeline.StepContext) string {
 	// Intent is agent-extracted text that lands ahead of the pipeline section,
 	// so it can shadow the real attestation the same way the Testing section

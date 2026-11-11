@@ -9,16 +9,11 @@ import (
 
 const decisiveMatchScore = 0.85
 
-// Match is the chosen session along with its overlap score.
 type Match struct {
-	Session *Session
-	Score   float64
-	// Confidence is the score used to rank accepted candidates after applying
-	// recency. Score remains the raw file-overlap score surfaced to callers.
+	Session    *Session
+	Score      float64
 	Confidence float64
-	// Overlap lists diff files that appeared in this session. Used purely
-	// for diagnostics/telemetry.
-	Overlap []string
+	Overlap    []string
 }
 
 type matchOptions struct {
@@ -27,10 +22,6 @@ type matchOptions struct {
 	Logf      func(format string, args ...any)
 }
 
-// score computes the share of diff files that appear anywhere in the
-// session's messages. The score is symmetric in the sense that a session
-// that touched many extra unrelated files is not penalized - only the
-// portion of *this* diff that the session covered matters.
 func score(s *Session, diffFiles []string) (float64, []string) {
 	if len(diffFiles) == 0 || len(s.Messages) == 0 {
 		return 0, nil
@@ -73,10 +64,6 @@ func pathMentionMatchesDiff(mention, diffFile string) bool {
 	return !strings.Contains(mention, "/") && filepath.Base(diffFile) == mention
 }
 
-// pickMatch returns the deterministic winner among accepted sessions.
-// A single decisive raw-score candidate wins before confidence ranking.
-// Otherwise, accepted candidates are ranked by confidence, with ties broken by
-// LastActivity.
 func pickMatch(sessions []*Session, diffFiles []string, threshold float64) *Match {
 	return pickMatchWithOptions(sessions, diffFiles, matchOptions{Threshold: threshold})
 }
@@ -180,8 +167,6 @@ func recencyBoost(headTime, lastActivity time.Time) float64 {
 	return 0
 }
 
-// normalizedPathVariants returns a small set of normalized forms for a
-// path so that absolute, repo-relative, and basename mentions can match.
 func normalizedPathVariants(p string) []string {
 	if p == "" {
 		return nil
@@ -199,9 +184,6 @@ func normalizedPathVariants(p string) []string {
 	return out
 }
 
-// scanFilePathsInText extracts plausible file paths from prose. The regex
-// is intentionally permissive - false positives don't matter because the
-// matcher only treats them as candidates, not ground truth.
 func scanFilePathsInText(text string) []string {
 	if text == "" {
 		return nil

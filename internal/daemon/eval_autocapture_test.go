@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestAutoCaptureEvalCaseCollectsAFinishedRun is the trigger's contract: a run
-// that reached the end of its pipeline with a decided review lands in the local
-// corpus with nobody running a command. Without this the eval sets stay empty
-// forever no matter how many reviews the machine performs.
 func TestAutoCaptureEvalCaseCollectsAFinishedRun(t *testing.T) {
 	ctx := context.Background()
 	p, database, runID := setupFinishedReviewRun(t, ctx)
@@ -30,10 +26,6 @@ func TestAutoCaptureEvalCaseCollectsAFinishedRun(t *testing.T) {
 	}
 }
 
-// TestAutoCaptureEvalCaseHonorsTheOperatorsSwitches pins both halves of the
-// off switch. Collection writes to local disk on every run, so a user who turns
-// it off must get nothing at all - not a smaller corpus, and not an eval
-// directory that quietly appears anyway.
 func TestAutoCaptureEvalCaseHonorsTheOperatorsSwitches(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -57,10 +49,6 @@ func TestAutoCaptureEvalCaseHonorsTheOperatorsSwitches(t *testing.T) {
 	}
 }
 
-// TestAutoCaptureEvalCaseSurvivesAnUncapturableRun proves collection stays
-// subordinate to the pipeline: an unknown run is a real capture error, and it
-// still has to return quietly rather than propagate out of the run goroutine,
-// where the enclosing recover would mark a finished run as failed.
 func TestAutoCaptureEvalCaseSurvivesAnUncapturableRun(t *testing.T) {
 	ctx := context.Background()
 	p, database, _ := setupFinishedReviewRun(t, ctx)
@@ -91,9 +79,6 @@ func capturedCaseCount(t *testing.T, p *paths.Paths) int {
 	return len(cases)
 }
 
-// setupFinishedReviewRun builds the smallest real thing collection needs: a
-// gate holding the reviewed commits, and a completed run whose review round
-// carries eval provenance and a recorded gate decision.
 func setupFinishedReviewRun(t *testing.T, ctx context.Context) (*paths.Paths, *db.DB, string) {
 	t.Helper()
 	root := t.TempDir()

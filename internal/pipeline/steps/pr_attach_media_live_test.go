@@ -16,9 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// This integration driver uses the production renderer, SQLite, git publication,
-// and an installed gh. The wrapper records argv and execs gh without substituting
-// its response. No agent, uploader, forge, or credential is mocked.
 func TestPRMediaOptOutWithRealGH(t *testing.T) {
 	realGH, err := exec.LookPath("gh")
 	if err != nil {

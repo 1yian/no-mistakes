@@ -43,8 +43,6 @@ func TestPRTemplateStructureRecognizesOnlyTopLevelATXH1(t *testing.T) {
 	}
 }
 
-// Representative abbreviated shapes from the pinned Chatwoot, Forem and
-// OpenProject compatibility report; fake drafts test acceptance, not model quality.
 func TestPRTemplateDraftAllowsSubordinateCompletion(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, template, body string }{

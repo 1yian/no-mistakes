@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// staticReader is a minimal Reader for tests.
 type staticReader struct {
 	name     string
 	sessions []*Session

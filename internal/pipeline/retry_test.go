@@ -95,9 +95,6 @@ func TestExecutor_RecordsAnAgentInvocationFailureAsTheStepsCause(t *testing.T) {
 	}
 }
 
-// failedSourceRun records a run that failed at failedStep on an agent
-// invocation error: every step before it completed, every step after it never
-// ran, except those named in skipped.
 func failedSourceRun(t *testing.T, database *db.DB, repo *db.Repo, steps []types.StepName, failedStep types.StepName, skipped ...types.StepName) *db.Run {
 	t.Helper()
 	run, err := database.InsertRun(repo.ID, "feature", "abc123", "def456")

@@ -36,12 +36,6 @@ func TestExecutorAutomaticSkipReasonRedactsCredentials(t *testing.T) {
 	}
 }
 
-// TestExecutor_StepLifecycleEvents verifies the executor emits step_started
-// and step_completed IPC events for every step in order. The broader
-// happy-path orchestration (DB persistence, run/step status transitions,
-// timestamp + duration recording across all 8 real steps) is exercised by
-// the e2e journey suite (internal/e2e), so this test focuses solely on
-// the IPC event contract that the TUI subscribes to.
 func TestExecutor_StepLifecycleEvents(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -91,9 +85,6 @@ func TestExecutor_SuccessfulStepsDoNotEmitTelemetry(t *testing.T) {
 	}
 }
 
-// A CI repair that carried the review approval (a proven pure replay) asks to
-// restart at Test: the rewind re-runs Test onward and leaves the completed
-// Review untouched, rather than paying for a second Review.
 func TestExecutor_RestartFromTestKeepsTheCompletedReview(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	var order []types.StepName
@@ -147,11 +138,6 @@ func TestExecutor_RestartFromTestKeepsTheCompletedReview(t *testing.T) {
 	}
 }
 
-// A CI repair that carried the review approval asks to restart at Test, but
-// that request lived only in the parked CI step's outcome. A daemon restart
-// while CI is parked on ask-user findings must still re-run Test onward on
-// approval, from the run's durable flag, instead of finishing the run with
-// the carried head never published.
 func TestExecutor_RecoveredCIGateApprovalRestartsAPendingCarryAtTest(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {

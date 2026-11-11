@@ -107,10 +107,6 @@ func systemdUnitExecutable(data []byte) (string, bool) {
 	return "", false
 }
 
-// isProxyEnvKey reports whether key is one of the forwarded proxy variables in
-// proxyEnvKeys. The match is exact on case-sensitive platforms (macOS, Linux)
-// so HTTP_PROXY and http_proxy stay distinct; on Windows, where env-var names
-// are case-insensitive, it matches case-insensitively to mirror serviceProxyEnv.
 func isProxyEnvKey(key string) bool {
 	for _, k := range proxyEnvKeys {
 		if k == key || (runtimeGOOS == "windows" && strings.EqualFold(k, key)) {
@@ -124,12 +120,6 @@ func isServiceEnvKey(key string) bool {
 	return key == "NO_MISTAKES_TELEMETRY" || isProxyEnvKey(key)
 }
 
-// systemdUnitProxyEnv extracts forwarded proxy and telemetry `Environment=`
-// entries from a rendered systemd unit, mirroring systemdUnitExecutable. Entries
-// are returned in file order with systemd's `%` -> `%%` doubling undone, so feeding the
-// result back through renderSystemdUnitWithProxyEnv reproduces the unit
-// byte-for-byte. The fixed HOME/PATH Environment= lines are skipped. This lets
-// drift detection and installation preserve stored values through serviceEnv.
 func systemdUnitProxyEnv(data []byte) [][2]string {
 	var out [][2]string
 	for _, line := range strings.Split(string(data), "\n") {
@@ -153,12 +143,6 @@ func systemdUnitProxyEnv(data []byte) [][2]string {
 	return out
 }
 
-// launchAgentProxyEnv extracts the forwarded proxy and telemetry entries from the
-// EnvironmentVariables <dict> of a rendered launchd plist, mirroring
-// launchAgentExecutable. Pairs are returned in file order with XML escaping
-// undone by the decoder; the fixed HOME/PATH keys are skipped. Feeding the
-// result back through renderLaunchAgentWithProxyEnv reproduces the plist. See
-// serviceEnv.
 func launchAgentProxyEnv(data []byte) [][2]string {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	var out [][2]string

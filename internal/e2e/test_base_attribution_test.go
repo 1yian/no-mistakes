@@ -14,37 +14,21 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestTestBaseAttributionJourney drives test.base_attribution through the
-// real binary, daemon, gate push, and Test step: a failing configured
-// commands.test is re-run on the run's base commit in a disposable checkout
-// and the Test finding's summary separates introduced from pre-existing
-// failures, while the finding itself and the park stay unchanged.
 func TestTestBaseAttributionJourney(t *testing.T) {
 	type journey struct {
-		name string
-		// trusted is appended to the default-branch .no-mistakes.yaml.
-		trusted string
-		// testScript and prepareScript are committed on main, so the base
-		// and the head run the same script; their behavior keys on files
-		// the pushed branch adds.
-		testScript    string
-		prepareScript string
-		branchFiles   map[string]string
-		// wantPark is false when the configured command passes on the head.
-		wantPark    bool
-		wantBaseRun bool
-		want        []string
-		wantAbsent  []string
-		// overrides is the operator's machine-local repository override
-		// block; localCheck is written as its additional test check.
-		overrides  string
-		localCheck string
-		// wantAttributionAbsent must not appear in the attribution section
-		// itself (the summary's text before the command output).
+		name                  string
+		trusted               string
+		testScript            string
+		prepareScript         string
+		branchFiles           map[string]string
+		wantPark              bool
+		wantBaseRun           bool
+		want                  []string
+		wantAbsent            []string
+		overrides             string
+		localCheck            string
 		wantAttributionAbsent []string
-		// The daemon inherits suite niceness, so wantNice is an adjustment
-		// rather than an absolute priority.
-		wantNice string
+		wantNice              string
 	}
 	goFailures := `echo '--- FAIL: TestOld (0.01s)'
 echo '--- FAIL: TestParse (0.00s)'

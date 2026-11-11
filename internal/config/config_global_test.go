@@ -273,9 +273,6 @@ func TestLoadGlobal_GateReconcileTimings(t *testing.T) {
 	}
 }
 
-// TestLoadGlobal_GateReconcileTimings_OperatorSlowAuthBudget is the documented
-// operator path: raise interval/timeout in global config.yaml so slow gh auth
-// probes fit the parked-gate reconcile budget (defaults remain 2m / 30s).
 func TestLoadGlobal_GateReconcileTimings_OperatorSlowAuthBudget(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

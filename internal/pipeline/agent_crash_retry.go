@@ -40,10 +40,6 @@ func retryableAgentCrash(ctx context.Context, err error, configuredTimeouts bool
 	return errors.As(err, &exitErr)
 }
 
-// CheckAgentCrashRetryBase binds the actual diff base at the shared resolver,
-// before any agent runs. A fresh fetch on a retry (or a later validation step)
-// must not silently change the scope that retained steps already validated.
-// The unconfigured run has no pin and follows its existing base resolution.
 func (sctx *StepContext) CheckAgentCrashRetryBase(base string) error {
 	if sctx.crashRetryBaseSHA == nil {
 		return nil
@@ -69,9 +65,6 @@ func crashRetryStep(name types.StepName) bool {
 	}
 }
 
-// crashRetryProof is deliberately ephemeral: retries are in the same live
-// execution only. Daemon recovery and manual continuation get no reuse credit.
-// Hashes are compared, never logged or persisted as a second source of truth.
 type crashRetryProof [sha256.Size]byte
 
 func (e *Executor) crashRetryProof(sctx *StepContext) (crashRetryProof, error) {

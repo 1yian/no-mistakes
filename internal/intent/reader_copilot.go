@@ -13,17 +13,10 @@ import (
 	"time"
 )
 
-// CopilotReaderName is the agent name used in cache keys and DB rows.
 const CopilotReaderName = "copilot"
 
-// copilotReader reads GitHub Copilot CLI sessions. Each session lives in
-// ~/.copilot/session-state/<id>/events.jsonl, a JSONL transcript. The
-// session.start event carries the cwd and start time we filter on; user and
-// assistant messages carry the turn text and tool file-path hints we need for
-// intent inference.
 type copilotReader struct{}
 
-// NewCopilotReader returns a Reader for GitHub Copilot CLI transcripts.
 func NewCopilotReader() Reader { return &copilotReader{} }
 
 func (r *copilotReader) Name() string { return CopilotReaderName }
@@ -124,15 +117,11 @@ func (r *copilotReader) Load(_ context.Context, s *Session) error {
 	return nil
 }
 
-// copilotMetadata is the small subset returned by copilotPeekMetadata.
 type copilotMetadata struct {
 	cwd       string
 	startedAt time.Time
 }
 
-// copilotPeekMetadata reads the session.start event to extract the cwd and
-// start time without parsing the full transcript. Returns nil without an
-// error when the file has no parseable session.start record.
 func copilotPeekMetadata(path string) (*copilotMetadata, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -173,14 +162,11 @@ func copilotPeekMetadata(path string) (*copilotMetadata, error) {
 	return nil, nil
 }
 
-// copilotRecord is the parsed shape of one events.jsonl line we care about.
 type copilotRecord struct {
 	id      string
 	message *Message
 }
 
-// parseCopilotRecord returns a Message for user and assistant turns. It
-// returns ok=true with message=nil for records we track only for LastMsgKey.
 func parseCopilotRecord(line []byte) (copilotRecord, bool) {
 	var raw struct {
 		Type      string          `json:"type"`
@@ -225,9 +211,6 @@ func parseCopilotRecord(line []byte) (copilotRecord, bool) {
 	return rec, true
 }
 
-// parseCopilotUserContent extracts the genuine user text. It reads data.content
-// (the user's prompt) and deliberately ignores data.transformedContent, which
-// the CLI pads with injected agent/system instructions that are not user intent.
 func parseCopilotUserContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -241,9 +224,6 @@ func parseCopilotUserContent(raw json.RawMessage) string {
 	return data.Content
 }
 
-// parseCopilotAssistantContent extracts assistant text and any file paths
-// referenced via tool request arguments. Reasoning text is dropped - only the
-// final assistant content is intent-relevant.
 func parseCopilotAssistantContent(raw json.RawMessage) (string, []string) {
 	if len(raw) == 0 {
 		return "", nil
@@ -266,9 +246,6 @@ func parseCopilotAssistantContent(raw json.RawMessage) (string, []string) {
 	return data.Content, paths
 }
 
-// isCopilotSyntheticUserText filters out the synthetic "user" messages the
-// Copilot CLI inserts to feed skill context back into the model. These start
-// with a <skill-context ...> tag and are not user intent.
 func isCopilotSyntheticUserText(text string) bool {
 	t := strings.TrimSpace(text)
 	return strings.HasPrefix(t, "<skill-context")

@@ -24,7 +24,6 @@ const (
 	evidenceLinkTestBase = "https://evidence.example.com/no-mistakes"
 )
 
-// mr1016Fixture reads one file of the MR 1016 fixture under testdata.
 func mr1016Fixture(t *testing.T, name string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "evidence_links", "mr1016", name))
@@ -34,19 +33,12 @@ func mr1016Fixture(t *testing.T, name string) string {
 	return string(data)
 }
 
-// mr1016Expected is a rendered-section fixture with its {{EVIDENCE_DIR}}/
-// placeholder replaced by the run's evidence directory as the renderer cites
-// it: this platform's spelling, HTML-escaped inside <code>.
 func mr1016Expected(t *testing.T, name, evidenceDir string) string {
 	t.Helper()
 	text := strings.TrimRight(mr1016Fixture(t, name), "\n")
 	return strings.ReplaceAll(text, "{{EVIDENCE_DIR}}/", html.EscapeString(evidenceDir+string(filepath.Separator)))
 }
 
-// newMR1016Context rebuilds run 01M6NB7HE9AM2PB1JWRS60EN63's Test step on a
-// GitLab repository: the four screenshots and three transcripts its evidence
-// directory held, and the findings the step recorded, so the PR step renders
-// the same Testing section the merge request published.
 func newMR1016Context(t *testing.T) *pipeline.StepContext {
 	t.Helper()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -69,14 +61,6 @@ func newMR1016Context(t *testing.T) *pipeline.StepContext {
 	return sctx
 }
 
-// TestPRStep_EvidenceLinkBaseURL_MR1016Fixture is the acceptance test for
-// test.evidence.link_base_url. The fixture is the Testing section a real
-// GitLab merge request (run 01M6NB7HE9AM2PB1JWRS60EN63) published, in which
-// every screenshot was a local path the reviewer had to copy out of the
-// description. Unset, the PR step still renders that section byte for byte
-// and adds no Evidence section. Set, every evidence file mention is a link
-// under the base with no local path left, and the Evidence section lists the
-// run's images as links without uploading anything.
 func TestPRStep_EvidenceLinkBaseURL_MR1016Fixture(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -203,11 +187,6 @@ func TestRenderEvidenceFileLinkEscapesTheLabel(t *testing.T) {
 	}
 }
 
-// TestBuildTestingSummaryForPR_LinkBaseURLRendersLocalArtifactsAsLinks covers
-// every Testing-section path that cites a local evidence file: the compact
-// evidence line, the Source line of a captioned artifact, the expanded
-// presentation, and the no-HTML Bitbucket flavor. An artifact with its own
-// URL keeps it; the base only replaces local path citations.
 func TestBuildTestingSummaryForPR_LinkBaseURLRendersLocalArtifactsAsLinks(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -285,10 +264,6 @@ func TestBuildTestingSummaryForPR_LinkBaseURLLeavesProseUntouched(t *testing.T) 
 	}
 }
 
-// TestPRStep_LinkBaseURLYieldsToUploadedAttachments: a GitHub user-attachments
-// upload is still the rendering of choice, so the base changes nothing when
-// the upload succeeded and only replaces the local-path fallback when it did
-// not.
 func TestPRStep_LinkBaseURLYieldsToUploadedAttachments(t *testing.T) {
 	t.Parallel()
 	t.Run("upload succeeded", func(t *testing.T) {
@@ -318,12 +293,6 @@ func TestPRStep_LinkBaseURLYieldsToUploadedAttachments(t *testing.T) {
 	})
 }
 
-// TestScenarioEvidenceCellLinksCompleteFileReferences: with the base set, a
-// scenario cell links every complete reference to a file that exists under
-// the evidence root - a nested name with a space, an absolute in-root path, a
-// name before sentence punctuation - and leaves prose, unknown names, and
-// partial matches plain. The review conversation directory is never a
-// candidate. Unset, the cell is today's cell byte for byte.
 func TestScenarioEvidenceCellLinksCompleteFileReferences(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(t.TempDir(), "Test Evidence", "01RUN")
@@ -378,9 +347,6 @@ func TestScenarioEvidenceCellLinksCompleteFileReferences(t *testing.T) {
 	}
 }
 
-// TestEvidenceFileURLFollowsASymlinkedEvidenceRoot: an artifact may record
-// the real path of a file under a symlinked evidence root; the URL still names
-// the configured directory and the file.
 func TestEvidenceFileURLFollowsASymlinkedEvidenceRoot(t *testing.T) {
 	t.Parallel()
 	real := filepath.Join(t.TempDir(), "real")
@@ -422,10 +388,6 @@ func TestScenarioEvidenceCellLinksSymlinkedRootReferences(t *testing.T) {
 	}
 }
 
-// TestScenarioEvidenceCellLeavesExistingLinksAlone: a cell that already
-// carries a Markdown link, an image, an autolink, or a bare URL naming an
-// evidence file is a complete reference. It renders exactly as it does with
-// the setting unset, and only plain filename text around it becomes a link.
 func TestScenarioEvidenceCellLeavesExistingLinksAlone(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(t.TempDir(), "01RUN")

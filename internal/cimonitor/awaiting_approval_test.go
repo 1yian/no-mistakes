@@ -2,8 +2,6 @@ package cimonitor
 
 import "testing"
 
-// The awaiting-approval line is monitor vocabulary the TUI and axi read back, so
-// it must be recognized - and it is never a ready state.
 func TestParseActivityRecognizesAwaitingApproval(t *testing.T) {
 	t.Parallel()
 
@@ -20,9 +18,6 @@ func TestParseActivityRecognizesAwaitingApproval(t *testing.T) {
 	}
 }
 
-// The blocking-manual-job line is the same kind of vocabulary: an earlier
-// passed-checks line must not survive it, so a pipeline stopped on a person
-// never reports ready.
 func TestParseActivityRecognizesAwaitingManualJob(t *testing.T) {
 	t.Parallel()
 

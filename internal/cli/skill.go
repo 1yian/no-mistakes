@@ -32,7 +32,6 @@ func newSkillCmd() *cobra.Command {
 	return cmd
 }
 
-// installUserSkill is shared by init's best-effort install and skill install.
 func installUserSkill() ([]string, error) {
 	written, err := skill.InstallUser()
 	if err != nil {

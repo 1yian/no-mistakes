@@ -234,8 +234,6 @@ func TestLoadConfig_InvalidEvidenceCommitMessageFailsClosed(t *testing.T) {
 	}
 }
 
-// The evidence branch names a ref the daemon pushes to with the maintainer's
-// credentials, so a contributor's pushed branch must not be able to pick it.
 func TestEffectiveRepoConfig_EvidenceBranchTrustedOnly(t *testing.T) {
 	pushed := "attacker/branch"
 	trusted := "team/ci/evidence"
@@ -264,8 +262,6 @@ func TestEffectiveRepoConfig_EvidenceBranchTrustedOnly(t *testing.T) {
 	}
 }
 
-// The evidence-upload contract keeps GitHub on by default and requires an
-// explicit attach_media opt-in on GitLab, with repository settings taking precedence.
 func TestTestEvidenceMerge_ProviderAttachmentDefaults(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

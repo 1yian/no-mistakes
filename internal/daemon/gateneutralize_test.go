@@ -11,13 +11,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// fakeLookPath makes every probed agent binary resolve, so agent resolution is
-// deterministic and independent of what is installed on the test host.
 func fakeLookPath(bin string) (string, error) { return "/fake/bin/" + bin, nil }
 
-// TestNewPipelineAgent_OptOut_AdmitsVerifiedHarness proves that under the trusted
-// opt-out (disable_project_settings=true), a verified harness passes the gate and
-// its pipeline agent reports neutralized.
 func TestNewPipelineAgent_OptOut_AdmitsVerifiedHarness(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCodex, types.AgentClaude, types.AgentPi} {
 		cfg := &config.Config{Agent: name, DisableProjectSettings: true}
@@ -32,12 +27,6 @@ func TestNewPipelineAgent_OptOut_AdmitsVerifiedHarness(t *testing.T) {
 	}
 }
 
-// TestNewPipelineAgent_OptOut_AdmitsOMPACPTarget is the fleet's exact
-// configuration: agent: acp:omp with disable_project_settings=true. omp is
-// driven only through acpx, and its context-file/rule/skill/extension
-// suppression is verified, so the default acp:omp launch must pass the gate and
-// report neutralized. An operator acp_registry_overrides entry for omp is an
-// opaque custom command and must fail closed.
 func TestNewPipelineAgent_OptOut_AdmitsOMPACPTarget(t *testing.T) {
 	cfg := &config.Config{Agent: types.AgentName("acp:omp"), DisableProjectSettings: true}
 	ag, _, err := newPipelineAgent(context.Background(), cfg, t.TempDir(), fakeLookPath, runenv.Overlay{}, nil)
@@ -61,10 +50,6 @@ func TestNewPipelineAgent_OptOut_AdmitsOMPACPTarget(t *testing.T) {
 	}
 }
 
-// TestNewPipelineAgent_OptOut_RefusesUnverifiedHarness is the captain-mandated
-// fail-closed contract at the daemon wiring: under the opt-out, a harness with no
-// verified neutralization knob is refused rather than launched with project
-// instructions loaded.
 func TestNewPipelineAgent_OptOut_RefusesUnverifiedHarness(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentGrok, types.AgentOpenCode, types.AgentCopilot, types.AgentCursor, types.AgentDevin, "acp:devin"} {
 		cfg := &config.Config{Agent: name, DisableProjectSettings: true}
@@ -76,9 +61,6 @@ func TestNewPipelineAgent_OptOut_RefusesUnverifiedHarness(t *testing.T) {
 	}
 }
 
-// TestNewPipelineAgent_NoOptOut_AdmitsEveryHarness is the backward-compat
-// guarantee: when the repo did NOT opt out, every harness - including ones with
-// no suppression knob - is admitted and runs exactly as before.
 func TestNewPipelineAgent_NoOptOut_AdmitsEveryHarness(t *testing.T) {
 	// rovodev is omitted: its resolution runs a real version probe that a fake
 	// binary path cannot satisfy. opencode/pi/copilot already prove that an
@@ -93,8 +75,6 @@ func TestNewPipelineAgent_NoOptOut_AdmitsEveryHarness(t *testing.T) {
 	}
 }
 
-// TestNewPipelineAgent_OptOut_RefusesDefeatedKnob proves the gate fails closed
-// even for a verified harness when an operator override defeats its knob.
 func TestNewPipelineAgent_OptOut_RefusesDefeatedKnob(t *testing.T) {
 	cfg := &config.Config{
 		Agent:                  types.AgentCodex,
@@ -108,8 +88,6 @@ func TestNewPipelineAgent_OptOut_RefusesDefeatedKnob(t *testing.T) {
 	}
 }
 
-// TestNewPipelineAgent_OptOut_FallbackRefusesAnyUnverifiedMember proves an
-// ordered fallback list fails closed under opt-out if any member is unverified.
 func TestNewPipelineAgent_OptOut_FallbackRefusesAnyUnverifiedMember(t *testing.T) {
 	cfg := &config.Config{Agents: []types.AgentName{types.AgentCodex, types.AgentOpenCode}, DisableProjectSettings: true}
 	if _, _, err := newPipelineAgent(context.Background(), cfg, t.TempDir(), fakeLookPath, runenv.Overlay{}, nil); err == nil {

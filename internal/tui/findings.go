@@ -4,10 +4,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// stepHasActionableFindings reports whether the step's findings (agent-produced
-// plus any user-added) include at least one finding a fix agent could act on,
-// i.e. anything other than a purely informational "no-op". Yolo uses this to
-// decide between fixing a gate's findings and approving it as-is.
 func (m Model) stepHasActionableFindings(step types.StepName) bool {
 	return types.HasActionableFindings(types.Findings{Items: m.findingItems(step)})
 }
@@ -30,9 +26,6 @@ func (m Model) awaitingActionState() (showSelectionActions bool, allowFix bool, 
 	return true, selectedCount > 0, selectedCount, totalCount
 }
 
-// findingItems returns the complete list of findings rendered for the step,
-// agent-produced items first followed by any user-added findings. Cursor
-// positions and selection state are tracked against this combined list.
 func (m *Model) findingItems(step types.StepName) []finding {
 	raw := m.stepFindings[step]
 	var items []finding
@@ -45,9 +38,6 @@ func (m *Model) findingItems(step types.StepName) []finding {
 	return items
 }
 
-// agentFindingItems returns only the agent-produced findings for the step,
-// used when the caller must distinguish user-authored findings from the
-// rest (e.g. when building RespondParams).
 func (m *Model) agentFindingItems(step types.StepName) []finding {
 	raw := m.stepFindings[step]
 	f, err := parseFindings(raw)
@@ -57,9 +47,6 @@ func (m *Model) agentFindingItems(step types.StepName) []finding {
 	return f.Items
 }
 
-// combinedFindingsJSON returns the findings JSON for the step merged with
-// any user overrides (per-finding instructions) and user-added findings.
-// If no overrides exist, the original JSON is returned unchanged.
 func (m *Model) combinedFindingsJSON(step types.StepName) string {
 	raw := m.stepFindings[step]
 	instructions := m.findingInstructions[step]
@@ -109,9 +96,6 @@ func (m *Model) resetFindingSelection(step types.StepName) {
 	m.findingCursor[step] = 0
 }
 
-// selectedFindingIDs returns the IDs of selected agent-produced findings.
-// User-authored findings are conveyed via addedFindings separately because
-// the daemon only recognizes agent IDs in the FindingIDs list.
 func (m *Model) selectedFindingIDs(step types.StepName) []string {
 	selected := m.findingSelections[step]
 	if len(selected) == 0 {
@@ -126,8 +110,6 @@ func (m *Model) selectedFindingIDs(step types.StepName) []string {
 	return ids
 }
 
-// selectedUserAddedFindings returns the user-added findings that are
-// currently selected (and therefore should be sent to the fix agent).
 func (m *Model) selectedUserAddedFindings(step types.StepName) []finding {
 	added := m.addedFindings[step]
 	if len(added) == 0 {
@@ -143,11 +125,6 @@ func (m *Model) selectedUserAddedFindings(step types.StepName) []finding {
 	return result
 }
 
-// unselectedFindingIDs returns the agent-produced finding IDs that are NOT
-// selected: the findings this fix response explicitly declines. The daemon
-// requires every finding the gate shows to be either fixed or declined, so the
-// checkbox selection maps onto the protocol as both lists; user-added findings
-// are not gate findings and never belong here.
 func (m *Model) unselectedFindingIDs(step types.StepName) []string {
 	selected := m.findingSelections[step]
 	var ids []string
@@ -159,7 +136,6 @@ func (m *Model) unselectedFindingIDs(step types.StepName) []string {
 	return ids
 }
 
-// withoutIDs returns the given IDs with every ID in exclude removed.
 func withoutIDs(ids, exclude []string) []string {
 	if len(ids) == 0 || len(exclude) == 0 {
 		return ids
@@ -177,8 +153,6 @@ func withoutIDs(ids, exclude []string) []string {
 	return kept
 }
 
-// diffOffsetForCurrentFinding returns the diff scroll offset that corresponds
-// to the current finding's file:line. Returns 0 if no match.
 func (m Model) diffOffsetForCurrentFinding(step types.StepName) int {
 	items := m.findingItems(step)
 	if len(items) == 0 {

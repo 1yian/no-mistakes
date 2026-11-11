@@ -15,9 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// fakeTransport replaces the plugin process: each call pops the next scripted
-// outcome and records the argv the adapter built, plus the content of the
-// --body-file while it still exists.
 type fakeTransport struct {
 	t        *testing.T
 	calls    []recordedCall
@@ -70,8 +67,6 @@ func (f *fakeTransport) last() recordedCall {
 	return f.calls[len(f.calls)-1]
 }
 
-// operationArgv returns the last argv without the trailing context flags and
-// --json, which every call carries and TestStatus_ArgvShape pins.
 func (f *fakeTransport) operationArgv() []string {
 	f.t.Helper()
 	argv := f.last().argv

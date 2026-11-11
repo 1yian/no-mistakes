@@ -5,23 +5,6 @@ import (
 	"strings"
 )
 
-// ParseRemote extracts the Azure DevOps organization URL, project name, and
-// repository name from a git remote (or pull-request) URL. It returns
-// ok=false for any non-Azure remote or when a component cannot be determined.
-//
-// Supported forms:
-//
-//	https://dev.azure.com/{org}/{project}/_git/{repo}
-//	https://{org}@dev.azure.com/{org}/{project}/_git/{repo}
-//	git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
-//	https://{org}.visualstudio.com/[{collection}/]{project}/_git/{repo}
-//	git@vs-ssh.visualstudio.com:v3/{org}/{project}/{repo}
-//
-// Any of the above may carry a trailing /pullrequest/{id} segment (a PR URL),
-// which is ignored. Project names may contain spaces; path segments are
-// percent-decoded. The returned orgURL is a fully-qualified organization URL
-// suitable for the az CLI's --organization flag (e.g.
-// https://dev.azure.com/myorg).
 func ParseRemote(remote string) (orgURL, project, repo string, ok bool) {
 	s := strings.TrimSpace(remote)
 	if s == "" {
@@ -129,11 +112,6 @@ func splitDecodePath(p string) []string {
 	return out
 }
 
-// webPRURL builds the browsable pull-request URL. It prefers the repository web
-// URL returned by the API; otherwise it constructs one from the org URL,
-// project, and repo (percent-encoding the project and repo segments). The az
-// CLI returns an _apis/... endpoint in the PR's top-level "url" field, which is
-// not browsable, so the human URL must be built rather than read from there.
 func webPRURL(orgURL, project, repo, repoWebURL, id string) string {
 	base := strings.TrimRight(strings.TrimSpace(repoWebURL), "/")
 	if base == "" {

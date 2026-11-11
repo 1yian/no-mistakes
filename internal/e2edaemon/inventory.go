@@ -12,14 +12,10 @@ import (
 )
 
 const (
-	// EnvInventory is the absolute path to the suite inventory directory.
-	// When unset, a process-local default under the system temp dir is used.
 	EnvInventory = "NM_E2E_DAEMON_INVENTORY"
 
-	// EnvMaxConcurrent caps how many temporary E2E daemons may be live at once.
 	EnvMaxConcurrent = "NM_E2E_DAEMON_MAX"
 
-	// DefaultMaxConcurrent bounds blast radius of one interrupted suite.
 	DefaultMaxConcurrent = 2
 
 	inventoryFileName = "inventory.json"
@@ -28,7 +24,6 @@ const (
 	slotsDirName      = "slots"
 )
 
-// Entry is one owned temporary E2E daemon root.
 type Entry struct {
 	ID           string    `json:"id"`
 	NMHome       string    `json:"nm_home"`
@@ -44,7 +39,6 @@ type inventoryFile struct {
 	Entries []Entry `json:"entries"`
 }
 
-// Inventory is a process-safe, file-backed record of temporary E2E daemons.
 type Inventory struct {
 	Dir string
 
@@ -52,8 +46,6 @@ type Inventory struct {
 	findDaemons func(string) ([]int, error)
 }
 
-// DirFromEnv returns the inventory directory from NM_E2E_DAEMON_INVENTORY,
-// or a stable per-user temp default when unset.
 func DirFromEnv() string {
 	if dir := os.Getenv(EnvInventory); dir != "" {
 		return dir
@@ -61,13 +53,10 @@ func DirFromEnv() string {
 	return filepath.Join(os.TempDir(), "no-mistakes-e2e-daemon-inventory")
 }
 
-// Open returns an Inventory rooted at DirFromEnv(), creating the directory
-// with mode 0700 when needed.
 func Open() (*Inventory, error) {
 	return OpenDir(DirFromEnv())
 }
 
-// OpenDir opens (or creates) an inventory directory.
 func OpenDir(dir string) (*Inventory, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("e2edaemon: empty inventory dir")
@@ -100,8 +89,6 @@ func (inv *Inventory) lockPath() string {
 	return filepath.Join(inv.Dir, lockFileName)
 }
 
-// Register records or updates ownership for nmHome. pid may be 0 when the
-// daemon has not started yet; SyncPID upgrades it later.
 func (inv *Inventory) Register(id, nmHome, nmBin string, pid, ownerPID int) error {
 	if inv == nil {
 		return fmt.Errorf("e2edaemon: nil inventory")
@@ -148,7 +135,6 @@ func (inv *Inventory) Register(id, nmHome, nmBin string, pid, ownerPID int) erro
 	})
 }
 
-// UpdatePID sets the recorded pid for id (or nmHome match).
 func (inv *Inventory) UpdatePID(id string, pid int) error {
 	return inv.updateProcess(id, pid, "")
 }
@@ -174,7 +160,6 @@ func (inv *Inventory) updateProcess(id string, pid int, processHash string) erro
 	})
 }
 
-// Unregister removes the entry with the given id.
 func (inv *Inventory) Unregister(id string) error {
 	if inv == nil {
 		return fmt.Errorf("e2edaemon: nil inventory")
@@ -193,7 +178,6 @@ func (inv *Inventory) Unregister(id string) error {
 	})
 }
 
-// List returns a snapshot of inventory entries.
 func (inv *Inventory) List() ([]Entry, error) {
 	if inv == nil {
 		return nil, fmt.Errorf("e2edaemon: nil inventory")

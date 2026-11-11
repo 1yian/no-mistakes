@@ -86,15 +86,10 @@ func legacySystemdUserServicePath() string {
 	return filepath.Join(home, ".config", "systemd", "user", legacySystemdServiceName)
 }
 
-// renderSystemdUnit is a test convenience wrapper using serviceEnv(nil).
-// Production callers use renderSystemdUnitWithProxyEnv with the environment
-// resolved by serviceEnv from the process and existing definition.
 func renderSystemdUnit(exe string, p *paths.Paths, home string) string {
 	return renderSystemdUnitWithProxyEnv(exe, p, home, serviceEnv(nil))
 }
 
-// renderSystemdUnitWithProxyEnv renders the systemd unit using the forwarded
-// proxy and telemetry environment supplied by the caller (see serviceEnv).
 func renderSystemdUnitWithProxyEnv(exe string, p *paths.Paths, home string, proxyEnv [][2]string) string {
 	command := strings.Join([]string{
 		systemdEscapeArg(exe),
@@ -134,13 +129,6 @@ WantedBy=default.target
 `, command, systemdEscapeArg(p.Root()), strings.Join(envLines, "\n"), systemdEscapeArg("append:"+p.DaemonBootstrapLog()), systemdEscapeArg("append:"+p.DaemonBootstrapLog()))
 }
 
-// systemdEnvironmentLine renders one `Environment=` directive. systemd runs
-// specifier expansion on directive values, so a literal `%` (e.g. a
-// percent-encoded character in a forwarded proxy credential like
-// http://user:p%40ss@proxy:8080) must be doubled to `%%` to survive it -
-// otherwise a known specifier letter corrupts the value and an unknown one
-// rejects the assignment on systemd >= v249. strconv.Quote never emits `%`, so
-// doubling first leaves the quoting unaffected.
 func systemdEnvironmentLine(key, value string) string {
 	return "Environment=" + strconv.Quote(strings.ReplaceAll(key+"="+value, "%", "%%"))
 }

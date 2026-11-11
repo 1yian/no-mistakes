@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// VerifyPRHead reads by immutable PR identity, independently of FindPR and any
-// create/update response. The REST object supplies both repository identities,
-// lifecycle state and the exact head in one observation.
 func (h *Host) VerifyPRHead(ctx context.Context, pr *scm.PR, branch, pushedHead string) error {
 	if pr == nil || h.repoSlug() == "" || branch == "" || !completeObjectID(pushedHead) {
 		return fmt.Errorf("verify PR head: incomplete expected identity or pushed head")

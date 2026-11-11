@@ -18,14 +18,8 @@ import (
 
 const defaultBaseBranchTipResolveWindow = 30 * time.Second
 
-// publishedHeadResolveWindow bounds each remote read of the published branch
-// head. Overridable so tests can drive the deadline without waiting it out.
 var publishedHeadResolveWindow = 30 * time.Second
 
-// CI monitoring status messages. These are surfaced to the user and parsed by
-// the TUI and the agent-facing axi commands to distinguish passed checks from
-// checks that are still running. The canonical strings live in cimonitor so all
-// producers and consumers agree on them.
 const (
 	ciChecksPassedMsg            = cimonitor.ChecksPassedMsg
 	ciChecksPassedCompleteMsg    = cimonitor.ChecksPassedCompleteMsg
@@ -37,33 +31,6 @@ const (
 	ciBehindBaseMsg              = cimonitor.BehindBaseMsg
 )
 
-// CIStep monitors an open PR until it is merged, closed, explicitly handed off,
-// or its configured idle timeout elapses, and repairs CI failures through the executor's shared
-// findings machinery. With ci.release_after_checks_pass it instead finishes the
-// run at the checks verdict.
-//
-// By default the green observation only clears the failure signal: the monitor
-// keeps watching the PR, so the run stays open and a later base-branch advance
-// is still repaired on its own. That is also why the recorded step duration
-// includes merge-waiting time. The opt-in release finishes the step there
-// instead, recording readiness and completing the run with the terminal
-// checks_passed status, which releases its worktree and lane and leaves the
-// merge decision to a human.
-//
-// Execute has the same shape as the review step's: when the executor
-// re-executes it as a fix round (sctx.Fixing), it first repairs the findings
-// selected for that round (sctx.PreviousFindings), then it monitors. Each
-// settled observation - every check finished, every authorized transient
-// rerun spent, at least one issue present - returns one finding per issue
-// carrying its action (ciObservationFindings), and the executor decides what
-// happens next: auto-fix findings enter the auto_fix.ci loop as fix rounds,
-// ask-user findings park for a decision. The step never counts or limits fix
-// rounds itself; the executor does, durably, from the round history.
-//
-// Empty check lists are never treated as green unless the resolved config
-// carries the trusted default-branch `no_ci: true` declaration (config.Config.NoCI).
-// A feature branch cannot self-declare that value. When checks exist, their
-// actual states are always processed normally - even on a declared no-CI repo.
 type CIStep struct {
 	lastFixedChecks      string                    // encoded targets of the last published repair, so a poll that still shows them is not re-escalated
 	lastFixedCompletedAt map[string]checkFreshness // terminally failed check freshness at the observation the last repair targeted
@@ -76,43 +43,30 @@ type CIStep struct {
 	pollIntervalOverride time.Duration    // if set, overrides computed poll interval (for testing)
 	waitForNextPoll      func(context.Context, time.Duration) error
 	now                  func() time.Time
-	// baseBranchTip resolves the current tip SHA of the upstream default
-	// branch. The bool is false when the SHA is a fallback/unknown value and
-	// must not re-arm the timeout. Overridable for testing; defaults to
-	// fetching the upstream default branch.
-	baseBranchTip func(context.Context) (string, bool)
-	// replayBase is the resolved base tip an in-flight rebase repair targets,
-	// set only for the duration of that repair's recording. recordRepair
-	// proves a pure replay against exactly this commit and nothing else.
-	replayBase string
+	baseBranchTip        func(context.Context) (string, bool)
+	replayBase           string
 }
 
-// SetPollIntervalOverride is a test hook; production leaves the override unset.
 func (s *CIStep) SetPollIntervalOverride(d time.Duration) *CIStep {
 	s.pollIntervalOverride = d
 	return s
 }
 
-// SetWaitForNextPoll is a test hook; production sleeps for the poll interval.
 func (s *CIStep) SetWaitForNextPoll(fn func(context.Context, time.Duration) error) *CIStep {
 	s.waitForNextPoll = fn
 	return s
 }
 
-// SetNow is a test hook; production uses time.Now.
 func (s *CIStep) SetNow(fn func() time.Time) *CIStep {
 	s.now = fn
 	return s
 }
 
-// SetBaseBranchTip is a test hook; production fetches the upstream default branch.
 func (s *CIStep) SetBaseBranchTip(fn func(context.Context) (string, bool)) *CIStep {
 	s.baseBranchTip = fn
 	return s
 }
 
-// TransientRerunRecorded reports whether a rerun budget entry exists for name.
-// Tests use this to assert monitor accounting without reading unexported state.
 func (s *CIStep) TransientRerunRecorded(name string) bool {
 	if s == nil {
 		return false
@@ -123,11 +77,6 @@ func (s *CIStep) TransientRerunRecorded(name string) bool {
 
 func (s *CIStep) Name() types.StepName { return types.StepCI }
 
-// ReconcileApprovalGate re-checks the PR after the CI step has parked at an
-// approval gate. A PR can be merged or closed after a timeout/failure gate was
-// recorded; either terminal state supersedes the stale gate just as it does in
-// the normal CI polling loop. Open, unknown, and provider-error states remain
-// parked so reconciliation never guesses success.
 func (s *CIStep) ReconcileApprovalGate(sctx *pipeline.StepContext) (bool, error) {
 	if err := assertPipelineHeadContinuity(sctx, s.Name()); err != nil {
 		return false, fmt.Errorf("%w: %w", pipeline.ErrFatalGateReconciliation, err)
@@ -190,10 +139,6 @@ func (s *CIStep) ReconcileApprovalGate(sctx *pipeline.StepContext) (bool, error)
 	}
 }
 
-// VerifyApprovalOverride reads live checks without fixing or rerunning them.
-// Required reviews must be proven complete at the run's current head before
-// approval can use the ordinary CI override path. Any earlier return leaves
-// that proof absent, so the deferred guard refuses completion.
 func (s *CIStep) VerifyApprovalOverride(sctx *pipeline.StepContext) (reason string, verifyErr error) {
 	requiredComplete := !requiresExternalReview(sctx)
 	defer func() {
@@ -817,10 +762,6 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 				}
 				rerunIssued = issued
 			}
-			// A cancelled check is unresolved, not green, and it is not a job
-			// failure either: it reaches its own approval gate below rather
-			// than the fix agent. A check whose rerun the provider has not
-			// published yet is neither, so the monitor keeps waiting for it.
 			var unresolvedCancelled, awaitingRerun []string
 			if !rerunIssued {
 				unresolvedCancelled, awaitingRerun = s.transientReruns.cancelledAfterRerun(checks)
@@ -1083,11 +1024,6 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 	}
 }
 
-// humanHoldMessage names the hold a check set is under, or "" when every
-// pending check can still finish on its own. The two holds read differently to
-// the person they wait on - approve a workflow versus run a job - so
-// each keeps its own wording instead of one hold's message describing the
-// other's.
 func humanHoldMessage(checks []scm.Check) string {
 	if hasAwaitingApprovalChecks(checks) {
 		return ciChecksAwaitingApprovalMsg
@@ -1098,12 +1034,6 @@ func humanHoldMessage(checks []scm.Check) string {
 	return ""
 }
 
-// ciWaitingMessage names what the monitor is waiting for when no check has
-// failed. A check the provider is holding for a person - a workflow awaiting
-// maintainer approval, or a blocking manual job - has run nothing more and
-// will run nothing until that person acts, so calling it "checks running"
-// describes work that does not exist and hides the one thing that would move
-// the run along. Anything else is an ordinary wait on checks in flight.
 func ciWaitingMessage(checks []scm.Check) string {
 	if hold := humanHoldMessage(checks); hold != "" {
 		return hold
@@ -1111,7 +1041,6 @@ func ciWaitingMessage(checks []scm.Check) string {
 	return ciChecksRunningMsg
 }
 
-// Keep logging independent of persistence so a failed write retries silently.
 type ciMonitorStatus struct {
 	persisted string
 	logged    string
@@ -1151,9 +1080,6 @@ func ciReadyMessage(message string) (ready, declaredNoCI bool) {
 	}
 }
 
-// ciReleaseAfterChecksPass reports whether the operator opted into finishing the
-// run at the checks verdict. The default is off: the monitor keeps watching the
-// PR until it is merged or closed, unless an operator explicitly hands it off.
 func ciReleaseAfterChecksPass(sctx *pipeline.StepContext) bool {
 	return sctx != nil && sctx.Config != nil && sctx.Config.CI.ReleaseAfterChecksPass
 }
@@ -1162,7 +1088,6 @@ func handoffPending(sctx *pipeline.StepContext) bool {
 	return sctx.HandoffPending != nil && sctx.HandoffPending()
 }
 
-// These two issue paths failed closed before handoff was introduced.
 func clearCIMonitorReadyForIssues(sctx *pipeline.StepContext) error {
 	if handoffPending(sctx) {
 		return clearCIMonitorReady(sctx)

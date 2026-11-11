@@ -15,8 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// writeStubAcpx writes a stub acpx binary that records its argv (one arg per
-// line) and stdin, then emits a minimal valid acpx JSON event stream.
 func writeStubAcpx(t *testing.T, dir string) string {
 	t.Helper()
 	path := filepath.Join(dir, "acpx")
@@ -35,9 +33,6 @@ fi
 	return path
 }
 
-// TestAcpxAgent_Run_AliasSpawnsDefaultCommandWithoutOverrides proves both
-// spellings of every first-class ACP alias drive a real acpx spawn with the
-// alias default raw command - no acp_registry_overrides entry configured.
 func TestAcpxAgent_Run_AliasSpawnsDefaultCommandWithoutOverrides(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -89,9 +84,6 @@ func TestAcpxAgent_Run_AliasSpawnsDefaultCommandWithoutOverrides(t *testing.T) {
 	}
 }
 
-// TestAcpxAgent_Run_DevinOverrideAndModelReachTheSpawn proves an operator's
-// acp_registry_overrides.devin replaces the `devin acp` default in the real
-// spawn, and an agent_config model rides acpx's own --model ahead of exec.
 func TestAcpxAgent_Run_DevinOverrideAndModelReachTheSpawn(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -146,11 +138,6 @@ func TestAcpxAgent_Run_DevinOverrideAndModelReachTheSpawn(t *testing.T) {
 	}
 }
 
-// TestAcpxAgent_Run_DevinObservedStreamYieldsStructuredOutputAndUsage replays
-// the event shape a live `devin acp` turn produced through acpx 0.13.0: thought
-// chunks, a permission-gated shell tool call, usage_update events whose token
-// counts sit under cognition.ai-namespaced _meta keys, a JSON-only final message
-// split across agent_message_chunk events, and camelCase result.usage.
 func TestAcpxAgent_Run_DevinObservedStreamYieldsStructuredOutputAndUsage(t *testing.T) {
 	events := strings.Join([]string{
 		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"Planning"}}}}`,
@@ -282,13 +269,6 @@ printf 'acpx: unknown option --file\n' >&2
 	}
 }
 
-// TestAcpxAgent_Run_FailedTurnEstimatesTheOutputItStreamed proves a turn that
-// reports input-only usage, streams an answer, and then fails does not record
-// its output as a reported zero: the estimate the success path applies is
-// applied on the failed path too. acpx reports usage per event, so a failed
-// turn routinely carries a real input count with no output count, and
-// resultFromUsage would otherwise hand instrumentation Reported=true with
-// OutputTokens=0 - a fabricated zero rather than an unknown.
 func TestAcpxAgent_Run_FailedTurnEstimatesTheOutputItStreamed(t *testing.T) {
 	const streamed = "partial answer before acpx died"
 

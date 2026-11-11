@@ -17,8 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// A daemon that exited but left its socket and PID file behind is cleared by
-// update's first daemon probe; update must still start the new daemon.
 func TestUpdaterRunStartsDaemonAfterProbeClearsStaleArtifacts(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix socket setup is platform-specific")

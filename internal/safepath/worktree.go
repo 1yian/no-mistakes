@@ -6,21 +6,11 @@ import (
 	"strings"
 )
 
-// Run worktree placeholders. A run worktree lives at
-// <NM_HOME>/worktrees/<repo-id>/<run-id>, where <repo-id> is a short hash of
-// the absolute local checkout path: published, it lets anyone confirm a guessed
-// account name and layout offline, and an NM_HOME outside the home directory
-// publishes whole. Like Placeholder, neither token is angle-bracketed, because
-// GitHub renders published .md evidence and drops unknown tags.
 const (
 	WorktreePlaceholder  = "{run-worktree}"
 	WorktreesPlaceholder = "{worktrees}"
 )
 
-// RedactWorktrees rewrites the run's worktree root, and as a fallback any path
-// into worktreesRoot, to the worktree placeholders. Call it before RedactText:
-// once the home prefix is "~", these roots no longer match. Either argument
-// may be empty.
 func RedactWorktrees(text, runWorktree, worktreesRoot string) string {
 	for _, root := range pathSpellings(runWorktree) {
 		text = replacePathPrefix(text, root, func(string) (int, string) { return 0, WorktreePlaceholder })
@@ -45,9 +35,6 @@ func RedactWorktrees(text, runWorktree, worktreesRoot string) string {
 	return text
 }
 
-// pathSegment returns the length of the separator plus path segment name at
-// the start of rest, or 0 when rest does not start with one. A single
-// backslash counts as a separator only when singleBackslash is set.
 func pathSegment(rest string, singleBackslash bool) int {
 	sep := 0
 	switch {
@@ -68,8 +55,6 @@ func pathSegment(rest string, singleBackslash bool) int {
 	return n
 }
 
-// pathSpellings lists the spellings an absolute directory can appear as in
-// captured output, longest first, the same set homeCandidates builds.
 func pathSpellings(dir string) []string {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {

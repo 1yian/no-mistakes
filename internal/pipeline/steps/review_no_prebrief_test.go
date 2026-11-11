@@ -10,14 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// The Jev review pre-brief (jev.review_assist, with its optional
-// jev.candidate_excerpt_bytes excerpt) was retired: offline measurement showed
-// the candidate generator excludes changed files by construction while nearly
-// all recorded finding locations are changed files, so its ranked listing
-// could not reach what it ranks for. The review step runs the same cold,
-// session-free, complete review it always ran without the assist, and the
-// prompt must carry no pre-brief section - even when a TYPESAFE_API_KEY is
-// still present in the environment, the step must not consult TypeSafe.
 func TestReviewStep_RunsColdWithoutTheRetiredJevPrebrief(t *testing.T) {
 	t.Setenv("TYPESAFE_API_KEY", "nm-retired-prebrief-must-not-be-used")
 

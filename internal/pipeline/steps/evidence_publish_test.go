@@ -17,11 +17,6 @@ import (
 
 const evidenceTestUpstream = "https://github.com/example/widgets.git"
 
-// newEvidencePublishContext wires a run whose push target is a real local bare
-// repository while the pipeline still sees a github.com URL, so the published
-// branch and the links the PR body builds from it can both be asserted. The
-// rewrite is git's own url.<base>.insteadOf, so every git call in the step goes
-// through the same code path production uses.
 func newEvidencePublishContext(t *testing.T, branch string) (sctx *pipeline.StepContext, remote string) {
 	t.Helper()
 	remote = t.TempDir()
@@ -310,17 +305,6 @@ func TestPublishRunEvidence_DisabledDoesNotTouchTheRemote(t *testing.T) {
 	}
 }
 
-// TestPublishRunEvidence_NeverPublishesTheReviewConversation is the end-to-end
-// half of the exclusion: internal/evidence enforces it, but only for the names
-// its caller supplies, and this step is that caller.
-//
-// The conversation shares the run's evidence directory with publishable test
-// evidence, so with test.evidence.store_in_repo and review.conversation both on
-// the reviewer's questions and the operator's answers - full text, and who
-// answered - would be committed to the orphan branch verbatim and permanently,
-// with none of the bounding or home-path redaction the PR-body rendering
-// applies. Real test evidence beside it must still publish, so the assertion is
-// not simply "nothing was published".
 func TestPublishRunEvidence_NeverPublishesTheReviewConversation(t *testing.T) {
 	t.Parallel()
 	sctx, remote := newEvidencePublishContext(t, "feature/add-login")

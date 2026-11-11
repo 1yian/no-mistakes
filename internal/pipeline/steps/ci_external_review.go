@@ -20,8 +20,6 @@ func requiredReviews(sctx *pipeline.StepContext) []string {
 	return sctx.Config.CI.RequiredReviews
 }
 
-// requiredReviewChecks checks that the forge adapter supplied every opted-in
-// review requirement. Unsupported forges cannot silently skip a requirement.
 func requiredReviewChecks(sctx *pipeline.StepContext, host scm.Host, pr *scm.PR, checks []scm.Check) ([]scm.Check, error) {
 	if sctx.Config != nil && sctx.Config.NoCI {
 		checks = slices.DeleteFunc(checks, func(check scm.Check) bool {

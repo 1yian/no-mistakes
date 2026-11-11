@@ -19,11 +19,6 @@ func TestProcessRunningReturnsFalseForMissingPID(t *testing.T) {
 	}
 }
 
-// TestSetSysProcAttrDetachesDaemonFromConsole guards the fix for issue #164:
-// without DETACHED_PROCESS and CREATE_NEW_PROCESS_GROUP the daemon child
-// inherits the installer's console, which causes PowerShell's
-// `Start-Process -Wait -NoNewWindow` to hang waiting on the (long-lived)
-// daemon instead of returning when the CLI exits.
 func TestSetSysProcAttrDetachesDaemonFromConsole(t *testing.T) {
 	cmd := exec.Command("does-not-need-to-exist.exe")
 	setSysProcAttr(cmd)

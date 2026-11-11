@@ -11,27 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// reapRunLogs bounds <NM_HOME>/logs/<run_id>, the per-run step-log directory
-// Executor.Execute/Resume create (paths.RunLogDir) and never anything else
-// removes. It was never given its own reaper, so a long-lived daemon
-// accumulated one small text-log directory per run forever - on one real
-// install this had already reached 650 directories with zero cleanup.
-//
-// There is no dedicated config surface for this: these are the same kind of
-// per-run diagnostic artifact test.evidence.retention already bounds, so the
-// daemon's own evidence policy governs both rather than adding a second knob
-// an operator has to learn. `no-mistakes axi logs --run <id>` already
-// tolerates a missing step log as an ordinary "not recorded for this run"
-// case (see runAxiLogs), so reaping an old run's directory degrades exactly
-// like evidence retention already does for screenshots - not a new trade-off.
-//
-// The shape mirrors reapEvidence: an entry whose run is still pending/running
-// is never touched (a step may still be appending to its log), a directory
-// older than the retention window is removed, and whatever survives is
-// trimmed to the run ceiling, oldest first. Unlike evidence there is no
-// "empty directory" rule - MkdirAll here always precedes at least one step
-// log being opened for append, so an empty log directory is not the dominant
-// case it is for evidence.
 func reapRunLogs(d *db.DB, root string, policy evidenceReapPolicy, now time.Time) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -118,9 +97,6 @@ func removeRunLogDir(path, runID string) bool {
 	return true
 }
 
-// newestFileModTime returns the most recent modification time among the
-// regular files directly inside dir. It reports false when dir has no
-// files to compare against.
 func newestFileModTime(dir string) (time.Time, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

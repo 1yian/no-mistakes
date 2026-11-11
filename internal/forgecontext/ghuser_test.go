@@ -13,11 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// installFakeGH puts a gh on PATH that answers `gh auth token` with
-// "token-for-<user>" for the signed-in logins and refuses every other login
-// the way gh does. It records its arguments and the GH_CONFIG_DIR it saw, and
-// exits 11 when an ambient token variable reaches it, so a test proves the
-// stored token was read rather than an inherited one echoed back.
 func installFakeGH(t *testing.T, signedIn ...string) (argsFile string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -105,8 +100,6 @@ func TestResolveGHUserSelectsTheForkOwnersLoginToken(t *testing.T) {
 	}
 }
 
-// The token reaches subprocesses through the environment only; every way the
-// context can be formatted into a log line or error stays free of it.
 func TestResolveGHUserNeverFormatsTheToken(t *testing.T) {
 	installFakeGH(t, "remicaesar")
 	resolved, err := Resolve(context.Background(), config.ForgeProfiles{"github.com/remicaesar": {GHUser: "remicaesar"}}, "git@github.com:remicaesar/repo.git", "")
@@ -191,8 +184,6 @@ func TestResolveOwnerScopedKeyFallsBackToThePlainHostKey(t *testing.T) {
 	}
 }
 
-// An owner-scoped key speaks only for its owner: other owners on the same
-// host keep exactly the ambient behavior they had without it.
 func TestResolveOwnerScopedKeyLeavesOtherOwnersAmbient(t *testing.T) {
 	argsFile := installFakeGH(t, "remicaesar")
 	profiles := config.ForgeProfiles{"github.com/remicaesar": {GHUser: "remicaesar"}}

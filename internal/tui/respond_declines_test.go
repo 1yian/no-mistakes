@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A finding the operator left unchecked that an earlier round of this step
-// already chose to fix cannot be declined. The TUI retries once with it
-// omitted, which keeps the earlier decision, so the refusal never reaches the
-// operator as an error they can do nothing about.
 func TestModel_RespondFixKeepsAnAlreadyFixedDeclineOutOfTheRetry(t *testing.T) {
 	findings := `{"findings":[` +
 		`{"id":"r1","severity":"error","description":"already fixed in round 1","action":"ask-user"},` +

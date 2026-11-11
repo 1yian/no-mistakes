@@ -7,35 +7,20 @@ import (
 	"strings"
 )
 
-// RunStatus represents the lifecycle state of a pipeline run.
 type RunStatus string
 
 const (
-	RunPending   RunStatus = "pending"
-	RunRunning   RunStatus = "running"
-	RunCompleted RunStatus = "completed"
-	RunFailed    RunStatus = "failed"
-	RunCancelled RunStatus = "cancelled"
-	// RunChecksPassed means the run reached its validation verdict and finished
-	// with every CI check green (or a trusted no_ci declaration) while the PR
-	// was still open. It is a success, distinct from RunCompleted so a caller
-	// can tell "checks passed, waiting on a human merge decision" apart from
-	// "the PR merged or closed"; the merge itself is never observed by this
-	// run, because the gate does not own the merge decision.
-	RunChecksPassed RunStatus = "checks_passed"
-	// RunHandedOff means the operator ended green CI monitoring for human review.
-	// The PR remains open; this does not imply that it was merged.
-	RunHandedOff RunStatus = "handed_off"
-	// RunCIMonitorInterrupted means the daemon restarted while babysitting an
-	// already-created PR. The PR remains intact, so this is not a pipeline
-	// failure.
+	RunPending              RunStatus = "pending"
+	RunRunning              RunStatus = "running"
+	RunCompleted            RunStatus = "completed"
+	RunFailed               RunStatus = "failed"
+	RunCancelled            RunStatus = "cancelled"
+	RunChecksPassed         RunStatus = "checks_passed"
+	RunHandedOff            RunStatus = "handed_off"
 	RunCIMonitorInterrupted RunStatus = "ci_monitor_interrupted"
 )
 
 const (
-	// StepErrorAbortedByUser is the error a step records when an operator
-	// aborts it at its approval gate. A reason, when given, follows it after
-	// ": " (see UserAbortStepError).
 	StepErrorAbortedByUser = "aborted by user"
 
 	RunCancelReasonAbortedByUser  = "cancelled: aborted by user"
@@ -43,8 +28,6 @@ const (
 	RunCIMonitorInterruptedReason = "ci monitor interrupted by daemon restart; PR remains open"
 )
 
-// UserAbortStepError returns the error recorded on a step an operator aborted
-// at its gate, with their reason when one was given.
 func UserAbortStepError(reason string) string {
 	if reason = strings.TrimSpace(reason); reason != "" {
 		return StepErrorAbortedByUser + ": " + reason
@@ -52,22 +35,10 @@ func UserAbortStepError(reason string) string {
 	return StepErrorAbortedByUser
 }
 
-// IsUserAbortStepError reports whether a step error records an operator's gate
-// abort, with or without a reason.
 func IsUserAbortStepError(stepError string) bool {
 	return stepError == StepErrorAbortedByUser || strings.HasPrefix(stepError, StepErrorAbortedByUser+": ")
 }
 
-// Terminal reports whether the run has reached a final state the daemon will
-// never advance further. This is the single source of truth for "is this run
-// terminal": every enumeration of terminal statuses (branchsync custody
-// recovery, the axi drive outcome check, the e2e harness wait loop) routes
-// through it so a newly added terminal status can never drift out of sync.
-// RunCIMonitorInterrupted is terminal - the daemon restarted mid-CI-monitor
-// and the run is never resumed (issue #361) - so it must classify exactly like
-// completed/failed/cancelled/handed_off. RunChecksPassed is terminal for the same kind of
-// reason: the monitor stopped on a green head and the run is never resumed, so
-// the merge it stopped waiting for cannot move it again.
 func (s RunStatus) Terminal() bool {
 	switch s {
 	case RunCompleted, RunFailed, RunCancelled, RunChecksPassed, RunCIMonitorInterrupted, RunHandedOff:
@@ -77,7 +48,6 @@ func (s RunStatus) Terminal() bool {
 	}
 }
 
-// StepName identifies a pipeline step.
 type StepName string
 
 const (
@@ -128,9 +98,6 @@ func (s StepName) Value() (driver.Value, error) {
 	return string(s), nil
 }
 
-// StepOrder returns the fixed execution order for a step (1-indexed).
-// A custom gate shares its anchor's order: it runs immediately after that core
-// step, and a restart that resets from the anchor must reset the gate with it.
 func (s StepName) Order() int {
 	if anchor, ok := s.CustomGateAnchor(); ok {
 		return anchor.Order()
@@ -159,7 +126,6 @@ func (s StepName) Order() int {
 	}
 }
 
-// AllSteps returns all core pipeline steps in execution order.
 func AllSteps() []StepName {
 	return []StepName{StepIntent, StepRebase, StepReview, StepTest, StepDocument, StepLint, StepPush, StepPR, StepCI}
 }
@@ -183,36 +149,13 @@ func CustomGateAnchors() []StepName {
 	return anchors
 }
 
-// CustomGateStepPrefix marks a step name as a repository-declared extra gate
-// rather than one of the fixed core steps, and CustomGateStepSeparator joins
-// the encoded anchor to the gate's label.
-//
-// The separator is '.' rather than ':' because a step name is used verbatim as
-// a filename: the executor derives each step's log path from it, and Win32
-// parses '<name>:<stream>:<type>' as an NTFS alternate data stream, so a
-// colon-bearing name fails to open on Windows and takes the whole run down
-// with it. '.' is a legal filename character on every supported platform, and
-// neither a core step name nor a well-formed gate label can contain one, so
-// the encoding stays reversible.
 const (
 	CustomGateStepPrefix    = "gate."
 	CustomGateStepSeparator = "."
 )
 
-// MaxCustomGateLabelLen bounds a gate label so the derived step name stays a
-// short, valid filename and a compact entry in the step tables, the PR body,
-// and the attestation payload.
 const MaxCustomGateLabelLen = 40
 
-// ValidCustomGateLabel reports whether label is a well-formed gate label:
-// non-empty, at most MaxCustomGateLabelLen bytes, and lowercase letters,
-// digits, and inner hyphens only.
-//
-// This is the single owner of that syntax, because it is what makes a gate
-// step name safe to join onto a path. Both the config that mints gate names
-// and CustomGateAnchor, which decides whether an arbitrary string IS a gate
-// step, answer from here, so a name that reports true for IsCustomGate can
-// never carry a separator or a traversal segment into a log path.
 func ValidCustomGateLabel(label string) bool {
 	if label == "" || len(label) > MaxCustomGateLabelLen {
 		return false
@@ -228,19 +171,10 @@ func ValidCustomGateLabel(label string) bool {
 	return true
 }
 
-// CustomGateStepName encodes a gate's anchor into its step name so Order can
-// place the gate without consulting the configuration that declared it.
 func CustomGateStepName(anchor StepName, name string) StepName {
 	return StepName(CustomGateStepPrefix + string(anchor) + CustomGateStepSeparator + name)
 }
 
-// decodeCustomGate reverses CustomGateStepName and is the single owner of that
-// decoding: IsCustomGate, CustomGateAnchor, and CustomGateLabel all answer from
-// here, so the separator handling lives in one place and the three can never
-// disagree about whether a name is a gate. It reports false for a core step,
-// and for any name whose encoded anchor is not allowed or whose label is not
-// well-formed, so a malformed name can never be ordered, or turned into a log
-// path, as if it were valid.
 func decodeCustomGate(s StepName) (StepName, string, bool) {
 	rest, ok := strings.CutPrefix(string(s), CustomGateStepPrefix)
 	if !ok {
@@ -256,26 +190,21 @@ func decodeCustomGate(s StepName) (StepName, string, bool) {
 	return StepName(anchor), label, true
 }
 
-// IsCustomGate reports whether the step is a repository-declared extra gate.
 func (s StepName) IsCustomGate() bool {
 	_, _, ok := decodeCustomGate(s)
 	return ok
 }
 
-// CustomGateAnchor returns the core step a custom gate runs after.
 func (s StepName) CustomGateAnchor() (StepName, bool) {
 	anchor, _, ok := decodeCustomGate(s)
 	return anchor, ok
 }
 
-// CustomGateLabel returns the repository-declared name of a custom gate, or
-// empty for a core step or a malformed gate name.
 func (s StepName) CustomGateLabel() string {
 	_, label, _ := decodeCustomGate(s)
 	return label
 }
 
-// IsCoreStepName reports whether the name is one of the fixed core steps.
 func IsCoreStepName(s StepName) bool {
 	for _, step := range AllSteps() {
 		if step == s {
@@ -285,7 +214,6 @@ func IsCoreStepName(s StepName) bool {
 	return false
 }
 
-// StepStatus represents the lifecycle state of a pipeline step.
 type StepStatus string
 
 const (
@@ -299,7 +227,6 @@ const (
 	StepStatusFailed           StepStatus = "failed"
 )
 
-// ApprovalAction represents user responses at approval points.
 type ApprovalAction string
 
 const (
@@ -308,17 +235,9 @@ const (
 	ActionSkip             ApprovalAction = "skip"
 	ActionAbort            ApprovalAction = "abort"
 	ActionCompleteCoverage ApprovalAction = "complete-coverage"
-	// ActionAnswer releases a review gate that parked on the reviewer's own
-	// open questions, once every one of them is answered. It is neither a
-	// verdict on the round nor a request to fix anything: the same reviewer
-	// session is resumed with the answers so it can finish its pass. It is
-	// never a valid response to any other gate - the daemon sends it, not an
-	// operator (see docs concepts/review-conversation).
-	ActionAnswer ApprovalAction = "answer"
+	ActionAnswer           ApprovalAction = "answer"
 )
 
-// AgentName identifies a supported agent backend. Explicit ACP targets use
-// dynamic acp:<target> values; first-class ACP aliases have constants below.
 type AgentName string
 
 const (
@@ -335,7 +254,6 @@ const (
 	AgentAntigravity AgentName = "antigravity"
 )
 
-// ACPAlias describes a first-class agent name that resolves to an ACP target.
 type ACPAlias struct {
 	Name           AgentName
 	Target         string
@@ -347,7 +265,6 @@ var acpAliases = []ACPAlias{
 	{Name: AgentDevin, Target: "devin", DefaultCommand: "devin acp"},
 }
 
-// ACPAliasFor returns the ACP alias metadata for a first-class agent name.
 func ACPAliasFor(name AgentName) (ACPAlias, bool) {
 	for _, alias := range acpAliases {
 		if alias.Name == name {
@@ -357,7 +274,6 @@ func ACPAliasFor(name AgentName) (ACPAlias, bool) {
 	return ACPAlias{}, false
 }
 
-// ACPAliasForTarget returns the ACP alias metadata for a raw ACP target.
 func ACPAliasForTarget(target string) (ACPAlias, bool) {
 	for _, alias := range acpAliases {
 		if alias.Target == target {
@@ -367,14 +283,12 @@ func ACPAliasForTarget(target string) (ACPAlias, bool) {
 	return ACPAlias{}, false
 }
 
-// ACPAliases returns all first-class ACP aliases.
 func ACPAliases() []ACPAlias {
 	out := make([]ACPAlias, len(acpAliases))
 	copy(out, acpAliases)
 	return out
 }
 
-// DefaultCommandBinary returns the executable named by the alias default command.
 func (a ACPAlias) DefaultCommandBinary() string {
 	fields := strings.Fields(a.DefaultCommand)
 	if len(fields) == 0 {
@@ -383,9 +297,6 @@ func (a ACPAlias) DefaultCommandBinary() string {
 	return fields[0]
 }
 
-// ACPTargetFor resolves the ACP target an agent name drives: the alias target
-// for a first-class alias, or the parsed target of an explicit acp:<target>
-// name. Returns false for non-ACP agent names.
 func ACPTargetFor(name AgentName) (string, bool) {
 	if alias, ok := ACPAliasFor(name); ok {
 		return alias.Target, true
@@ -408,10 +319,6 @@ func CanonicalAgentName(name AgentName) AgentName {
 	return name
 }
 
-// ACPRawCommand resolves the raw command acpx runs for an ACP target: a
-// registry override is trimmed and wins when non-blank, otherwise the alias
-// default command is used.
-// Empty means acpx dispatches the target through its own registry.
 func ACPRawCommand(target string, overrides map[string]string) string {
 	if override := strings.TrimSpace(overrides[target]); override != "" {
 		return override

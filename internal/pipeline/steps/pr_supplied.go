@@ -12,15 +12,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// MaxRunPRBodyBytes bounds a caller-supplied PR description (axi run
-// --pr-body-file). The body travels as one base64 push option, so this is the
-// same pkt-line budget as intent; internal/cli pins the two together.
 const MaxRunPRBodyBytes = 49122
 
-// NormalizeRunPRTitle validates a caller-supplied PR title and returns it
-// trimmed. An empty input means none was supplied. The CLI checks it before any
-// push and the daemon checks it again before persisting, so both refuse the
-// same values.
 func NormalizeRunPRTitle(title string) (string, error) {
 	if title == "" {
 		return "", nil
@@ -41,11 +34,6 @@ func NormalizeRunPRTitle(title string) (string, error) {
 	return trimmed, nil
 }
 
-// ValidateRunPRBody validates a caller-supplied PR description. An empty input
-// means none was supplied. The bytes are otherwise published as given, so the
-// checks refuse what could not survive publication or would forge ownership:
-// controls gh rewrites on read, bidi overrides that disguise the text, and the
-// markers that delimit the generated appendix and attestation.
 func ValidateRunPRBody(body string) error {
 	if body == "" {
 		return nil
@@ -88,9 +76,6 @@ func suppliedPRBody(sctx *pipeline.StepContext) string {
 	return *sctx.Run.PRBody
 }
 
-// logSuppliedPRTextUnused tells the caller the supplied text did not reach a
-// PR. Unlike a --closes reference it promises nothing on its own, so a step
-// that publishes no new PR logs it rather than failing.
 func logSuppliedPRTextUnused(sctx *pipeline.StepContext, reason string) {
 	var parts []string
 	if suppliedPRTitle(sctx) != "" {
@@ -105,9 +90,6 @@ func logSuppliedPRTextUnused(sctx *pipeline.StepContext, reason string) {
 	sctx.Log(fmt.Sprintf("supplied PR %s not applied: %s", strings.Join(parts, " and "), reason))
 }
 
-// renderSuppliedPRTitle applies pr.title_format to a supplied title, which then
-// stands for the bare {{.Title}}. Without a format the title is used as given:
-// conventional tightening would break the verbatim promise.
 func renderSuppliedPRTitle(sctx *pipeline.StepContext, title string) (string, error) {
 	if sctx.Config == nil || sctx.Config.PR.TitleFormat == "" {
 		return title, nil
@@ -115,11 +97,6 @@ func renderSuppliedPRTitle(sctx *pipeline.StepContext, title string) (string, er
 	return renderPRTitle(sctx, title)
 }
 
-// buildSuppliedPRContent composes a new PR whose description the caller
-// supplied. The body becomes the author narrative of an owned body, so it never
-// goes through stripGeneratedSections and every later run keeps it byte for
-// byte, refreshing only the appendix. Only the title, or the configured public
-// Intent brief, is still drafted, and only when the caller did not supply it.
 func (s *PRStep) buildSuppliedPRContent(sctx *pipeline.StepContext, branch, baseBranch, baseSHA, template string, provider scm.Provider, bodyLimit int) (prContent, error) {
 	body := suppliedPRBody(sctx)
 	if template != "" {
@@ -161,9 +138,6 @@ func (s *PRStep) buildSuppliedPRContent(sctx *pipeline.StepContext, branch, base
 	return composeOwnedPRContent(prOwnedBody{before: narrative}, title, appendix, bodyLimit, sctx.WorkDir, nmWorktreesRoot())
 }
 
-// applySuppliedPRTitle replaces a drafted title with the supplied one. The
-// title is outside the appendix integrity guard, so swapping it after
-// composition leaves an owned body valid; the redaction boundary still applies.
 func applySuppliedPRTitle(sctx *pipeline.StepContext, content prContent) (prContent, error) {
 	supplied := suppliedPRTitle(sctx)
 	if supplied == "" {

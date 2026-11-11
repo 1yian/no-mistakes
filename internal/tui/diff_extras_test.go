@@ -400,7 +400,6 @@ func TestRenderDiff_StatsBlankLineNotDoubled(t *testing.T) {
 }
 
 func TestRenderDiff_ScrolledViewPreservesStatsGap(t *testing.T) {
-	// When scrolled down, the stats header still has a blank line before the visible diff content.
 	var b strings.Builder
 	b.WriteString("diff --git a/main.go b/main.go\n")
 	b.WriteString("--- a/main.go\n")

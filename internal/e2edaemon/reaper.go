@@ -14,7 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/winproc"
 )
 
-// ReapResult summarizes one reaper pass.
 type ReapResult struct {
 	Entries int
 	Stopped int
@@ -24,10 +23,6 @@ type ReapResult struct {
 	Errors  []string
 }
 
-// ReapAll stops every inventoried temporary daemon with bounded ownership
-// checks, then removes their inventory entries. It never touches processes
-// that are not listed in the inventory or whose argv no longer matches the
-// recorded NM_HOME (so the shared service is never a target).
 func (inv *Inventory) ReapAll() ReapResult {
 	var result ReapResult
 	if inv == nil {
@@ -106,8 +101,6 @@ func (inv *Inventory) reapEntry(e Entry, result *ReapResult) error {
 	return nil
 }
 
-// isAllowedTempRoot is a hard safety gate: never operate on the shared
-// user NM_HOME or other non-temp paths even if inventory is corrupted.
 func isAllowedTempRoot(nmHome string) bool {
 	nmHome = filepath.Clean(nmHome)
 	if nmHome == "" || nmHome == "." || nmHome == string(filepath.Separator) {
@@ -194,7 +187,6 @@ func processMatchesHash(pid int, expected string) bool {
 	return err == nil && expected != "" && processHash(command) == expected
 }
 
-// Ownership tracks one harness's inventory entry and concurrency slot.
 type Ownership struct {
 	Inv    *Inventory
 	ID     string
@@ -203,9 +195,6 @@ type Ownership struct {
 	Slot   *Slot
 }
 
-// Acquire creates inventory ownership for a temp NM_HOME under the suite
-// concurrency cap. Call SyncPID after the daemon becomes live; call Release
-// after stop (or from the reaper path).
 func Acquire(nmHome, nmBin string, slotTimeout time.Duration) (*Ownership, error) {
 	inv, err := Open()
 	if err != nil {
@@ -233,7 +222,6 @@ func Acquire(nmHome, nmBin string, slotTimeout time.Duration) (*Ownership, error
 	return own, nil
 }
 
-// SyncPID reads a live daemon pid (from caller) into the inventory.
 func (o *Ownership) SyncPID(pid int) error {
 	if o == nil || o.Inv == nil {
 		return fmt.Errorf("e2edaemon: nil ownership")
@@ -279,7 +267,6 @@ func (o *Ownership) SyncProcess(pid int) error {
 	return nil
 }
 
-// StopBestEffort runs daemon stop for this home when a binary is known.
 func (o *Ownership) StopBestEffort() {
 	if o == nil {
 		return
@@ -291,8 +278,6 @@ func (o *Ownership) StopBestEffort() {
 	})
 }
 
-// Release stops best-effort, reaps any leftover matched process for this
-// home only, and frees the slot. Inconclusive cleanup remains inventoried.
 func (o *Ownership) Release() {
 	if o == nil {
 		return

@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newEvalCmd deliberately does not call trackCommand. Eval cases and candidate
-// results are local code data, so this command surface has no remote telemetry
-// event and does not use the daemon.
 func newEvalCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "eval",
@@ -48,18 +45,6 @@ func openEvalStore() (*paths.Paths, *eval.Store, error) {
 	return p, store, nil
 }
 
-// evalRepoNames resolves the repository fingerprints a case carries back to
-// human names from the locally registered repositories. It is best effort and
-// display-only: when the pipeline database cannot be read, the dashboards fall
-// back to the fingerprint rather than failing an eval command that otherwise
-// needs no database at all.
-//
-// The read goes through db.OpenReadOnly, never db.Open. db.Open creates the
-// database and runs every migration, so routing a display lookup through it
-// made `eval sets`, `eval report`, and `eval run` initialize pipeline state on
-// a machine that has none, and migrate the schema of a database a running
-// daemon owns. A missing database is the ordinary case here (os.IsNotExist),
-// not an error worth reporting: the dashboards simply show fingerprints.
 func evalRepoNames(p *paths.Paths) map[string]string {
 	database, err := db.OpenReadOnly(p.DB())
 	if err != nil {

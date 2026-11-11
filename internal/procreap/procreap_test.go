@@ -8,21 +8,15 @@ import (
 	"time"
 )
 
-// fakeSystem is an in-memory process table with recorded signals, so the
-// sweep's policy can be exercised without signalling anything real.
 type fakeSystem struct {
-	mu      sync.Mutex
-	procs   []Process
-	cwds    map[int]string
-	dead    map[int]bool
-	signals []signalRecord
-	// ignoreTerm names processes that keep running after SIGTERM, so the
-	// SIGKILL escalation can be observed.
+	mu         sync.Mutex
+	procs      []Process
+	cwds       map[int]string
+	dead       map[int]bool
+	signals    []signalRecord
 	ignoreTerm map[int]bool
-	// listCalls and cwdCalls count the process-table reads, which are what a
-	// sweep costs on a real machine (`ps` plus one cwd read per candidate).
-	listCalls int
-	cwdCalls  int
+	listCalls  int
+	cwdCalls   int
 }
 
 type signalRecord struct {
@@ -111,10 +105,6 @@ func victimPIDs(victims []Victim) []int {
 	return out
 }
 
-// TestSweepReapsStaleWorktreeProcessAndSparesEverythingElse is the core policy
-// contract: a long-running process standing in a finished run's worktree is
-// terminated, while a process of the same age standing anywhere else - the
-// case that protects an unrelated LaunchAgent-style worker - is untouched.
 func TestSweepReapsStaleWorktreeProcessAndSparesEverythingElse(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	fake := &fakeSystem{
@@ -144,9 +134,6 @@ func TestSweepReapsStaleWorktreeProcessAndSparesEverythingElse(t *testing.T) {
 	}
 }
 
-// TestSweepSparesActiveRunWorktree pins the guard that keeps the reaper from
-// killing a live pipeline: an active run still owns its worktree, so nothing
-// standing in it is a leak, no matter how long it has been running.
 func TestSweepSparesActiveRunWorktree(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	fake := &fakeSystem{
@@ -177,9 +164,6 @@ func TestSweepSparesActiveRunWorktree(t *testing.T) {
 	}
 }
 
-// TestSweepMinAgeSparesYoungProcesses guards the startup sweep against
-// terminating a process that just started, which is what a run beginning
-// concurrently with daemon startup would look like.
 func TestSweepMinAgeSparesYoungProcesses(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	fake := &fakeSystem{
@@ -197,12 +181,6 @@ func TestSweepMinAgeSparesYoungProcesses(t *testing.T) {
 	}
 }
 
-// TestSweepRunWorktreesReapsEveryTargetFromOneProcessSnapshot covers the eject
-// call, which removes every worktree a repository recorded outside the default
-// tree at once. Reading the process table is what a sweep costs, and run rows
-// are never pruned, so a per-directory sweep makes eject cost one `ps` plus one
-// cwd read per run the repository has ever had. One snapshot must answer all of
-// them, with the per-directory reach unchanged.
 func TestSweepRunWorktreesReapsEveryTargetFromOneProcessSnapshot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	operatorRoot := filepath.Join(t.TempDir(), "repo-runs")
@@ -250,10 +228,6 @@ func TestSweepRunWorktreesReapsEveryTargetFromOneProcessSnapshot(t *testing.T) {
 	}
 }
 
-// TestSweepRunWorktreesWithoutTargetsReadsNothing pins the fail-safe half of the
-// batched entry point: with no worktree to sweep there is nothing to scope the
-// sweep to, and an unscoped sweep of the default tree with no age floor and no
-// run-active check would reap a live run's processes.
 func TestSweepRunWorktreesWithoutTargetsReadsNothing(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	fake := &fakeSystem{
@@ -275,9 +249,6 @@ func TestSweepRunWorktreesWithoutTargetsReadsNothing(t *testing.T) {
 	}
 }
 
-// TestSweepScopeIgnoresAgeAndOtherWorktrees covers the run-cleanup call: the
-// caller owns exactly one finished run, so its worktree is swept regardless of
-// how young the processes are, and no other run's worktree is touched.
 func TestSweepScopeIgnoresAgeAndOtherWorktrees(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	scope := filepath.Join(root, "repo1", "run1")
@@ -305,10 +276,6 @@ func TestSweepScopeIgnoresAgeAndOtherWorktrees(t *testing.T) {
 	}
 }
 
-// TestSweepNeverSignalsItselfOrItsAncestors is the guard that keeps a sweep
-// from taking down the daemon that is running it - the daemon's own working
-// directory is not normally a worktree, but a fixture, a test, or a future
-// caller must not be able to make it one and lose the process.
 func TestSweepNeverSignalsItselfOrItsAncestors(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	self := os.Getpid()
@@ -339,10 +306,6 @@ func TestSweepNeverSignalsItselfOrItsAncestors(t *testing.T) {
 	}
 }
 
-// TestSweepExpandsToDescendantsAndLedGroup pins that a matched process takes
-// its whole tree with it: a child that has since chdir'd out of the worktree,
-// and a sibling sharing the group it leads, are both reaped. Without this a
-// leaked worker's own children keep running after the worker is gone.
 func TestSweepExpandsToDescendantsAndLedGroup(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	wt := filepath.Join(root, "repo1", "run1")
@@ -376,9 +339,6 @@ func TestSweepExpandsToDescendantsAndLedGroup(t *testing.T) {
 	}
 }
 
-// TestSweepEscalatesToSIGKILLOnlyAfterSIGTERMFails pins the termination
-// contract: everything gets a chance to shut down cleanly, and only what
-// survives the grace period is killed outright.
 func TestSweepEscalatesToSIGKILLOnlyAfterSIGTERMFails(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	wt := filepath.Join(root, "repo1", "run1")
@@ -406,9 +366,6 @@ func TestSweepEscalatesToSIGKILLOnlyAfterSIGTERMFails(t *testing.T) {
 	}
 }
 
-// TestWorktreeRefRequiresRunDirectory keeps the association precise: standing
-// in the worktrees root or in a repo directory is not standing in a run, and
-// must never make a process a candidate.
 func TestWorktreeRefRequiresRunDirectory(t *testing.T) {
 	root := t.TempDir()
 	roots := worktreeMatchers(Options{WorktreesRoot: root})
@@ -423,12 +380,6 @@ func TestWorktreeRefRequiresRunDirectory(t *testing.T) {
 	}
 }
 
-// TestSweepNamedWorktreesReachOnlyWhatARunRecorded covers a repository whose
-// runs the operator placed in a directory of their own (worktree_roots). Reach
-// there is the worktrees the caller names, one per run record, so a stale run
-// process is still reaped - while everything else in that directory is out of
-// reach, including a directory whose name looks exactly like a run worktree but
-// that no run created. The name is not evidence in somebody else's directory.
 func TestSweepNamedWorktreesReachOnlyWhatARunRecorded(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	repoRoot := filepath.Join(t.TempDir(), "repo-runs")
@@ -477,13 +428,6 @@ func TestSweepNamedWorktreesReachOnlyWhatARunRecorded(t *testing.T) {
 	}
 }
 
-// TestSweepReachesDeletedNamedWorktreeThroughSymlinkedRoot is the deleted-cwd
-// case this package exists for, in an operator's own directory. The worktree is
-// gone - the daemon removed it at run end while a process that had left its
-// process group kept standing in it - so the only spelling left to resolve is
-// the directory that held it. On macOS every path under /tmp goes through a
-// symlink, so the recorded spelling and the process's cwd differ, and matching
-// only the recorded one leaves that process burning CPU forever.
 func TestSweepReachesDeletedNamedWorktreeThroughSymlinkedRoot(t *testing.T) {
 	base := t.TempDir()
 	realRoot := filepath.Join(base, "real-runs")
@@ -524,9 +468,6 @@ func TestSweepReachesDeletedNamedWorktreeThroughSymlinkedRoot(t *testing.T) {
 	}
 }
 
-// A named worktree without the run identity to check it against is dropped
-// rather than matched, so a caller that cannot say which run owns a directory
-// never gets it signalled.
 func TestSweepIgnoresNamedWorktreeWithoutRunIdentity(t *testing.T) {
 	repoRoot := filepath.Join(t.TempDir(), "repo-runs")
 	const runID = "01JZ8XQ7V6K9M3B0T5N2R4C8YD"

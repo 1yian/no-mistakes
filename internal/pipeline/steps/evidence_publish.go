@@ -12,29 +12,14 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/reviewqa"
 )
 
-// evidenceLinks describes a published evidence commit well enough to turn a
-// local artifact path into a stable PR link.
 type evidenceLinks struct {
-	// blobBase and rawBase are the provider URL prefixes for the evidence
-	// COMMIT, not the branch: a later run may overwrite the same paths at the
-	// branch tip, and an old PR must keep showing the bytes it was reviewed
-	// against.
 	blobBase string
 	rawBase  string
-	// root is the local directory the artifacts were published from.
-	root string
-	// dir is the run's directory inside the evidence branch, "" at root.
-	dir string
-	// files is the set of published paths relative to root (slash separated).
-	files map[string]bool
+	root     string
+	dir      string
+	files    map[string]bool
 }
 
-// publishRunEvidence copies this run's evidence directory onto the repository's
-// orphan evidence branch and returns the links the PR body should use. It
-// returns nil whenever evidence is not opted in, there is nothing to publish,
-// or publication failed. The renderer then omits evidence-branch links that
-// would not resolve; it may still use an uploaded media attachment, otherwise
-// the artifact keeps its local-path rendering.
 func publishRunEvidence(sctx *pipeline.StepContext) *evidenceLinks {
 	if sctx == nil || sctx.Config == nil || sctx.Repo == nil || sctx.Run == nil || !sctx.Config.Test.Evidence.StoreInRepo {
 		return nil
@@ -105,9 +90,6 @@ func publishRunEvidence(sctx *pipeline.StepContext) *evidenceLinks {
 	return links
 }
 
-// target returns the PR link for an artifact path published by this run, or ""
-// when the path is not one of them. raw selects the rendering host used for
-// images and videos so they display inline instead of as a page link.
 func (e *evidenceLinks) target(artifactPath string, raw bool) string {
 	if e == nil || e.blobBase == "" || artifactPath == "" {
 		return ""
@@ -139,9 +121,6 @@ func joinURLPath(dir, rel string) string {
 	return strings.Join(segments, "/")
 }
 
-// nmWorktreesRoot is the NM_HOME worktrees root published text is redacted
-// against. Without a resolvable NM_HOME only the run's own worktree is
-// rewritten.
 func nmWorktreesRoot() string {
 	if p, err := paths.New(); err == nil {
 		return p.WorktreesDir()

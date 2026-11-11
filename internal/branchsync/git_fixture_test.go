@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// gitFixtureRoot holds the one built copy of each cached fixture's
-// repositories. TestMain places it in its temporary directory and removes it.
 var gitFixtureRoot string
 
 var gitFixtures sync.Map
@@ -20,12 +18,6 @@ type gitFixture[T any] struct {
 	built bool
 }
 
-// copyGitFixture runs build once per test process for key and copies the
-// repositories it left in its root into a fresh temporary root. Building a
-// fixture's repositories costs ~20 git.exe spawns, and those spawns set this
-// package's Windows wall time; a copy costs one spawn per worktree. Every copy
-// shares what build leaves, so build must remove any clone or linked worktree
-// it made: their Git metadata names the build root as a path.
 func copyGitFixture[T any](t *testing.T, key string, build func(t *testing.T, root string) T) (string, T) {
 	t.Helper()
 	cached, _ := gitFixtures.LoadOrStore(key, &gitFixture[T]{})

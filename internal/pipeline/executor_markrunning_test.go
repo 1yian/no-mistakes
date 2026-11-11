@@ -9,10 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A fix round is marked fixing before the step re-executes. A step whose fix
-// round ends with ordinary execution (the CI monitor after a published repair)
-// reports that through MarkRunning, and the durable status plus the event
-// stream both read running again before Execute returns.
 func TestExecutor_MarkRunningReturnsAFixingStepToRunning(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

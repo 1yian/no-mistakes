@@ -32,10 +32,6 @@ type statefulGHState struct {
 	PRs map[string]*statefulGHPR `json:"prs"`
 }
 
-// setupStatefulGitHub points origin at a github.com URL (rewritten to the
-// local upstream) and shadows gh with the fakeagent stub that remembers PR
-// bodies, so the pipeline's create/update/verify round trip reads back exactly
-// what it last published.
 func setupStatefulGitHub(t *testing.T, h *Harness) string {
 	t.Helper()
 	originURL := "https://github.com/example/closes.git"
@@ -98,7 +94,6 @@ func readRunClosingRefs(t *testing.T, nmHome, runID string) ([]string, *int64) {
 	return run.ClosingIssueRefs, run.ClosingIssueRefsLockedAt
 }
 
-// exactLineCount counts lines equal to want after trimming whitespace.
 func exactLineCount(body, want string) int {
 	n := 0
 	for _, line := range strings.Split(body, "\n") {
@@ -129,10 +124,6 @@ func saveEvidence(t *testing.T, name, content string) {
 	}
 }
 
-// waitPublished waits for the newest run on branch other than prevID to
-// complete its PR step. A run that does not skip CI keeps monitoring the open
-// PR until it merges, so once the body is published it is cancelled: the
-// next scenario needs the branch idle, not a merged PR.
 func waitPublished(t *testing.T, h *Harness, branch, prevID, label string) *ipc.RunInfo {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Minute)
@@ -166,9 +157,6 @@ func waitPublished(t *testing.T, h *Harness, branch, prevID, label string) *ipc.
 	return settlePublished(t, h, run, branch, label)
 }
 
-// settlePublished brings a run whose PR step completed to rest from a possibly
-// stale snapshot of it: a live run is cancelled, a terminal one must be a
-// successful outcome.
 func settlePublished(t *testing.T, h *Harness, run *ipc.RunInfo, branch, label string) *ipc.RunInfo {
 	t.Helper()
 	if !run.Status.Terminal() {
@@ -281,7 +269,6 @@ func TestClosingIssueRefsGitHubJourney(t *testing.T) {
 		}
 	}
 
-	// Scenario: a gate push option carries a reference on the non-AXI path.
 	const optBranch = "feature/closes-push-option"
 	h.CommitChange(optBranch, "opt.txt", "opt\n", "add push option fixture")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -298,7 +285,6 @@ func TestClosingIssueRefsGitHubJourney(t *testing.T) {
 	saveEvidence(t, "05-push-option-pr-body.md", body)
 	assertLinesOnce(t, "push option", body, "## Issues", "Closes #41", "Closes acme/widgets#5")
 
-	// Scenario: an invalid push option is refused at the gate.
 	const badOptBranch = "feature/closes-bad-option"
 	h.CommitChange(badOptBranch, "bad.txt", "bad\n", "add bad option fixture")
 	out2, err := h.runGit(ctx, h.WorkDir, "push", "-o", "no-mistakes.closes=#9", "no-mistakes", badOptBranch)
@@ -312,8 +298,6 @@ func TestClosingIssueRefsGitHubJourney(t *testing.T) {
 		}
 	}
 
-	// Scenario: without --closes no closing keyword is added or inferred,
-	// even when the branch name and commit message mention an issue.
 	const plainBranch = "fix/issue-321"
 	h.CommitChange(plainBranch, "plain.txt", "plain\n", "Fix #321: plain change")
 	pwt := h.AddWorktree(plainBranch)
@@ -330,8 +314,6 @@ func TestClosingIssueRefsGitHubJourney(t *testing.T) {
 	}
 }
 
-// TestClosingIssueRefsReattachAfterComposeIsRefused leaves CI running (no
-// checks yet) after the PR body is composed, then reattaches with --closes.
 func TestClosingIssueRefsReattachAfterComposeIsRefused(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	statePath := setupStatefulGitHub(t, h)
@@ -384,7 +366,6 @@ func TestClosingIssueRefsReattachAfterComposeIsRefused(t *testing.T) {
 	h.CancelRun(run.ID)
 }
 
-// TestClosingIssueRefsNonGitHubFailsAtPR runs --closes against a Gitea origin.
 func TestClosingIssueRefsNonGitHubFailsAtPR(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	const (
@@ -427,9 +408,6 @@ func TestClosingIssueRefsNonGitHubFailsAtPR(t *testing.T) {
 	t.Log(evidence)
 }
 
-// TestClosingIssueRefsOwnedTemplateJourney drives the author-preserving
-// pr.template path: the appendix renders the requested reference, and author
-// text that already closes the issue is not duplicated by the appendix.
 func TestClosingIssueRefsOwnedTemplateJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	statePath := setupStatefulGitHub(t, h)

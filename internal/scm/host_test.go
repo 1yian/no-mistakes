@@ -117,7 +117,6 @@ func TestErrUnsupportedIsMatched(t *testing.T) {
 	}
 }
 
-// fakeHost asserts Host interface compliance at compile time.
 type fakeHost struct{}
 
 var _ Host = (*fakeHost)(nil)

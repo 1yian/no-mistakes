@@ -12,16 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// The review-fix contract's unit of work is the invariant a finding violates,
-// at every site in the changed area where it must hold, not the one reported
-// instance. The superseded "fix the reported instance narrowly" rule produced
-// the thrash it was measured against: on SSHHIP PR #462, 11 of 17 rereviews
-// reported the sibling site the previous fix had left behind (the other clamp
-// axis, the Skip path beside the Fix path, the same __proto__ map in a second
-// file, the next unvalidated field of one response) or a regression the fix
-// itself made. The fragments below are the rendered fixer contract; the
-// reviewer-side class-once rule and the rereview's follow-on labelling are
-// pinned by their own tests in this file.
 var (
 	fixerClassRuleLines = []string{
 		"- Before changing code, state for each finding the invariant it violates (what must always hold, in one sentence) and enumerate every place in the changed area where that same invariant must hold: every axis, direction, and representation; every sibling call path, command, action, and state transition; every consumer of the same input, field, or record. Fix the invariant at all of those places in this round, with the same small correction, or at the one shared boundary that makes all of them hold. A fix that closes only the reported site and leaves a sibling site reachable is incomplete; the next review will report the sibling.",
@@ -40,8 +30,6 @@ var (
 		"Remove any alias, branch, parameter, or helper your fix made unreachable",
 		"A fix that makes the reported sequence pass while breaking the ordinary path, a caller's assumption, or a sibling site is a regression the next review will report",
 	}
-	// Neither superseded scope rule may return: the instance-narrow rule bred
-	// sibling follow-ons, and the deepest-practical-cause rule bred machinery.
 	fixerSupersededScopeRules = []string{
 		"Fix the reported instance narrowly",
 		"fix the deepest practical cause instead",
@@ -69,13 +57,6 @@ func promptHasExactLine(prompt, want string) bool {
 	return false
 }
 
-// TestReviewStep_FixPromptClosesTheInvariantAcrossSiblingSites pins the
-// fixer's invariant-complete rule as rendered: state the invariant, enumerate
-// every sibling site, close all of them in this round with the same small
-// correction or one shared boundary, and never as machinery. The self-trace
-// rule sits between "apply all fixes first" and the single focused
-// verification, so the trace is of the code as edited and precedes any test
-// run. The rereview never receives the fixer's contract.
 func TestReviewStep_FixPromptClosesTheInvariantAcrossSiblingSites(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -129,13 +110,6 @@ func TestReviewStep_FixPromptClosesTheInvariantAcrossSiblingSites(t *testing.T) 
 	}
 }
 
-// TestReviewStep_ReviewPromptReportsTheClassOnce pins the reviewer's
-// class-once rule: a defect finding lists, in that same finding, every other
-// site in the changed code where the same invariant is violated or must hold,
-// and an incomplete-validation finding lists every consumed field still
-// unvalidated. The anchor stays one file and line, so the carry-forward set
-// and finding identity are unchanged. Both the initial review and the rereview
-// carry the rule; the fixer does not.
 func TestReviewStep_ReviewPromptReportsTheClassOnce(t *testing.T) {
 	t.Parallel()
 
@@ -214,14 +188,6 @@ func TestReviewStep_ReviewPromptReportsTheClassOnce(t *testing.T) {
 	})
 }
 
-// TestReviewStep_RereviewNamesFollowOnsOfPriorFixRounds pins the rereview's
-// follow-on labelling: a defect in code a prior fix round changed, or a
-// sibling site of an invariant a prior round addressed, is reported as such,
-// naming the round and whether the fix introduced, left behind, or moved the
-// defect, with every remaining sibling listed so one round can close the
-// class. It rides both provenance framings (this run's fix rounds and a
-// previous run's uncertified fixer commits), because both are prior-round
-// code, and is absent from an ordinary initial review and from the fixer.
 func TestReviewStep_RereviewNamesFollowOnsOfPriorFixRounds(t *testing.T) {
 	t.Parallel()
 
@@ -326,8 +292,6 @@ func TestReviewStep_RereviewNamesFollowOnsOfPriorFixRounds(t *testing.T) {
 	})
 }
 
-// The class-fix corpus is an executable unified-diff contract, so each fixture
-// must remain consumable by the documented git-based evaluation flow.
 func TestReviewStep_ClassFixFixturesApply(t *testing.T) {
 	t.Parallel()
 

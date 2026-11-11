@@ -1,4 +1,3 @@
-// Package github implements scm.Host backed by the gh CLI.
 package github
 
 import (
@@ -18,10 +17,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// CmdFactory builds an exec.Cmd in the caller's workdir with the caller's env.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Host talks to GitHub through the gh CLI.
 type Host struct {
 	cmd                 CmdFactory
 	cliAvailable        func() bool
@@ -32,23 +29,10 @@ type Host struct {
 	requiredReviews     []string
 	requiredReviewAppID int64
 	draft               bool // open created PRs as drafts (gh pr create --draft)
-	// assetHTTP and assetUploadPrefix override the unofficial user-attachments
-	// upload transport in tests. Production leaves both nil/empty and uses
-	// http.DefaultClient against uploads.github.com (or uploads.<ghec-host>).
-	assetHTTP         *http.Client
-	assetUploadPrefix string
+	assetHTTP           *http.Client
+	assetUploadPrefix   string
 }
 
-// New builds a Host. cliAvailable reports whether the gh binary is
-// resolvable on the caller's PATH (possibly overridden by env). host is the
-// repo's GitHub hostname; when set the availability check is scoped to it via
-// --hostname so a stale credential for an unrelated configured gh host cannot
-// make this repo look unauthenticated. repo is the "owner/name" slug; when set
-// it is passed via --repo to every PR/run command so they resolve the right
-// repository regardless of the process working directory. The daemon runs from
-// a fixed, non-repo working dir, so without this gh cannot infer the repo (or
-// branch) and fails on every poll. host is optional; empty reproduces the
-// legacy unscoped auth-check behavior.
 func New(cmd CmdFactory, cliAvailable func() bool, host, repo string) *Host {
 	return &Host{
 		cmd:          cmd,
@@ -58,19 +42,12 @@ func New(cmd CmdFactory, cliAvailable func() bool, host, repo string) *Host {
 	}
 }
 
-// WithRequiredReviews opts the existing check adapter into strict completion
-// semantics for the named review bots. The default does no extra discovery.
 func (h *Host) WithRequiredReviews(reviewers []string, appID int64) *Host {
 	h.requiredReviews = append([]string(nil), reviewers...)
 	h.requiredReviewAppID = appID
 	return h
 }
 
-// NewWithFork builds a Host that opens PRs on repo using forkRepo as the head
-// repository owner. forkRepo is an "owner/name" slug: creation uses its owner
-// for --head <owner>:<branch>, and live-head proof checks the complete slug.
-// host is optional; see
-// New for its role in scoping the auth check. draft opens created PRs as drafts.
 func NewWithFork(cmd CmdFactory, cliAvailable func() bool, host, repo, forkRepo string, draft bool) *Host {
 	h := New(cmd, cliAvailable, host, repo)
 	h.forkOwner = repoOwner(forkRepo)
@@ -79,8 +56,6 @@ func NewWithFork(cmd CmdFactory, cliAvailable func() bool, host, repo, forkRepo 
 	return h
 }
 
-// RepoSlug extracts the "owner/name" identifier from a GitHub remote or PR
-// URL. Longer paths such as PR links are reduced to their leading two segments.
 func RepoSlug(remoteURL string) string {
 	parts := strings.Split(scm.RepoPath(remoteURL), "/")
 	if len(parts) < 2 {
@@ -89,15 +64,10 @@ func RepoSlug(remoteURL string) string {
 	return parts[0] + "/" + parts[1]
 }
 
-// HostPrefixedSlug returns "host/owner/name" for GitHub Enterprise Server
-// instances and plain "owner/name" for github.com. This is the format that
-// the gh CLI's --repo flag requires for GHE.
 func HostPrefixedSlug(remoteURL string) string {
 	return HostPrefixedSlugForHost(remoteURL, scm.ExtractHost(remoteURL))
 }
 
-// HostPrefixedSlugForHost is HostPrefixedSlug using an already-resolved host.
-// This lets callers honor SSH HostName aliases without rewriting the remote.
 func HostPrefixedSlugForHost(remoteURL, host string) string {
 	slug := RepoSlug(remoteURL)
 	if slug == "" {
@@ -110,8 +80,6 @@ func HostPrefixedSlugForHost(remoteURL, host string) string {
 	return host + "/" + slug
 }
 
-// repoArgs returns the --repo flag pair when the slug is known, so gh commands
-// resolve the right repository regardless of the process working directory.
 func (h *Host) repoArgs() []string {
 	if h.repo == "" {
 		return nil
@@ -119,14 +87,6 @@ func (h *Host) repoArgs() []string {
 	return []string{"--repo", h.repo}
 }
 
-// prSelector returns the explicit gh PR selector for pr, preferring the numeric
-// PR number and falling back to the canonical PR URL; both name the exact pull
-// request to gh regardless of the process working directory. It fails closed
-// when neither is known: an empty positional makes `gh pr <verb>` fall back to
-// resolving the current branch of the cwd, and the daemon runs from a detached
-// bare gate repo whose HEAD is the default branch (main), so an inferred
-// selector silently targets the wrong PR (or none — "no pull requests found for
-// branch main") instead of the feature PR the pipeline already knows.
 func prSelector(pr *scm.PR) (string, error) {
 	if pr != nil {
 		if n := strings.TrimSpace(pr.Number); n != "" {
@@ -249,9 +209,6 @@ func parsePullRequestURL(raw, expectedHost, expectedRepo string) (int, error) {
 	return number, nil
 }
 
-// stdoutOnly runs cmd and returns its stdout alone, so notices a gh wrapper
-// writes to stderr never become part of the data. On failure, detail carries
-// the trimmed stderr, or stdout when stderr is empty.
 func stdoutOnly(cmd *exec.Cmd) (out []byte, detail string, err error) {
 	out, err = cmd.Output()
 	if err == nil {
@@ -379,11 +336,6 @@ func (h *Host) CreatePR(ctx context.Context, branch, base string, content scm.PR
 	return pr, nil
 }
 
-// UpdatePR rewrites the PR title (when non-empty) and body with a REST PATCH
-// instead of `gh pr edit`. `gh pr edit` first runs a GraphQL lookup that selects
-// reviewRequests, including Team.organization, which a token limited to the
-// repo and workflow scopes cannot read (it needs read:org), so a pure content
-// rewrite failed for those tokens. The PATCH sends only the fields it changes.
 func (h *Host) UpdatePR(ctx context.Context, pr *scm.PR, content scm.PRContent) (*scm.PR, error) {
 	selector, err := prSelector(pr)
 	if err != nil {
@@ -591,16 +543,10 @@ func (h *Host) getPRChecks(ctx context.Context, selector string) ([]scm.Check, e
 	return checks, nil
 }
 
-// commitChecksQuery reads the head commit's check rollup. A CheckRun also
-// carries its check suite's app slug: that is the structural identity the CI
-// step uses to tell a third-party review bot's check (scm.ReviewBots) from the
-// repository's own Actions jobs, without matching check names.
 const commitChecksQuery = `query($owner:String!,$name:String!,$oid:String!,$cursor:String){repository(owner:$owner,name:$name){object(expression:$oid){... on Commit{statusCheckRollup{contexts(first:100,after:$cursor){nodes{__typename ... on CheckRun{databaseId name status conclusion completedAt startedAt detailsUrl checkSuite{app{slug databaseId}}} ... on StatusContext{id context state targetUrl}} pageInfo{hasNextPage endCursor}}}}}}}`
 
 const reviewThreadsQuery = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$cursor){nodes{id isResolved comments(first:100){` + reviewCommentsSelection + `}} pageInfo{hasNextPage endCursor}}}}}`
 
-// reviewThreadCommentsQuery reads the rest of one thread's comments when the
-// first page of reviewThreadsQuery could not hold them all.
 const reviewThreadCommentsQuery = `query($id:ID!,$cursor:String){node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$cursor){` + reviewCommentsSelection + `}}}}`
 
 const reviewCommentsSelection = `nodes{databaseId body path line url createdAt author{login ... on Bot{databaseId}}} pageInfo{hasNextPage endCursor}`
@@ -809,25 +755,6 @@ func (h *Host) appendUnrepresentedWorkflowRuns(checks, runs []scm.Check) []scm.C
 	return checks
 }
 
-// collapseLatestByName collapses orderable same-name reruns of one workflow
-// to the most recently started one. Independent workflows and records whose
-// provider metadata cannot establish an order remain visible. GitHub's raw
-// commit statusCheckRollup returns every check run ever attached to the commit,
-// including runs a later same-named run has
-// already superseded - e.g. a CI monitor's auto-fix push re-triggers the
-// same gate check, and the rollup keeps both the old FAILURE and the new
-// SUCCESS forever. Without this collapse the superseded failure stays
-// visible even after the later run at the same head turns green, which
-// manufactures an unrecoverable auto-fix loop (see "CI Monitor Lifecycle" in
-// .agents/skills/ci-monitor/SKILL.md). This restores the semantics `gh pr checks` already applies
-// (collapse by startedAt) to the commit-rollup path, which never had it.
-//
-// Must run AFTER appendUnrepresentedWorkflowRuns, never before: that call
-// dedupes by Actions run ID against the FULL uncollapsed rollup. Collapsing
-// first would drop a superseded run's ID out of the "represented" set the
-// union checks against, letting the union re-add the same stale run under
-// its own workflow run name - resurrecting exactly the failure this is
-// meant to hide.
 func (h *Host) collapseLatestByName(checks []scm.Check) []scm.Check {
 	collapsed := make([]scm.Check, 0, len(checks))
 	for _, check := range checks {
@@ -870,8 +797,6 @@ func (h *Host) sameCheckReplacementGroup(a, b scm.Check) bool {
 		aRunID != "" && bRunID != "" && aRunID != bRunID
 }
 
-// checkStartedAfter reports whether a is newer and whether the available
-// provider metadata establishes an order between the checks.
 func (h *Host) checkStartedAfter(a, b scm.Check) (bool, bool) {
 	if !a.StartedAt.IsZero() && !b.StartedAt.IsZero() && !a.StartedAt.Equal(b.StartedAt) {
 		return a.StartedAt.After(b.StartedAt), true
@@ -1042,14 +967,6 @@ func (h *Host) getWorkflowRunChecks(ctx context.Context, headSHA string) ([]scm.
 	return checks, nil
 }
 
-// RerunCheck re-runs the Actions work behind check for the same commit, so a
-// check the provider cancelled rather than failed can be retried without a new
-// push. The job is identified from the check's details link, which is the only
-// run/job identity `gh pr checks` reports: a link naming a job re-runs just that
-// job (and its dependencies), and a cancelled check naming only a run re-runs
-// the whole run. Anything else - a third-party status pointing at an external
-// dashboard, or a run path this backend cannot read - names no re-runnable work,
-// and the error says so rather than falling back to a wider rerun.
 func (h *Host) RerunCheck(ctx context.Context, _ *scm.PR, check scm.Check) error {
 	rerunArgs, ok := h.rerunTargetArgs(check)
 	if !ok {
@@ -1064,9 +981,6 @@ func (h *Host) RerunCheck(ctx context.Context, _ *scm.PR, check scm.Check) error
 	return nil
 }
 
-// rerunTargetArgs turns a check into the `gh run rerun` arguments that re-run
-// exactly that work, or reports that the link names nothing this backend can
-// re-run.
 func (h *Host) rerunTargetArgs(check scm.Check) ([]string, bool) {
 	runID, jobID, ok := h.actionsRerunTarget(check.Link)
 	switch {
@@ -1116,19 +1030,6 @@ func (h *Host) actionsRunSegments(link string) ([]string, bool) {
 	return segments, true
 }
 
-// actionsRerunTarget resolves the Actions run, and where possible the exact job,
-// that a check's details URL names. It parses the URL and reads only its path:
-// a real details URL routinely carries a query (?check_suite_focus=true) or a
-// step fragment (#step:4:12), and neither belongs to the job identity.
-//
-// Only ".../actions/runs/<run-id>/job/<id>" yields a job id, because that `id`
-// is the job's databaseId, which is what `gh run rerun --job` requires. Two
-// shapes are deliberately rejected rather than downgraded to the whole run:
-// the browser's ".../runs/<run-id>/jobs/<n>" form, whose number is a per-run
-// display index the API answers with 404, and any other unrecognized path under
-// a run. Re-running a run can restart more than one job, so widening one
-// check's rerun on an unparsable link is a blast radius this policy must not
-// take.
 func (h *Host) actionsRerunTarget(link string) (runID, jobID string, ok bool) {
 	segments, ok := h.actionsRunSegments(link)
 	if !ok {
@@ -1145,15 +1046,6 @@ func (h *Host) actionsRerunTarget(link string) (runID, jobID string, ok bool) {
 	}
 }
 
-// PreRunFailures reports which of the given failed checks GitHub Actions failed
-// during the job's setup phase - before any repository step ran. Actions
-// resolves and downloads every action a job uses inside "Set up job", so an
-// action-download outage ("Failed to resolve action download info", HTTP 503)
-// fails that step and the job never executes a repository step. It reads the
-// job's own step-level conclusions, never log text, and fails closed: a check
-// whose job it cannot resolve or read is simply not flagged, so it stays a
-// genuine failure. The result is positional (parallel to checks), so a
-// same-named genuine failure never inherits another check's infrastructure flag.
 func (h *Host) PreRunFailures(ctx context.Context, checks []scm.Check) ([]bool, error) {
 	result := make([]bool, len(checks))
 	// Cache each run's jobs so several checks from one run cost one API call.
@@ -1176,16 +1068,6 @@ func (h *Host) PreRunFailures(ctx context.Context, checks []scm.Check) ([]bool, 
 	return result, nil
 }
 
-// runJobs reads a run's jobs (with their steps) from Actions, reporting both
-// why a read failed and whether the response carried a job list at all. A
-// caller that must tell "this run executed no jobs" from "this run's job data
-// is not there" reads this one: an error, an absent list, and a present empty
-// list are three different answers that all look like an empty slice.
-//
-// present is true only for a job array the response actually carried. A
-// missing "jobs" key and an explicit null both decode to a nil pointer and
-// report false, so absent job data is never mistaken for a run that ran
-// nothing.
 func (h *Host) runJobs(ctx context.Context, runID string) (jobs []githubRunJob, present bool, err error) {
 	viewArgs := append([]string{"run", "view", runID}, h.repoArgs()...)
 	viewArgs = append(viewArgs, "--json", "jobs")
@@ -1203,9 +1085,6 @@ func (h *Host) runJobs(ctx context.Context, runID string) (jobs []githubRunJob, 
 	return *payload.Jobs, true, nil
 }
 
-// fetchRunJobs reads a run's jobs (with their steps) from Actions. A run it
-// cannot read yields no jobs, so every check on it fails closed to a genuine
-// failure rather than being guessed as infrastructure.
 func (h *Host) fetchRunJobs(ctx context.Context, runID string) []githubRunJob {
 	jobs, _, err := h.runJobs(ctx, runID)
 	if err != nil {
@@ -1214,9 +1093,6 @@ func (h *Host) fetchRunJobs(ctx context.Context, runID string) []githubRunJob {
 	return jobs
 }
 
-// matchRunJob finds the job a check names: by databaseId when the check's link
-// carried one, otherwise by job name. A re-run can renumber jobs, so the name
-// fallback keeps a check matchable when its link named only the run.
 func matchRunJob(jobs []githubRunJob, jobID, checkName string) (githubRunJob, bool) {
 	if jobID != "" {
 		for _, job := range jobs {
@@ -1233,10 +1109,6 @@ func matchRunJob(jobs []githubRunJob, jobID, checkName string) (githubRunJob, bo
 	return githubRunJob{}, false
 }
 
-// jobFailedAtSetup reports whether a failed job failed in its setup step, before
-// any repository step ran. It requires the job itself to be failed and its setup
-// step ("Set up job", always step 1) to carry a failure conclusion; a job whose
-// setup succeeded and failed a later step is a real failure and is never matched.
 func jobFailedAtSetup(job githubRunJob) bool {
 	if !isFailedJob(job) {
 		return false
@@ -1276,11 +1148,6 @@ func (h *Host) GetMergeableState(ctx context.Context, pr *scm.PR) (scm.Mergeable
 	return parseMergeableState(string(out)), nil
 }
 
-// parseMergeableState reads "<mergeable> <mergeStateStatus>". mergeable alone
-// is MERGEABLE for a conflict-free PR that is behind its base, so a merge the
-// base's "require branches to be up to date" rule refuses looked mergeable.
-// GitHub reports mergeStateStatus BEHIND only under that rule; without it a
-// behind PR reads CLEAN, so BEHIND alone is the signal.
 func parseMergeableState(out string) scm.MergeableState {
 	fields := strings.Fields(out)
 	if len(fields) == 0 {
@@ -1411,10 +1278,6 @@ type githubRunView struct {
 	Jobs []githubRunJob `json:"jobs"`
 }
 
-// githubRunJobsView decodes the same response as githubRunView, but keeps
-// whether the "jobs" key was there. The pointer is nil for both a missing key
-// and an explicit null, and non-nil for a present array including an empty
-// one, which is the distinction runJobs reports as present.
 type githubRunJobsView struct {
 	Jobs *[]githubRunJob `json:"jobs"`
 }
@@ -1562,7 +1425,6 @@ func normalizeCheckBucket(bucket, state string) scm.CheckBucket {
 	}
 }
 
-// GetReviewComments implements scm.ReviewCommentsHost.
 func (h *Host) GetReviewComments(ctx context.Context, pr *scm.PR) ([]scm.ReviewComment, error) {
 	return h.getReviewComments(ctx, pr, 0)
 }

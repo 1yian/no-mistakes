@@ -18,9 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv/memscopetest"
 )
 
-// TestTestStep_OutOfMemoryKeepsTheCommandOutputInTheStepLog runs under a
-// memory-limited scope with OOMPolicy=continue so the configured test command
-// is OOM-killed after printing a marker.
 func TestTestStep_OutOfMemoryKeepsTheCommandOutputInTheStepLog(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("NM_STEPS_OOM_INNER") == "1" {

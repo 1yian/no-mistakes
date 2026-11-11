@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// recordingAgent captures the RunOpts it was invoked with.
 type recordingAgent struct {
 	name      string
 	gotOpts   RunOpts
@@ -92,12 +91,6 @@ func TestWithSteering_ForwardsSessionCapability(t *testing.T) {
 	}
 }
 
-// TestSteeringNamesTheConfiguredEvidenceRoot pins the preamble to the evidence
-// root its caller supplied. The preamble used to rebuild that path itself from
-// os.TempDir(), independently of the test step that actually creates the
-// directory - two copies of one fact, either of which could move without the
-// other. Asserting that two different roots produce two different preambles is
-// what makes that drift impossible to reintroduce silently.
 func TestSteeringNamesTheConfiguredEvidenceRoot(t *testing.T) {
 	first := filepath.Join(t.TempDir(), "evidence")
 	second := filepath.Join(t.TempDir(), "elsewhere")
@@ -119,9 +112,6 @@ func TestSteeringNamesTheConfiguredEvidenceRoot(t *testing.T) {
 	}
 }
 
-// TestSteeringPromptsAgentsWithTheSameRootTheRunWritesTo is the drift check
-// between the two consumers of the evidence path: an agent steered for a run
-// must be told about the very directory that run's steps hand it.
 func TestSteeringPromptsAgentsWithTheSameRootTheRunWritesTo(t *testing.T) {
 	evidenceRoot := filepath.Join(t.TempDir(), "evidence")
 	runDir := filepath.Join(evidenceRoot, "run-123")
@@ -161,15 +151,6 @@ func TestWorktreeSteering_DescribesSoftBoundary(t *testing.T) {
 	}
 }
 
-// TestWorktreeSteering_BoundsHostFilesystemSearch pins the host-search boundary
-// added after a Test run spent its whole 30-minute budget on an agent-authored
-// `find / -maxdepth 4` that blocked in a macOS automount at 0% CPU, so no
-// scenario ever ran. The preamble that allows out-of-worktree reads must name
-// whole-root searches as disallowed (including the exact `find /` shape and the
-// `mdfind /` spotlight variant), keep bounded worktree/evidence/repo-local reads
-// allowed, and spell out a missing-tool fallback that stays role-neutral: only
-// the Test step has scenarios and an "untested" state, so the shared preamble
-// asks the role to report the missing tool in its own normal result.
 func TestWorktreeSteering_BoundsHostFilesystemSearch(t *testing.T) {
 	preamble := WorktreeSteering(filepath.Join(t.TempDir(), "evidence"))
 	normalized := strings.Join(strings.Fields(preamble), " ")
@@ -203,13 +184,6 @@ func TestWorktreeSteering_BoundsHostFilesystemSearch(t *testing.T) {
 	}
 }
 
-// TestWithSteering_EveryAgentOnlyAddsNewCommits pins the append-only commit rule
-// (issue #642): a fix agent that amended or squashed a commit left HEAD off the
-// pipeline's recorded head, so the next step's continuity check refused the run
-// with no way back. Every pipeline agent is wrapped by WithSteering, so the rule
-// must reach the prompt the agent actually receives, including the case that
-// stranded a real run (a finding asking to change a commit message) and the one
-// exception a step's own prompt grants (running or continuing a rebase or merge).
 func TestWithSteering_EveryAgentOnlyAddsNewCommits(t *testing.T) {
 	inner := &recordingAgent{name: "claude"}
 	steered := WithSteering(inner, filepath.Join(t.TempDir(), "evidence"))

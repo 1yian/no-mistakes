@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// writeWorktreeRootsConfig writes a global config whose worktree_roots entries
-// are absolute paths on this platform, and quotes them so a Windows drive
-// letter is not read as a YAML mapping.
 func writeWorktreeRootsConfig(t *testing.T, entries map[string]string) string {
 	t.Helper()
 	var b strings.Builder
@@ -24,9 +21,6 @@ func writeWorktreeRootsConfig(t *testing.T, entries map[string]string) string {
 	return path
 }
 
-// yamlPath quotes a path for YAML: a Windows path must not be read as a
-// mapping on its drive-letter colon, and its separators must survive as
-// literal backslashes.
 func yamlPath(path string) string {
 	return `"` + strings.ReplaceAll(path, `\`, `\\`) + `"`
 }
@@ -60,8 +54,6 @@ func TestLoadGlobal_WorktreeRootsDefaultEmpty(t *testing.T) {
 	}
 }
 
-// A relative path would resolve against whatever working directory the daemon
-// happens to have, so neither side of an entry may be one.
 func TestLoadGlobal_WorktreeRootsRejectsRelativePaths(t *testing.T) {
 	dir := t.TempDir()
 	cases := map[string]map[string]string{
@@ -100,9 +92,6 @@ func TestLoadGlobal_WorktreeRootsRejectsEmptyValues(t *testing.T) {
 	}
 }
 
-// Two checkouts sharing one root is the destructive case: cleanup and eject
-// identify a run worktree by its position in a root, so each repository would
-// treat the other's runs as its own.
 func TestLoadGlobal_WorktreeRootsRejectsSharedRoot(t *testing.T) {
 	dir := t.TempDir()
 	shared := filepath.Join(dir, "runs")
@@ -118,8 +107,6 @@ func TestLoadGlobal_WorktreeRootsRejectsSharedRoot(t *testing.T) {
 	}
 }
 
-// Two spellings of one checkout would pick an arbitrary winner, so they are
-// rejected instead of silently resolved.
 func TestLoadGlobal_WorktreeRootsRejectsDuplicateCheckout(t *testing.T) {
 	dir := t.TempDir()
 	checkout := filepath.Join(dir, "src", "repo-a")
@@ -150,8 +137,6 @@ func TestLoadGlobal_WorktreeRootsRejectsRootInsideItsCheckout(t *testing.T) {
 	}
 }
 
-// The global config stays strict about unknown keys, so a misspelled setting
-// is reported instead of silently ignored.
 func TestLoadGlobal_RejectsMisspelledWorktreeRootsKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -169,11 +154,6 @@ func TestLoadGlobal_RejectsMisspelledWorktreeRootsKey(t *testing.T) {
 	}
 }
 
-// InspectGlobalConfigMapping answers questions the parsed configuration cannot:
-// whether the document already carries a top-level key, and whether an entry can
-// be added under it. Both empty forms of a key parse to nothing, so a caller that
-// must not write a second one - YAML rejects a duplicate top-level key, and the
-// daemon then refuses to start - has to ask the document.
 func TestInspectGlobalConfigMappingPresence(t *testing.T) {
 	present := map[string]string{
 		"an entry":                    "worktree_roots:\n  " + yamlPath(filepath.Join(string(filepath.Separator), "src", "repo")) + ": " + yamlPath(filepath.Join(string(filepath.Separator), "work", "runs")) + "\n",
@@ -214,8 +194,6 @@ func TestInspectGlobalConfigMappingPresence(t *testing.T) {
 	}
 }
 
-// The empty forms are exactly the ones the parsed value cannot distinguish from
-// an absent key, which is why InspectGlobalConfigMapping reads the document.
 func TestEmptyWorktreeRootsFormsParseToNoEntries(t *testing.T) {
 	for name, contents := range map[string]string{
 		"a key with no value":       "worktree_roots:\n",
@@ -231,12 +209,6 @@ func TestEmptyWorktreeRootsFormsParseToNoEntries(t *testing.T) {
 	}
 }
 
-// TestInspectGlobalConfigMappingReportsWhatCanBeAppended pins the shape half of
-// the inspection against the YAML a caller has to produce. AppendableBlock says
-// the value is a block mapping one more entry line can go into; after a flow
-// mapping it cannot, and the document then stops loading at all - a daemon that
-// refuses to start. Every appendable claim is checked with the loader, because a
-// wrong one is exactly that failure.
 func TestInspectGlobalConfigMappingReportsWhatCanBeAppended(t *testing.T) {
 	// worktree_roots refuses a path that is not absolute, and absolute is what
 	// the platform says it is: a leading-separator path carries no volume, so

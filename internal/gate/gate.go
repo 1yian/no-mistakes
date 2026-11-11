@@ -25,35 +25,17 @@ var ensureGateHooksPathIsolation = git.EnsureHooksPathIsolation
 
 var sweepRunWorktrees = procreap.SweepRunWorktrees
 
-// RemoteName is the name of the git remote that points to the local gate.
 const RemoteName = "no-mistakes"
 
-// repoID generates a deterministic 12-char hex ID from an absolute path.
 func repoID(absPath string) string {
 	h := sha256.Sum256([]byte(absPath))
 	return fmt.Sprintf("%x", h[:6])
 }
 
-// Init sets up a no-mistakes gate for the git repo at workDir.
-// It creates a bare repo, installs the post-receive hook, best-effort
-// isolates the bare repo's hooks path from shared local config writes when
-// Git supports config --worktree, adds the no-mistakes remote, and records
-// the repo in the database.
-//
-// Init is idempotent: re-running it on an already-initialized repo repairs and
-// refreshes the gate (for example installing a newer hook, picking up hook-path
-// isolation, or restoring a missing remote) instead of failing. This includes
-// a working directory that was renamed or moved since the gate was created:
-// the gate identified by the leftover no-mistakes remote is reattached at the
-// new path, preserving its run history. The returned bool reports whether a
-// new gate was created (true) or an existing one was refreshed (false).
 func Init(ctx context.Context, d *db.DB, p *paths.Paths, workDir string) (*db.Repo, bool, error) {
 	return InitWithFork(ctx, d, p, workDir, "")
 }
 
-// InitWithFork is Init plus an optional GitHub fork push URL. The origin remote
-// remains the parent repository used for PRs. When forkURL is empty, an
-// existing fork setting is preserved across idempotent refreshes.
 func InitWithFork(ctx context.Context, d *db.DB, p *paths.Paths, workDir, forkURL string) (*db.Repo, bool, error) {
 	if classified, err := (gatecontext.Inspector{DB: d, Paths: p}).Inspect(ctx, gatecontext.Request{CWD: workDir, MarkerPresent: gatecontext.MarkerPresent()}); err != nil {
 		return nil, false, err
@@ -187,10 +169,6 @@ func validateForkRouting(ctx context.Context, upstreamURL, forkURL string) error
 	return fmt.Errorf("fork URL routing is currently supported only for GitHub parent and fork remotes (parent provider: %s, fork provider: %s)", parentProvider, forkProvider)
 }
 
-// provisionGate creates or repairs the on-disk gate for a repo: the bare repo,
-// its push/hook configuration, hook-path isolation, and the git remotes wiring
-// the working repo to the gate and the gate to its upstream. Every step is
-// idempotent so this doubles as the repair path for re-running init.
 func provisionGate(ctx context.Context, bareDir, absRoot, upstreamURL, reposDir string) error {
 	// Create the bare repo. git init --bare is a no-op on an existing one.
 	if err := git.InitBare(ctx, bareDir); err != nil {
@@ -230,13 +208,6 @@ func provisionGate(ctx context.Context, bareDir, absRoot, upstreamURL, reposDir 
 	return nil
 }
 
-// ensureWorkingRemote points the working repo's no-mistakes remote at bareDir,
-// on a fresh init and on a refresh alike. It decides from the literal
-// configured URL, before any url.<base>.insteadOf rewrite, because that is
-// what it would overwrite: the remote lives in .git/config, which every linked
-// worktree of the checkout shares, including one gated by another no-mistakes
-// home (another NM_HOME, typically another OS account). A literal URL outside
-// this home's repos dir is never rewritten (issue #1555).
 func ensureWorkingRemote(ctx context.Context, absRoot, bareDir, reposDir string) error {
 	literalURLs, err := git.GetConfiguredRemoteURLs(ctx, absRoot, RemoteName)
 	if err != nil {
@@ -277,15 +248,10 @@ func ensureWorkingRemote(ctx context.Context, absRoot, bareDir, reposDir string)
 		refusal, bareDir, shellQuote("url."+bareDir+".insteadOf"), shellQuote(literalURL))
 }
 
-// shellQuote quotes s as one POSIX shell word, so a path holding $, quotes, or
-// spaces survives copying the printed command into a shell.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// remoteResolvesTo reports whether every URL git resolves for the working
-// repo's no-mistakes remote, for fetch and for push and after any insteadOf or
-// pushInsteadOf rewrite, is bareDir.
 func remoteResolvesTo(ctx context.Context, absRoot, bareDir string) bool {
 	for _, args := range [][]string{
 		{"remote", "get-url", "--all", RemoteName},
@@ -304,10 +270,6 @@ func remoteResolvesTo(ctx context.Context, absRoot, bareDir string) bool {
 	return true
 }
 
-// removeOwnWorkingRemote removes the working repo's no-mistakes remote only
-// when its literal URL points into this home's repos dir. Under a shared .git
-// the remote can be another home's gate that this home merely reaches through
-// url.insteadOf, and that wiring is not ours to remove.
 func removeOwnWorkingRemote(ctx context.Context, absRoot, reposDir string) {
 	urls, err := git.GetConfiguredRemoteURLs(ctx, absRoot, RemoteName)
 	if err == nil && len(urls) == 1 && filepath.Dir(urls[0]) == reposDir {
@@ -315,24 +277,12 @@ func removeOwnWorkingRemote(ctx context.Context, absRoot, reposDir string) {
 	}
 }
 
-// isSameRepoGateOfAnotherHome reports whether url has the shape of this
-// repository's gate under some other no-mistakes home: <NM_HOME>/repos/<id>.git
-// with the same id as bareDir. A fresh init derives the id from the main
-// checkout's path, so homes sharing one .git usually name the same id; one
-// that kept an older id gets the plain refusal without this guidance.
 func isSameRepoGateOfAnotherHome(url, bareDir string) bool {
 	return filepath.IsAbs(url) &&
 		filepath.Base(url) == filepath.Base(bareDir) &&
 		filepath.Base(filepath.Dir(url)) == filepath.Base(filepath.Dir(bareDir))
 }
 
-// reattachRelocatedRepo detects a working directory that was renamed or moved
-// after init: it carries a no-mistakes remote pointing at a gate in our repos
-// dir, but its repo record references the old path. When the old path no
-// longer exists, the record is migrated to the new path so the existing gate
-// and its run history are reattached. It returns nil when the repo should be
-// treated as a fresh init instead: no gate remote, an orphan gate with no
-// record, or a copy whose original still exists on disk.
 func reattachRelocatedRepo(ctx context.Context, d *db.DB, p *paths.Paths, absRoot string) (*db.Repo, error) {
 	remoteURL, err := git.GetRemoteURL(ctx, absRoot, RemoteName)
 	if err != nil {
@@ -363,9 +313,6 @@ func reattachRelocatedRepo(ctx context.Context, d *db.DB, p *paths.Paths, absRoo
 	return migrated, nil
 }
 
-// Eject removes the no-mistakes gate from the repo at workDir.
-// It removes the remote, deletes the bare repo and worktrees,
-// and deletes the repo record from the database.
 func Eject(ctx context.Context, d *db.DB, p *paths.Paths, workDir string) (*db.Repo, error) {
 	if classified, err := (gatecontext.Inspector{DB: d, Paths: p}).Inspect(ctx, gatecontext.Request{CWD: workDir, MarkerPresent: gatecontext.MarkerPresent()}); err != nil {
 		return nil, err
@@ -411,34 +358,6 @@ func Eject(ctx context.Context, d *db.DB, p *paths.Paths, workDir string) (*db.R
 	return repo, nil
 }
 
-// removeRepoWorktrees deletes the ejected repository's run worktrees.
-//
-// Under the default placement no-mistakes owns <NM_HOME>/worktrees/<repoID>
-// outright, so the whole directory goes. Everything a run recorded outside it
-// is removed one directory at a time (see worktree_roots and
-// internal/worktrees): such a directory sits in a directory of the operator's
-// own - it holds the toolchain configuration the runs were placed there to
-// inherit - so eject removes exactly what this repository's own run rows
-// recorded, and touches nothing else: not the root, not the operator's files,
-// and not a neighbouring directory that merely looks like a run. Reading the
-// recorded placement rather than deriving it is also what reaches a run left in
-// a root the operator has since reconfigured away.
-//
-// Every one of those directories is swept before any of them is removed - both
-// halves, in the one process snapshot that costs (see
-// procreap.SweepRunWorktrees). Which half a run landed in says nothing about
-// whether it leaked a process that escaped its group, and a default-placement
-// directory removed without a sweep leaves that process burning CPU on a deleted
-// cwd until some later daemon startup happens to sweep the tree by shape - which
-// is the cost this sweep exists to eliminate, not to defer.
-//
-// The sweep also has to precede the deletion of the repository record: the
-// cascade takes the run rows with it, and outside the default tree those rows are
-// the only thing that can name the directory. Sweeping afterwards would be
-// sweeping a directory nothing knows about.
-//
-// Failures are logged rather than fatal: an eject that cannot delete a leftover
-// worktree must still finish removing the gate.
 func removeRepoWorktrees(d *db.DB, p *paths.Paths, repo *db.Repo) {
 	defaultDir := filepath.Join(p.WorktreesDir(), repo.ID)
 
@@ -471,17 +390,6 @@ func removeRepoWorktrees(d *db.DB, p *paths.Paths, repo *db.Repo) {
 	}
 }
 
-// reachableRunWorktree reports whether a recorded placement can still have
-// anything standing in it, which is the same bound daemon startup applies to the
-// same set (see leftoverRecordedRunWorktrees and db.ActiveRunWorktreesOutside):
-// a directory that is still on disk, or the worktree of a run that never
-// reached a terminal state and may therefore have lost its directory while a
-// process it leaked kept holding it.
-//
-// A terminal run whose directory is already gone is not in reach: its removal
-// swept it, and eject would otherwise pay a full sweep for every run this
-// repository has ever had - run rows are never pruned, so that set grows without
-// bound while the work it does is empty.
 func reachableRunWorktree(dir string, status types.RunStatus) bool {
 	if info, err := os.Stat(dir); err == nil && info.IsDir() {
 		return true

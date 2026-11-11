@@ -19,8 +19,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// startTestDaemonWithMaxConcurrentRuns starts a daemon whose global config
-// caps concurrent runs, mirroring startTestDaemonWithSteps.
 func startTestDaemonWithMaxConcurrentRuns(t *testing.T, maxConcurrent int, sf StepFactory) (*paths.Paths, *db.DB) {
 	t.Helper()
 
@@ -70,9 +68,6 @@ func submitBranchRun(t *testing.T, p *paths.Paths, gateDir, branch, headSHA stri
 	return result.RunID
 }
 
-// waitForRunTerminalStatus waits for any terminal status (completed, failed,
-// or cancelled): unlike waitForRunTerminalState, it also settles cancelled
-// runs, which is how queue tests end their runs.
 func waitForRunTerminalStatus(t *testing.T, d *db.DB, runID string) *db.Run {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -116,7 +111,6 @@ func runStatus(t *testing.T, d *db.DB, runID string) types.RunStatus {
 	return run.Status
 }
 
-// Queued runs start in submission order as slots free.
 func TestMaxConcurrentRuns_QueuedRunsStartFIFO(t *testing.T) {
 	started := make(chan string, 8)
 	p, d := startTestDaemonWithMaxConcurrentRuns(t, 1, func() []pipeline.Step {
@@ -164,8 +158,6 @@ func TestMaxConcurrentRuns_QueuedRunsStartFIFO(t *testing.T) {
 	}
 }
 
-// Cancelling a queued run removes it cleanly: it never starts, and the queue
-// drains around it.
 func TestMaxConcurrentRuns_CancelQueuedRunNeverStarts(t *testing.T) {
 	started := make(chan string, 4)
 	p, d := startTestDaemonWithMaxConcurrentRuns(t, 1, func() []pipeline.Step {
@@ -198,7 +190,6 @@ func TestMaxConcurrentRuns_CancelQueuedRunNeverStarts(t *testing.T) {
 	}
 }
 
-// An explicit zero keeps today's unlimited behavior.
 func TestMaxConcurrentRuns_ZeroMeansUnlimited(t *testing.T) {
 	started := make(chan string, 2)
 	p, d := startTestDaemonWithMaxConcurrentRuns(t, 0, func() []pipeline.Step {
@@ -221,8 +212,6 @@ func TestMaxConcurrentRuns_ZeroMeansUnlimited(t *testing.T) {
 	waitForRunTerminalStatus(t, d, secondID)
 }
 
-// A second submitted run waits in pending while the cap is held, then starts
-// once the first run finishes.
 func TestMaxConcurrentRuns_SecondRunWaitsForSlot(t *testing.T) {
 	started := make(chan string, 4)
 	p, d := startTestDaemonWithMaxConcurrentRuns(t, 1, func() []pipeline.Step {
@@ -429,8 +418,6 @@ func TestMaxConcurrentRuns_ConfigErrorRetainsCap(t *testing.T) {
 	}
 }
 
-// The cap reload contract distinguishes an initially absent config from losing
-// a configured cap, while still allowing successful edits to change the cap.
 func TestMaxConcurrentRuns_CapReloadsWithoutRestart(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	m := NewRunManager(nil, p, nil)
@@ -466,9 +453,6 @@ func TestMaxConcurrentRuns_CapReloadsWithoutRestart(t *testing.T) {
 	}
 }
 
-// The subscription contract requires every persisted cancellation to publish
-// its terminal state before closing. An abrupt close or stale revision would
-// leave a subscriber displaying the queued run until it reconnects.
 func TestMaxConcurrentRuns_QueuedCancellationPublishesTerminalEvent(t *testing.T) {
 	for _, action := range []string{"cancel", "supersede", "shutdown"} {
 		t.Run(action, func(t *testing.T) {

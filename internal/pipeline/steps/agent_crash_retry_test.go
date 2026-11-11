@@ -39,7 +39,6 @@ func TestTestStep_AgentCrashRetryExitThenSuccess(t *testing.T) {
 	}
 }
 
-// Exercise the real parser and executor together, not only a marked mock error.
 func TestDocumentStep_AgentCrashRetryMalformedOutput(t *testing.T) {
 	t.Parallel()
 	dir, base, head := setupGitRepo(t)

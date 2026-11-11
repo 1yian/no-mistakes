@@ -149,14 +149,6 @@ func TestDocumentStep_AgentManaged_UnresolvedFindingsNeedApprovalWithoutAutoFixL
 	}
 }
 
-// TestDocumentStep_PromptAppliesPlacementPolicy pins the placement-policy
-// prompt contract from the 121-PR audit: each fact has one authoritative
-// owner, stale duplicates are removed or reduced to pointers (not
-// synchronized), AGENTS.md and CLAUDE.md never receive incident narratives
-// (invariant + regression-test pointer instead) and are edited only to
-// correct factually wrong content - never to fill gaps, no new surfaces for
-// perceived gaps, and the scope stays on documentation this change made
-// stale. The old exhaustive-corpus-synchronization incentives must be gone.
 func TestDocumentStep_PromptAppliesPlacementPolicy(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -218,8 +210,6 @@ func TestDocumentStep_PromptAppliesPlacementPolicy(t *testing.T) {
 	}
 }
 
-// Runtime prompts and deliberate removals remain outside documentation
-// cleanup in both the standalone and combined document+lint passes.
 func TestDocumentStep_PromptPreservesRuntimePromptsAndDeliberateRemovals(t *testing.T) {
 	t.Parallel()
 	for _, lintCommand := range []string{"", "exit 0"} {
@@ -259,11 +249,6 @@ func TestDocumentStep_PromptPreservesRuntimePromptsAndDeliberateRemovals(t *test
 	}
 }
 
-// TestDocumentStep_TrustedPolicyInstructionsAugmentPrompt proves a
-// repository's own ownership map (config document.instructions, loaded only
-// from the trusted default branch) reaches the prompt as an augmentation of
-// the built-in defaults, and that no-policy repositories keep the built-in
-// policy alone.
 func TestDocumentStep_TrustedPolicyInstructionsAugmentPrompt(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -386,10 +371,6 @@ func TestDocumentStep_NoChanges_SkipsAgent(t *testing.T) {
 	}
 }
 
-// TestDocumentStep_NoOpPassWithEmptySummarySucceeds pins the legitimate
-// no-op pass: an agent that found nothing stale and edited nothing may
-// return an empty findings array with an empty summary, and the step must
-// succeed instead of refusing the pass with "missing summary".
 func TestDocumentStep_NoOpPassWithEmptySummarySucceeds(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -424,9 +405,6 @@ func TestDocumentStep_NoOpPassWithEmptySummarySucceeds(t *testing.T) {
 	}
 }
 
-// TestDocumentStep_FindingsWithEmptySummaryStillFails keeps the summary
-// requirement whenever the agent reports unresolved findings, even though a
-// no-op pass may now omit one.
 func TestDocumentStep_FindingsWithEmptySummaryStillFails(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -445,9 +423,6 @@ func TestDocumentStep_FindingsWithEmptySummaryStillFails(t *testing.T) {
 	}
 }
 
-// TestDocumentStep_FindingsWithMissingSummaryKeyStillFails pins the output
-// shape itself: the summary field must be present even when empty is allowed,
-// so an omitted field stays a validation failure.
 func TestDocumentStep_FindingsWithMissingSummaryKeyStillFails(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -466,10 +441,6 @@ func TestDocumentStep_FindingsWithMissingSummaryKeyStillFails(t *testing.T) {
 	}
 }
 
-// TestDocumentStep_ChangesWithEmptySummaryStillFails keeps the summary
-// requirement when the pass actually edited files: an agent that changed
-// documentation without naming what it did is not a no-op, even with no
-// unresolved findings.
 func TestDocumentStep_ChangesWithEmptySummaryStillFails(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -494,11 +465,6 @@ func TestDocumentStep_ChangesWithEmptySummaryStillFails(t *testing.T) {
 	}
 }
 
-// TestDocumentStep_AgentSelfCommittedChangesWithEmptySummaryStillFails
-// covers the review-bot finding: an agent that commits its own edits leaves a
-// clean worktree, so the pipeline commits nothing and committed would be
-// false even though the head advanced. Head movement counts as changes, so
-// the pass must not read as a no-op.
 func TestDocumentStep_AgentSelfCommittedChangesWithEmptySummaryStillFails(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

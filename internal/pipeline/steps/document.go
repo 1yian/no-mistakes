@@ -11,20 +11,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// DocumentStep keeps documentation accurate for the change under its
-// placement policy, and - when no deterministic lint command is configured -
-// also performs the agent-driven lint duty in the same invocation so the
-// pipeline pays one cold agent pass for housekeeping instead of two.
 type DocumentStep struct{}
 
 func (s *DocumentStep) Name() types.StepName { return types.StepDocument }
 
-// documentPlacementPolicy is the fail-safe default placement policy. It
-// replaces the old exhaustive-synchronization incentive: the agent is
-// rewarded for updating each fact's single owner and for consolidation,
-// deletion, and pointers - not for synchronizing every prose copy. A trusted
-// repository-specific policy (config document.instructions) may narrow or
-// clarify these rules but never weaken them.
 const documentPlacementPolicy = `Documentation placement policy (fail-safe defaults; repository-specific instructions may narrow or clarify them, never weaken them):
 - Every fact or contract has exactly one authoritative owner document. Update the owner; never synchronize prose copies of the same fact.
 - When this change leaves an existing duplicate stale, remove the duplicate or reduce it to a short pointer to the owner instead of updating another full copy.
@@ -37,8 +27,6 @@ const documentPlacementPolicy = `Documentation placement policy (fail-safe defau
 - Deep reference docs own detailed conditional material; link to them instead of copying them into always-loaded guidance.
 - Generated or schema-backed facts must be generated from their authoritative source and checked for drift, never hand-copied.`
 
-// documentScopeDiscipline bounds the pass to documentation this change made
-// stale, replacing the old "be exhaustive across the corpus" instruction.
 const documentScopeDiscipline = `Scope discipline:
 - Only touch documentation this change made stale, plus direct contradictions that analysis reveals.
 - Prompt files or prompt text loaded by the product at runtime are executable behavior, even when written in Markdown or prose. Do not reword runtime-loaded prompts as documentation cleanup.
@@ -49,8 +37,6 @@ const documentScopeDiscipline = `Scope discipline:
 - Preserve load-bearing user guidance, security rationale, compatibility constraints, and onboarding material. A long document is not a defect by itself; duplication and wrong placement are.
 - Prefer consolidation, deletion, and pointers to the owner over addition and synchronization.`
 
-// housekeepingLintSection adds the agent-driven lint duty to the combined
-// document+lint pass.
 const housekeepingLintSection = `
 
 Combined lint duty (same pass - no separate lint agent will run):
@@ -62,8 +48,6 @@ Combined lint duty (same pass - no separate lint agent will run):
 
 Set "category" on every finding: "documentation" for documentation findings, "lint" for lint findings.`
 
-// housekeepingFindingsSchema extends findingsSchema with the per-finding
-// category that routes combined-pass findings to their owning gates.
 var housekeepingFindingsSchema = json.RawMessage(`{
 	"type": "object",
 	"properties": {
@@ -168,10 +152,6 @@ func (s *DocumentStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcom
 	}
 	changesApplied := committed || sctx.Run.HeadSHA != headBefore
 
-	// Without trustworthy structured output we cannot confirm the agent
-	// resolved every gap. Fail the step rather than creating an approval gate:
-	// unattended AXI modes can resolve a gate, but must never certify opaque
-	// analyzer output.
 	var findings Findings
 	if result.Output == nil {
 		return nil, agent.RejectStructuredOutput(fmt.Errorf("document analyzer returned no structured findings"))
@@ -206,13 +186,6 @@ func (s *DocumentStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcom
 	}, nil
 }
 
-// validateDocumentAnalyzerFindings parses the document pass's structured
-// output. A pass that reports no unresolved findings and made no changes -
-// nothing for the pipeline to commit and no head movement from the agent's
-// own commits - is a legitimate no-op, so its (present) summary may be empty.
-// Whenever the agent reports unresolved findings or actually changed files,
-// the summary is still required so the outcome names what remains or what
-// was done; an absent summary field stays a shape violation in every case.
 func validateDocumentAnalyzerFindings(raw []byte, findings *Findings, changesCommitted bool) error {
 	if err := unmarshalRequiredFindings(raw, findings, false); err != nil {
 		return err
@@ -223,9 +196,6 @@ func validateDocumentAnalyzerFindings(raw []byte, findings *Findings, changesCom
 	return nil
 }
 
-// buildPrompt assembles the document (or combined document+lint) prompt: the
-// placement policy, scope discipline, trusted repository-specific policy,
-// the task, and - in combined mode - the lint duty.
 func (s *DocumentStep) buildPrompt(sctx *pipeline.StepContext, baseSHA, ignorePatterns string, combinedLint bool) string {
 	historySection := executionContextPromptSection(sctx.WorkDir) + roundHistoryPromptSection(sctx) + userIntentPromptSection(sctx)
 
@@ -299,10 +269,6 @@ Previous findings to address:
 	return prompt
 }
 
-// trustedDocumentPolicySection renders the repository-specific documentation
-// ownership policy. The value comes from the trusted default-branch copy of
-// .no-mistakes.yaml (config.EffectiveRepoConfig), so a contributor's pushed
-// branch cannot weaken the rules that gate its own review.
 func trustedDocumentPolicySection(sctx *pipeline.StepContext) string {
 	if sctx.Config == nil {
 		return ""
@@ -315,10 +281,6 @@ func trustedDocumentPolicySection(sctx *pipeline.StepContext) string {
 		sanitizePromptMultilineText(instructions)
 }
 
-// repositoryDocumentPolicySection renders the operator's machine-local
-// documentation policy for this repository (a repository_overrides entry). It
-// is labeled as the operator's so it never reads as the repository's own
-// policy, and it only adds to the defaults and the trusted policy.
 func repositoryDocumentPolicySection(sctx *pipeline.StepContext) string {
 	if sctx.Config == nil {
 		return ""
@@ -338,10 +300,6 @@ func lintDutySection(combinedLint bool) string {
 	return housekeepingLintSection
 }
 
-// splitHousekeepingFindings routes combined-pass findings to their owning
-// gates. An uncategorized finding counts as documentation - the stricter
-// gate (any documentation finding parks; lint parks only on error/warning) -
-// so miscategorization fails safe.
 func splitHousekeepingFindings(findings Findings) (doc Findings, lint Findings) {
 	doc = Findings{Summary: findings.Summary}
 	lint = Findings{Summary: findings.Summary}

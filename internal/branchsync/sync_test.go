@@ -901,21 +901,6 @@ func TestForkTargetNeverReadsParentOrigin(t *testing.T) {
 	}
 }
 
-// TestRefreshSlowSuccessfulLsRemoteDoesNotStealFetchBudget reproduces the
-// production symptom (JVPT: axi sync reports offline / "could not refresh
-// the configured push target" even though ls-remote and fetch independently
-// succeed) by proving that a slow-but-successful ls-remote no longer shares
-// its context deadline with the subsequent fetch.
-//
-// RemoteTimeout (300ms) is set shorter than the simulated ls-remote delay
-// (400ms) on purpose: had the old code's single context.WithTimeout call
-// still been shared with the fetch, that context's fixed 300ms deadline
-// would already be unconditionally expired - a guaranteed property of
-// context.WithTimeout's timer, not a timing race - by the time the fetch
-// ran, and exec.CommandContext fails closed immediately on an already-done
-// context. The fix creates the fetch's context fresh, after the ls-remote
-// call returns, so it gets its own full 300ms from that later point
-// regardless of how long ls-remote took.
 func TestRefreshSlowSuccessfulLsRemoteDoesNotStealFetchBudget(t *testing.T) {
 	f := newSyncFixture(t)
 
@@ -948,10 +933,6 @@ func TestRefreshSlowSuccessfulLsRemoteDoesNotStealFetchBudget(t *testing.T) {
 	}
 }
 
-// TestRefreshGenuineRemoteTimeoutStillReportsOffline proves the fix does not
-// widen the safe fail-closed behavior: an operation that genuinely cannot
-// complete within its own fresh budget must still block as offline, and must
-// never fall through to the fetch step.
 func TestRefreshGenuineRemoteTimeoutStillReportsOffline(t *testing.T) {
 	f := newSyncFixture(t)
 
@@ -978,13 +959,6 @@ func TestRefreshGenuineRemoteTimeoutStillReportsOffline(t *testing.T) {
 	}
 }
 
-// TestServiceRemoteTimeoutDefaultsToConfigDefault proves the link between the
-// operator-configurable global default (config.DefaultBranchSyncRemoteTimeout,
-// 60s - the captain-approved replacement for the old hardcoded 15s constant)
-// and what a Service actually uses when a caller does not explicitly set
-// RemoteTimeout, which is the case for every production construction site
-// that fails to load global config and falls back to
-// config.DefaultGlobalConfig().
 func TestServiceRemoteTimeoutDefaultsToConfigDefault(t *testing.T) {
 	var s Service
 	if got := s.remoteTimeout(); got != config.DefaultBranchSyncRemoteTimeout {
@@ -992,16 +966,6 @@ func TestServiceRemoteTimeoutDefaultsToConfigDefault(t *testing.T) {
 	}
 }
 
-// TestRefreshSlowButSuccessfulLsRemoteAloneExceedsItsOwnBudgetReportsOffline
-// reproduces the ACTUAL JVPT production failure mode (see
-// data/no-mistakes-jvpt-refresh-root-cause/report.md): ls-remote itself -
-// never a starved fetch - takes longer than its own fresh per-operation
-// budget, because a real private-repo credential helper (git spawning `gh
-// auth git-credential` as a child process) legitimately takes ~19-22s in
-// that environment. This must stay indistinguishable from a genuine
-// unreachable-remote timeout at the State/Safety/Error level (fail-closed
-// either way, and fetch is never invoked), while remaining triggerable
-// purely by ls-remote's own latency against too small a budget.
 func TestRefreshSlowButSuccessfulLsRemoteAloneExceedsItsOwnBudgetReportsOffline(t *testing.T) {
 	f := newSyncFixture(t)
 
@@ -1029,12 +993,6 @@ func TestRefreshSlowButSuccessfulLsRemoteAloneExceedsItsOwnBudgetReportsOffline(
 	}
 }
 
-// TestRefreshRaisedRemoteTimeoutAcceptsTheSameLegitimateSlowLsRemote is the
-// companion to the test above: the identical legitimate-but-slow ls-remote
-// latency now succeeds once the configured budget is raised past it,
-// proving the fix actually widens the working envelope (what an operator
-// gets by raising branch_sync_remote_timeout) rather than just relabeling
-// the timeout.
 func TestRefreshRaisedRemoteTimeoutAcceptsTheSameLegitimateSlowLsRemote(t *testing.T) {
 	f := newSyncFixture(t)
 
@@ -1056,14 +1014,6 @@ func TestRefreshRaisedRemoteTimeoutAcceptsTheSameLegitimateSlowLsRemote(t *testi
 	}
 }
 
-// TestRefreshParentCancellationStopsFetchAfterLsRemoteSucceeds guards against
-// a plausible refactor mistake when giving each remote op its own deadline:
-// deriving the fetch's per-op context from context.Background() instead of
-// the caller's ctx, which would silently stop honoring cancellation. An
-// upfront-cancelled context would be caught earlier by inspect()'s own local
-// git calls before ever reaching the remote-op code this fix touches, so
-// this cancels the parent exactly between the two calls - right as
-// ls-remote succeeds - to prove the fetch context is still derived from it.
 func TestRefreshParentCancellationStopsFetchAfterLsRemoteSucceeds(t *testing.T) {
 	f := newSyncFixture(t)
 

@@ -15,8 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// evidenceFixture builds a DB plus an evidence root and returns helpers for
-// seeding run directories with a chosen age and status.
 type evidenceFixture struct {
 	t    *testing.T
 	db   *db.DB
@@ -47,8 +45,6 @@ func newEvidenceFixture(t *testing.T) *evidenceFixture {
 	return &evidenceFixture{t: t, db: d, p: p, repo: repo, root: root}
 }
 
-// seed creates a run in the given status plus its evidence directory, aged by
-// backdating the directory's modification time.
 func (f *evidenceFixture) seed(branch string, status types.RunStatus, age time.Duration, files map[string]string) string {
 	f.t.Helper()
 	run, err := f.db.InsertRun(f.repo.ID, branch, "head-"+branch, "base-"+branch)
@@ -82,9 +78,6 @@ func (f *evidenceFixture) exists(runID string) bool {
 	return err == nil
 }
 
-// TestReapEvidenceHonorsRetentionAndSparesActiveRuns is the core reaper
-// contract: no-mistakes bounds its own evidence directory on both axes, and
-// never removes a directory belonging to a run that is still in flight.
 func TestReapEvidenceHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	f := newEvidenceFixture(t)
 	artifact := map[string]string{"screenshot.png": "not really a png"}
@@ -110,11 +103,6 @@ func TestReapEvidenceHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	}
 }
 
-// TestReapEvidenceRemovesEmptyRunDirectoriesRegardlessOfAge targets the
-// dominant source of accumulation. The test step creates the run's directory
-// before the agent decides whether it has anything to write, so a run that
-// produced no artifact would otherwise leave a permanent entry behind - on a
-// real machine this was 94% of everything in the directory.
 func TestReapEvidenceRemovesEmptyRunDirectoriesRegardlessOfAge(t *testing.T) {
 	f := newEvidenceFixture(t)
 
@@ -135,9 +123,6 @@ func TestReapEvidenceRemovesEmptyRunDirectoriesRegardlessOfAge(t *testing.T) {
 	}
 }
 
-// TestReapEvidenceTrimsToTheRunCeilingOldestFirst covers the second bound: a
-// burst of runs that all land inside the retention window still cannot grow the
-// directory without limit.
 func TestReapEvidenceTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	f := newEvidenceFixture(t)
 	artifact := map[string]string{"log.txt": "output"}
@@ -156,9 +141,6 @@ func TestReapEvidenceTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	}
 }
 
-// TestReapEvidenceKeepsEverythingWhenBothBoundsAreDisabled proves the operator
-// escape hatch really disables reaping, with the deliberate exception of empty
-// directories, which carry nothing to lose.
 func TestReapEvidenceKeepsEverythingWhenBothBoundsAreDisabled(t *testing.T) {
 	f := newEvidenceFixture(t)
 	artifact := map[string]string{"log.txt": "output"}
@@ -191,12 +173,6 @@ func TestReapEvidenceLeavesUnownedDirectoriesAlone(t *testing.T) {
 	}
 }
 
-// TestReapLegacyEvidenceDrainsTheSharedTempRootUnderTheSamePolicy covers the
-// upgrade path. Older versions wrote to a fixed directory inside the system
-// temp directory and never reaped it; an upgraded daemon drains that under the
-// same rules - including the active-run guard - instead of migrating files
-// whose absolute paths older PR bodies already name, or wiping a directory a
-// run started before the upgrade may still be writing to.
 func TestReapLegacyEvidenceDrainsTheSharedTempRootUnderTheSamePolicy(t *testing.T) {
 	f := newEvidenceFixture(t)
 
@@ -251,9 +227,6 @@ func TestReapLegacyEvidenceDrainsTheSharedTempRootUnderTheSamePolicy(t *testing.
 	}
 }
 
-// TestReapLegacyEvidenceLeavesTheCurrentRootAlone: an operator who pointed
-// local_root back at the legacy location owns it, and the drain must not apply
-// its policy twice to the same directory.
 func TestReapLegacyEvidenceLeavesTheCurrentRootAlone(t *testing.T) {
 	f := newEvidenceFixture(t)
 	fakeTemp := t.TempDir()
@@ -273,8 +246,6 @@ func TestReapLegacyEvidenceLeavesTheCurrentRootAlone(t *testing.T) {
 	}
 }
 
-// TestEvidenceReapPolicyForUsesGlobalConfigAndDefaults keeps the daemon's
-// resolution aligned with the global-only config contract.
 func TestEvidenceReapPolicyForUsesGlobalConfigAndDefaults(t *testing.T) {
 	if got := evidenceReapPolicyFor(nil); got.Retention != config.DefaultEvidenceRetention || got.MaxRuns != config.DefaultEvidenceMaxRuns {
 		t.Errorf("nil global config = %+v, want the built-in defaults", got)
@@ -290,8 +261,6 @@ func TestEvidenceReapPolicyForUsesGlobalConfigAndDefaults(t *testing.T) {
 	}
 }
 
-// TestEvidenceRootForHonorsConfiguredLocalRoot pins the daemon-side resolution
-// of where evidence lives to the same answer the pipeline uses.
 func TestEvidenceRootForHonorsConfiguredLocalRoot(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if got, want := evidenceRootFor(p, nil), p.EvidenceDir(); got != want {
@@ -308,11 +277,6 @@ func TestEvidenceRootForHonorsConfiguredLocalRoot(t *testing.T) {
 	}
 }
 
-// TestRunCleanupRemovesEmptyEvidenceDirAndKeepsNonEmpty is the per-run half of
-// evidence ownership, and the cheapest of the three layers: a finished run that
-// wrote nothing leaves nothing behind, while a run that produced artifacts
-// keeps every file. Without it, the test step's up-front MkdirAll left one
-// permanent directory per run no matter what the agent decided to write.
 func TestRunCleanupRemovesEmptyEvidenceDirAndKeepsNonEmpty(t *testing.T) {
 	f := newEvidenceFixture(t)
 	m := NewRunManager(f.db, f.p, nil)
@@ -335,8 +299,6 @@ func TestRunCleanupRemovesEmptyEvidenceDirAndKeepsNonEmpty(t *testing.T) {
 	}
 }
 
-// TestRunCleanupIsSafeWithoutConfigAndForUnknownRuns keeps the cleanup path
-// from ever being the thing that fails a finished run.
 func TestRunCleanupIsSafeWithoutConfigAndForUnknownRuns(t *testing.T) {
 	f := newEvidenceFixture(t)
 	m := NewRunManager(f.db, f.p, nil)
@@ -351,8 +313,6 @@ func TestRunCleanupIsSafeWithoutConfigAndForUnknownRuns(t *testing.T) {
 	}
 }
 
-// recoveredRunTestAgent is the minimum an agent must be for a recovered run to
-// reach its completion boundary; nothing in this test invokes it.
 type recoveredRunTestAgent struct{}
 
 func (recoveredRunTestAgent) Name() string { return "test" }
@@ -361,13 +321,6 @@ func (recoveredRunTestAgent) Run(context.Context, agent.RunOpts) (*agent.Result,
 }
 func (recoveredRunTestAgent) Close() error { return nil }
 
-// TestRecoveredRunCleanupRemovesItsEmptyEvidenceDir covers the OTHER completion
-// boundary. A run parked at an approval gate when the daemon stopped is resumed
-// by resumeRecoveredRun, which finishes through its own defer rather than the
-// fresh-run one - so evidence ownership is only true "after each run" if both
-// paths clean up. Every outcome of a resumed run shares that defer, which is why
-// asserting on the boundary is enough here: the run below is rejected early by
-// Resume, and its evidence directory must still be gone afterwards.
 func TestRecoveredRunCleanupRemovesItsEmptyEvidenceDir(t *testing.T) {
 	f := newEvidenceFixture(t)
 	m := NewRunManager(f.db, f.p, func() []pipeline.Step { return nil })

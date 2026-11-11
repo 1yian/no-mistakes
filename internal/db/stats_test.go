@@ -230,9 +230,6 @@ func TestGetStatsDoesNotCountTestBudgetCutsAsFixedMistakes(t *testing.T) {
 	}
 }
 
-// An exhausted Review fix-round budget records the operator's budget, not a
-// defect: the notice counts as neither reported nor, once an answer round
-// clears the gate, fixed. The real defect beside it still counts.
 func TestGetStatsDoesNotCountReviewFixRoundBudgetAsMistake(t *testing.T) {
 	d := openTestDB(t)
 	repo, _ := d.InsertRepo("/repo/budget", "git@example.com:budget.git", "main")

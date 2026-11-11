@@ -199,7 +199,6 @@ func TestRenderDiff_ColoredLines(t *testing.T) {
 }
 
 func TestRenderDiff_Scrolling(t *testing.T) {
-	// Build a diff with many lines.
 	var b strings.Builder
 	b.WriteString("diff --git a/main.go b/main.go\n")
 	b.WriteString("--- a/main.go\n")
@@ -259,7 +258,6 @@ func TestRenderDiff_WrappedInBox(t *testing.T) {
 }
 
 func TestRenderDiff_ScrollIndicatorInBottomBorder(t *testing.T) {
-	// Build a diff with many lines.
 	var b strings.Builder
 	b.WriteString("diff --git a/main.go b/main.go\n")
 	b.WriteString("--- a/main.go\n")

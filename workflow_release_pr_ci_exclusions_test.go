@@ -10,13 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestPullRequestWorkflowsExcludeReleasePleaseOutputs is the drift check for
-// the release-please zero-run path filter. release-please opens its PR with
-// GITHUB_TOKEN, which creates pull_request runs that sit in action_required
-// forever; the only native way to create zero runs is to exclude every path
-// release-please writes from each pull_request trigger. This test derives the
-// expected output set from release-please-config.json so adding an extra-files
-// entry (or changing release-type) without updating the workflows fails CI.
 func TestPullRequestWorkflowsExcludeReleasePleaseOutputs(t *testing.T) {
 	expected := expectedReleasePleaseOutputs(t)
 	if len(expected) == 0 {
@@ -54,10 +47,6 @@ func TestPullRequestWorkflowsExcludeReleasePleaseOutputs(t *testing.T) {
 	}
 }
 
-// expectedReleasePleaseOutputs derives the file set release-please writes for
-// this repository from release-please-config.json. Always includes the
-// manifest; release-type selects the strategy outputs; every configured
-// extra-files path is included.
 func expectedReleasePleaseOutputs(t *testing.T) []string {
 	t.Helper()
 	data, err := os.ReadFile("release-please-config.json")
@@ -142,9 +131,6 @@ func loadWorkflowPullRequest(t *testing.T, path string) (map[string]any, bool) {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	// Decode via yaml.Node so a bare `on:` key (YAML 1.1 bool true) and a
-	// plain string "on" key are both visible; map[string]any alone can drop
-	// the boolean-key form depending on decoder settings.
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		t.Fatalf("parse %s: %v", path, err)
@@ -173,7 +159,6 @@ func loadWorkflowPullRequest(t *testing.T, path string) (map[string]any, bool) {
 	}
 }
 
-// workflowOnNode finds the workflow's on: mapping node under a document root.
 func workflowOnNode(root *yaml.Node) *yaml.Node {
 	if root == nil {
 		return nil
@@ -198,9 +183,6 @@ func workflowOnNode(root *yaml.Node) *yaml.Node {
 	return nil
 }
 
-// pullRequestExcludesPath reports whether a pull_request trigger will create
-// no run when the PR changes only paths that should be ignored for
-// release-please, specifically whether `path` cannot alone cause a run.
 func pullRequestExcludesPath(pr map[string]any, path string) bool {
 	if ignores, ok := stringSlice(pr["paths-ignore"]); ok {
 		for _, pattern := range ignores {
@@ -255,8 +237,6 @@ func stringSlice(v any) ([]string, bool) {
 	}
 }
 
-// pathMatch implements the subset of GitHub paths filter semantics needed for
-// exact release-output paths: exact match, '**' / '*' globs, and leading '/'.
 func pathMatch(pattern, path string) bool {
 	pattern = strings.TrimPrefix(pattern, "/")
 	path = strings.TrimPrefix(path, "/")

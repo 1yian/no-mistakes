@@ -185,7 +185,6 @@ func TestHelpOverlay_ShowsOpenPRActionWhenPRURLPresent(t *testing.T) {
 	}
 }
 
-// Test: action bar to findings box should have exactly 1 blank line, not 2.
 func TestModel_View_OneBlankLineBetweenActionBarAndFindings(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)
@@ -231,7 +230,6 @@ func TestModel_View_OneBlankLineBetweenActionBarAndFindings(t *testing.T) {
 	}
 }
 
-// Test: log box to help overlay should have exactly 1 blank line, not 2.
 func TestModel_View_OneBlankLineBetweenLogAndHelp(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)
@@ -361,7 +359,6 @@ func TestModel_View_ResponsiveLayoutReservesGapBeforeLogBox(t *testing.T) {
 	}
 }
 
-// Test: footer should have consistent spacing (1 blank line) after any preceding section.
 func TestModel_View_ConsistentFooterSpacing(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)

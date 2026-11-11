@@ -14,8 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// longAskUserDescription is well past any inline cap and keeps its reasoning in
-// the tail, where a prefix cut used to drop it.
 func longAskUserDescription() string {
 	return "The new retry wrapper changes delivery semantics. " +
 		strings.Repeat("Context the reviewer needs to weigh the tradeoff. ", 40) +
@@ -28,8 +26,6 @@ type decodedFindingRow struct {
 	Description string `toon:"description"`
 }
 
-// The skill requires ask-user findings to be relayed verbatim, and the gate is
-// the only place a driver reads them, so the gate must never cut one.
 func TestGateRendersFindingDescriptionsVerbatim(t *testing.T) {
 	desc := longAskUserDescription()
 	gate := stepView{
@@ -54,8 +50,6 @@ func TestGateRendersFindingDescriptionsVerbatim(t *testing.T) {
 	}
 }
 
-// After a gate resolves, status only counts a step's findings, so `axi logs`
-// is the read path for their text; the summary stays bounded unless --full.
 func TestAxiLogsRendersRecordedFindingsAfterTheGateResolves(t *testing.T) {
 	repoDir, p, database, repo := setupAxiQueryRepo(t)
 	chdir(t, repoDir)
@@ -131,8 +125,6 @@ func TestAxiLogsRendersRecordedFindingsAfterTheGateResolves(t *testing.T) {
 	}
 }
 
-// A damaged findings record must be reported, not rendered as a step that
-// recorded no decision content.
 func TestAxiLogsReportsUnparseableRecordedFindings(t *testing.T) {
 	repoDir, _, database, repo := setupAxiQueryRepo(t)
 	chdir(t, repoDir)

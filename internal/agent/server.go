@@ -17,18 +17,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// managedServerOutput holds the writer used for managed-server stdout and
-// stderr. Defaults to os.Stderr so debug output is visible in normal CLI
-// sessions; callers rendering to a raw terminal (e.g. the setup wizard
-// alt-screen) should override it so log lines don't corrupt the display.
 var (
 	managedServerOutputMu sync.Mutex
 	managedServerOutput   io.Writer = os.Stderr
 )
 
-// SetManagedServerOutput routes future managed-server stdout/stderr to w.
-// Passing nil resets to the default (os.Stderr). Only affects servers
-// started after this call; already-running servers keep their original fds.
 func SetManagedServerOutput(w io.Writer) {
 	managedServerOutputMu.Lock()
 	defer managedServerOutputMu.Unlock()
@@ -44,13 +37,8 @@ func currentManagedServerOutput() io.Writer {
 	return managedServerOutput
 }
 
-// defaultHealthTimeout bounds how long startServerWithPort waits for a freshly
-// spawned server to answer its health endpoint before giving up. It is generous
-// enough to absorb cold starts under host load: opencode has been observed
-// taking 15s+ just to emit its first log line when the machine is busy.
 const defaultHealthTimeout = 60 * time.Second
 
-// managedServer manages a persistent HTTP server process (used by rovodev and opencode agents).
 type managedServer struct {
 	cmd           *exec.Cmd
 	port          int
@@ -68,7 +56,6 @@ type managedServerOptions struct {
 	holdStdin     bool
 }
 
-// getAvailablePort finds an ephemeral port by binding to :0 and releasing.
 func getAvailablePort() (int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -79,10 +66,6 @@ func getAvailablePort() (int, error) {
 	return port, nil
 }
 
-// startServerWithPort spawns the server process on a given port and waits for health.
-// The process is not tied to ctx - it outlives individual Run calls and is stopped via shutdown().
-// ctx is only used for the health check timeout.
-// agentName tags the PID tracking file so crash-recovery can identify orphans.
 func startServerWithPort(ctx context.Context, agentName, bin string, args []string, cwd string, healthPath string, port int, environment runenv.Overlay, extraEnv ...[]string) (*managedServer, error) {
 	return startServerWithOptions(ctx, agentName, bin, args, cwd, healthPath, port, environment, managedServerOptions{}, extraEnv...)
 }
@@ -153,13 +136,10 @@ func startServerWithOptions(ctx context.Context, agentName, bin string, args []s
 	return srv, nil
 }
 
-// baseURL returns the server's base URL.
 func (s *managedServer) baseURL() string {
 	return fmt.Sprintf("http://127.0.0.1:%d", s.port)
 }
 
-// formatHealthTimeout renders a health-check deadline for error messages,
-// preferring a plain seconds form (e.g. "60s") over Duration's "1m0s".
 func formatHealthTimeout(d time.Duration) string {
 	if d%time.Second == 0 {
 		return fmt.Sprintf("%ds", int(d/time.Second))
@@ -167,9 +147,6 @@ func formatHealthTimeout(d time.Duration) string {
 	return d.String()
 }
 
-// waitForHealth polls the health endpoint until it returns 200 or timeout.
-// If the server process exits before becoming healthy, it returns immediately
-// with an exit error instead of waiting out the health-check deadline.
 func (s *managedServer) waitForHealth(ctx context.Context, path string) error {
 	url := s.baseURL() + path
 	client := &http.Client{Timeout: 2 * time.Second}
@@ -223,12 +200,6 @@ func serverExitedBeforeHealthyError(waitErr error) error {
 	return fmt.Errorf("server exited before becoming healthy: %w", waitErr)
 }
 
-// shutdown gracefully stops the server process. The long-running goroutine
-// spawned in startServerWithPort owns cmd.Wait(); shutdown signals the
-// process and waits on s.exited to observe termination.
-// The PID tracking file is removed only after the process is confirmed
-// exited - if SIGKILL fails to reap it, the file is left on disk so a
-// future daemon can finish the job.
 func (s *managedServer) shutdown() {
 	s.stopping.Store(true)
 	if s.stdin != nil {

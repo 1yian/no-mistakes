@@ -72,10 +72,6 @@ func newInitCmd() *cobra.Command {
 					return fmt.Errorf("start daemon: %w", err)
 				}
 
-				// Install the agent skill at user level so agents can drive
-				// no-mistakes via `/no-mistakes` in any repo. Best-effort: a
-				// skill write failure must not undo a successful gate setup. With
-				// --skip-user-skill the installer is not invoked at all.
 				var skillErr error
 				if !skipUserSkill {
 					_, skillErr = installUserSkill()
@@ -126,23 +122,6 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
-// resolveWorktreeRoot validates a --worktree-root value and returns the
-// absolute directory the config entry must name. A relative value is resolved
-// against the current directory here rather than accepted into the config,
-// where it would be read by a daemon with an unrelated working directory.
-//
-// It also refuses every placement the daemon refuses to start on, through the
-// same owner (worktrees.CheckPlacement) and against the same checkouts: NM_HOME,
-// the checkout being initialized, every checkout the config names, and every
-// registered repository (db.RepoWorkingPaths, which is where the daemon's startup
-// gate reads them too).
-//
-// Finally it refuses a root another checkout has already claimed, which the
-// config loader rejects. All of it belongs here rather than only in the daemon:
-// the daemon refuses to start on a config it cannot load or place, and every
-// command starts the daemon, so printing such an entry would hand the operator a
-// paste that takes their whole CLI down instead of placing anything - the failure
-// belongs where they can still pick another directory.
 func resolveWorktreeRoot(p *paths.Paths, d *db.DB, workDir, root string) (string, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
@@ -166,29 +145,6 @@ func resolveWorktreeRoot(p *paths.Paths, d *db.DB, workDir, root string) (string
 	return abs, nil
 }
 
-// assertCheckoutHoldsNoConfiguredWorktreeRoot refuses to register a checkout
-// that contains a directory the configuration already places run worktrees in.
-//
-// It runs on EVERY init, not only the one that names a directory, because which
-// placements are usable is decided by which checkouts exist: worktrees.CheckPlacement
-// refuses a root inside ANY registered checkout, and the daemon refuses to start
-// while a configured entry is unusable. Registering a checkout AROUND an existing
-// root therefore reaches the very state --worktree-root is careful never to
-// print, from the other direction - and the operator would find out at the next
-// daemon start, when every command goes down with it, from a message naming a
-// config entry they did not touch. Refusing here leaves them a checkout they can
-// still place elsewhere and an entry they can still repoint.
-//
-// Only entries this checkout would newly break are judged. An unrelated one that
-// is already unusable is the daemon's report to make: it is not this
-// registration's doing, and init has no business refusing to run over it.
-//
-// A config that does not load is refused outright instead, naming the fault. It
-// cannot be judged - the entries it would be judged against are the ones that
-// did not load - and registering into it is never useful: the daemon refuses to
-// start on that same config, so the registration lands in a CLI that is already
-// down, and the placement it may have broken then surfaces as a second fault to
-// find by hand.
 func assertCheckoutHoldsNoConfiguredWorktreeRoot(p *paths.Paths, workDir string) error {
 	checkout, err := git.FindMainRepoRoot(workDir)
 	if err != nil || strings.TrimSpace(checkout) == "" {
@@ -213,15 +169,6 @@ func assertCheckoutHoldsNoConfiguredWorktreeRoot(p *paths.Paths, workDir string)
 	return nil
 }
 
-// knownCheckouts lists every checkout placement validation must protect: the
-// ones the global config names plus every registered repository. It is the same
-// set the daemon's startup gate judges against, so init cannot accept a
-// placement that then stops the daemon.
-//
-// An unreadable database yields the config half alone, which is the whole set on
-// a machine that has registered nothing. An unreadable config cannot get here:
-// init refuses one before it registers anything (see
-// assertCheckoutHoldsNoConfiguredWorktreeRoot).
 func knownCheckouts(p *paths.Paths, d *db.DB) []string {
 	var out []string
 	if cfg, err := config.LoadGlobal(p.ConfigFile()); err == nil {
@@ -235,11 +182,6 @@ func knownCheckouts(p *paths.Paths, d *db.DB) []string {
 	return out
 }
 
-// checkoutClaimingWorktreeRoot reports the configured checkout that already
-// places its run worktrees in root, when that checkout is not the one being
-// initialized. An unreadable config yields no claim, and cannot get here anyway:
-// init refuses one before it registers anything (see
-// assertCheckoutHoldsNoConfiguredWorktreeRoot).
 func checkoutClaimingWorktreeRoot(p *paths.Paths, checkout, root string) (string, bool) {
 	cfg, err := config.LoadGlobal(p.ConfigFile())
 	if err != nil {
@@ -258,47 +200,6 @@ func checkoutClaimingWorktreeRoot(p *paths.Paths, checkout, root string) (string
 	return "", false
 }
 
-// printWorktreeRootGuidance reports the worktree_roots entry that places this
-// repository's run worktrees in the requested directory. no-mistakes never
-// rewrites the global config - it is a hand-maintained file with the
-// operator's own comments - so init prints the exact entry to add instead of
-// editing it, and says nothing further when the entry is already in effect.
-//
-// What it prints is whatever edit leaves the config loadable, because YAML
-// rejects a duplicate key at either level and a config that no longer loads is a
-// daemon that refuses to start - every command runs EnsureDaemon, so the
-// operator's whole CLI goes with it. Four edits, four shapes:
-//
-//   - No key: the key and the entry.
-//   - The key is there but nothing can be added under it - `worktree_roots: {}`,
-//     `worktree_roots: {a: b}`, or a valueless `worktree_roots:`: the whole key
-//     is replaced by the block form, carrying the entries it already had. An
-//     indented entry line after a flow mapping is not part of that mapping at
-//     all; YAML rejects the document.
-//   - A block, and this checkout already has a DIFFERENT root: its key is
-//     already in the block, so the edit is to replace that entry's value. Adding
-//     a second `<checkout>:` under the same block is the duplicate-key failure
-//     one level down from a second `worktree_roots:`. Both lines are printed as
-//     the config spells them, so the operator can find the one to replace.
-//   - A block without this checkout: only the entry line, to add under the
-//     existing key.
-//
-// Which of those applies is a question about the document rather than about the
-// entries it parsed to (see config.InspectGlobalConfigMapping): a key with no
-// value and a key set to {} both parse to nothing, so the parsed configuration
-// cannot tell them from an absent key, nor a block mapping from a flow one. That
-// includes whether this checkout already has an entry, which decides between
-// replacing a line and adding one (see configuredWorktreeRootEntry).
-//
-// A configuration this guidance cannot describe an edit to never reaches it: a
-// config that does not load is refused before the repository is registered (see
-// assertCheckoutHoldsNoConfiguredWorktreeRoot), and a document nobody can parse
-// is one of those.
-//
-// Every line printed for an existing block carries that block's own indentation,
-// for the same reason: the siblings of a block mapping all sit at one column, so
-// an entry line at another one is the same unloadable document, and a line named
-// for replacement at another one is not a line the operator's file contains.
 func printWorktreeRootGuidance(w io.Writer, p *paths.Paths, workingPath, root string) {
 	shape := config.InspectGlobalConfigMapping(p.ConfigFile(), "worktree_roots")
 	configuredKey, configuredRoot, configured := configuredWorktreeRootEntry(shape, workingPath)
@@ -328,8 +229,6 @@ func printWorktreeRootGuidance(w io.Writer, p *paths.Paths, workingPath, root st
 	}
 }
 
-// worktreeRootsEntryIndent is the indentation an entry line must carry: the one
-// the block's existing entries use, or two spaces when there are none to match.
 func worktreeRootsEntryIndent(shape config.GlobalConfigMapping) string {
 	if shape.EntryIndent > 0 {
 		return strings.Repeat(" ", shape.EntryIndent)
@@ -337,12 +236,6 @@ func worktreeRootsEntryIndent(shape config.GlobalConfigMapping) string {
 	return "  "
 }
 
-// printWorktreeRootsBlockReplacement prints the block form of the whole
-// worktree_roots key, which is the only edit that works when nothing can be
-// added under the key as written. It carries every entry the operator already
-// has, either re-pointing this checkout's or adding one for it - which is why it
-// is reached only for a document that parsed: entries nobody could read are
-// entries this rewrite would drop.
 func printWorktreeRootsBlockReplacement(w io.Writer, p *paths.Paths, shape config.GlobalConfigMapping, workingPath, configuredKey, root string) {
 	if shape.Line != "" {
 		fmt.Fprintf(w, "  %s\n", sDim.Render("Replace this line in "+p.ConfigFile()+" so runs are created there:"))
@@ -366,19 +259,6 @@ func printWorktreeRootsBlockReplacement(w io.Writer, p *paths.Paths, shape confi
 	}
 }
 
-// configuredWorktreeRootEntry returns the worktree_roots entry that places this
-// checkout's runs, spelled the way the config file spells it.
-//
-// It reads the document rather than the parsed configuration for the same reason
-// the rest of this guidance does: the document is what the operator edits, and it
-// is the same read that already decided the shape, so one source answers every
-// question about the file rather than two that can disagree about it.
-//
-// The key is returned as written rather than canonicalized because guidance that
-// names a line has to name the line the operator will find: a trailing separator
-// or a symlinked spelling still matches the same checkout (that is what
-// worktrees.Canonical is for), and re-writing the key would also risk two
-// literal keys naming one checkout, which the config loader rejects.
 func configuredWorktreeRootEntry(shape config.GlobalConfigMapping, workingPath string) (key, root string, ok bool) {
 	want := worktrees.Canonical(workingPath)
 	for _, entry := range shape.Entries {

@@ -18,8 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Without --closes the body never gains a closing reference, even though
-// the intent names an issue.
 func TestPRStep_NeverInfersClosingReferenceFromIntent(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -38,8 +36,6 @@ func TestPRStep_NeverInfersClosingReferenceFromIntent(t *testing.T) {
 	}
 }
 
-// The pipeline publishes a closing reference in the intent neutralized, so
-// without --closes the PR closes nothing.
 func TestPRStep_NeutralizesClosingReferenceInPublishedIntent(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -58,8 +54,6 @@ func TestPRStep_NeutralizesClosingReferenceInPublishedIntent(t *testing.T) {
 	}
 }
 
-// A closing reference in the agent-drafted narrative is published
-// neutralized: closure comes only from --closes.
 func TestPRStep_NeutralizesClosingReferenceInDraftedNarrative(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -81,8 +75,6 @@ func TestPRStep_NeutralizesClosingReferenceInDraftedNarrative(t *testing.T) {
 	}
 }
 
-// With --closes, only the Issues section closes: a drafted reference to the
-// same issue is neutralized and the requested one renders and verifies once.
 func TestPRStep_ClosesRendersOnlyInIssuesSection(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -133,8 +125,6 @@ func TestNeutralizeClosingReferencesURLForm(t *testing.T) {
 	}
 }
 
-// A tested command containing backticks renders as an HTML <code> element; it
-// must be published exactly as recorded, while prose around it is neutralized.
 func TestNeutralizeClosingReferencesLeavesHTMLCodeUnchanged(t *testing.T) {
 	t.Parallel()
 	rendered := renderTestedDetailFor("git commit -m \"`Fixes #12`\" && echo Fixes #12", prBodyHTML)
@@ -148,9 +138,6 @@ func TestNeutralizeClosingReferencesLeavesHTMLCodeUnchanged(t *testing.T) {
 	}
 }
 
-// pr.template bodies keep author text verbatim, so the requested reference
-// lives in the regenerated appendix, and is not repeated once the author's
-// own text closes the same issue.
 func TestPRTemplate_ClosesRendersOnceAcrossCreateAndAuthorEditedUpdate(t *testing.T) {
 	t.Parallel()
 	sctx, _, _ := templateTestContext(t)
@@ -195,9 +182,6 @@ func TestPRTemplate_ClosesRendersOnceAcrossCreateAndAuthorEditedUpdate(t *testin
 	}
 }
 
-// The Issues section is derived from the author text actually being written:
-// an author removing their own closing line between reads gets the requested
-// reference back in the appendix instead of a body that closes nothing.
 func TestPROwnershipUpdateRecomputesIssuesFromLatestAuthorText(t *testing.T) {
 	t.Parallel()
 	_, appendix := ownedFixture(t)
@@ -229,9 +213,6 @@ func readPRBodyFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-// A run carrying --closes must not skip publication because the PR host is
-// unavailable: nothing would close the requested issues. Without --closes the
-// step still skips.
 func TestPRStep_ClosesFailsInsteadOfSkippingWhenHostUnavailable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -274,8 +255,6 @@ func TestPRStep_ClosesFailsInsteadOfSkippingWhenHostUnavailable(t *testing.T) {
 	}
 }
 
-// Trailing punctuation and ordered-list items are ordinary ways to write a
-// standalone closing line; verification must see them.
 func TestClosingKeywordLinesAcceptPunctuationAndOrderedLists(t *testing.T) {
 	t.Parallel()
 	body := "Fixes #4.\n1. Closes #5\n2) Resolves owner/repo#6;\nThis fixes #7 partly.\n"
@@ -292,8 +271,6 @@ func TestClosingKeywordLinesAcceptPunctuationAndOrderedLists(t *testing.T) {
 	}
 }
 
-// `95` and `<own repo>#95` name the same issue, so it renders exactly once,
-// and an author's qualified line for the PR's own repository covers `95`.
 func TestPRStep_OwnRepositoryQualifiedReferenceRendersOnce(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -322,11 +299,6 @@ func TestPRStep_OwnRepositoryQualifiedReferenceRendersOnce(t *testing.T) {
 	}
 }
 
-// The GitLab half of the grammar: its default closing pattern adds the gerunds
-// and "implements" to GitHub's words and lets a project path nest under
-// subgroups. A line GitHub would not close on must not be counted as a closing
-// declaration there either, or an author's ordinary sentence would silently
-// cover a requested reference.
 func TestClosingGrammar_GitLabWordsAndNestedReferences(t *testing.T) {
 	t.Parallel()
 
@@ -428,8 +400,6 @@ func TestNeutralizeGitLabClosingReferences(t *testing.T) {
 	}
 }
 
-// GitHub's neutralizer is untouched: the GitLab-only words stay ordinary text,
-// and the code-block exemption it relies on stays exactly as it was.
 func TestNeutralizeGitHubClosingReferencesLeavesGitLabOnlyFormsAlone(t *testing.T) {
 	t.Parallel()
 
@@ -440,9 +410,6 @@ func TestNeutralizeGitHubClosingReferencesLeavesGitLabOnlyFormsAlone(t *testing.
 	}
 }
 
-// gitlabClosingContext is a StepContext whose repository resolves to GitLab, so
-// the closing grammar, the project path, and the rendered references all come
-// from the GitLab side.
 func gitlabClosingContext(refs ...string) *pipeline.StepContext {
 	return &pipeline.StepContext{
 		Ctx:              context.Background(),
@@ -453,9 +420,6 @@ func gitlabClosingContext(refs ...string) *pipeline.StepContext {
 	}
 }
 
-// A requested reference renders in the Issues section and verifies against the
-// published body on GitLab, including a cross-project reference to a project
-// nested under subgroups.
 func TestIssuesSectionOnGitLabRendersAndVerifiesEveryReferenceForm(t *testing.T) {
 	t.Parallel()
 
@@ -473,8 +437,6 @@ func TestIssuesSectionOnGitLabRendersAndVerifiesEveryReferenceForm(t *testing.T)
 	}
 }
 
-// The author's own closing line covers a requested reference on GitLab for the
-// words GitLab closes on - including "Implements", which GitHub does not.
 func TestIssuesSectionAuthorCoverageFollowsTheGitLabGrammar(t *testing.T) {
 	t.Parallel()
 
@@ -490,8 +452,6 @@ func TestIssuesSectionAuthorCoverageFollowsTheGitLabGrammar(t *testing.T) {
 	}
 }
 
-// closesBoundaryHost is a Host that only declares the capabilities a case needs
-// plus the body read every closing-reference publication verifies against.
 type closesBoundaryHost struct {
 	scm.Host
 	caps scm.Capabilities
@@ -503,10 +463,6 @@ func (h closesBoundaryHost) GetPRContent(context.Context, *scm.PR) (scm.PRConten
 	return scm.PRContent{Title: "title", Body: "body"}, nil
 }
 
-// claimClosingIssueRefs is the one gate --closes passes through: it localizes
-// the run's references, fails closed on a reference shape the hosting provider
-// would misread, and fails closed when the provider does not close issues from
-// the body at all.
 func TestClaimClosingIssueRefsProviderBoundaries(t *testing.T) {
 	t.Parallel()
 
@@ -575,11 +531,6 @@ func TestClaimClosingIssueRefsProviderBoundaries(t *testing.T) {
 	}
 }
 
-// End to end on GitLab: a run carrying --closes publishes the reference in the
-// merge request description and verifies it by reading the description back.
-// The referenceless prose around it stays neutralized, including a drafted
-// closing sentence - GitLab's closing pattern is a raw regex over the whole
-// description, so that sentence in the body would otherwise close the issue.
 func TestPRStep_GitLabClosesRendersAndVerifiesOnTheMR(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -632,8 +583,6 @@ func TestPRStep_GitLabClosesRendersAndVerifiesOnTheMR(t *testing.T) {
 	}
 }
 
-// The same run on GitHub publishes the GitHub spelling of protection: the
-// drafted sentence's reference is code-spanned, and no backslash escape appears.
 func TestPRStep_GitHubClosesKeepsGitHubNeutralization(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -710,8 +659,6 @@ func TestGitLabClosingCoverageRejectsTabs(t *testing.T) {
 	}
 }
 
-// A supplied description is narrative like any other: a closing keyword in it
-// is neutralized, and only --closes publishes a live reference.
 func TestPRStep_SuppliedBodyClosesOnlyThroughTheIssuesSection(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

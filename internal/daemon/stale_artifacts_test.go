@@ -10,8 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// staleDaemonRoot leaves what an exited daemon leaves behind: a socket file
-// that refuses connections and a PID file naming its process.
 func staleDaemonRoot(t *testing.T, pidFile []byte) *paths.Paths {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -112,8 +110,6 @@ func TestIsRunningRefusedSocketWithLiveOrUnverifiableDaemonStillRefuses(t *testi
 	}
 }
 
-// The update path stops the old daemon and waits for it; a daemon that exited
-// but left its socket and PID file behind must count as stopped.
 func TestWaitForDaemonStopAcceptsExitedDaemonThatLeftItsArtifacts(t *testing.T) {
 	started := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 	p := staleDaemonRoot(t, []byte(`{"pid":424242,"started_at":"2026-04-20T10:00:00Z"}`))
@@ -131,8 +127,6 @@ func TestWaitForDaemonStopAcceptsExitedDaemonThatLeftItsArtifacts(t *testing.T) 
 	}
 }
 
-// A probe inspecting a stale PID must not hold the singleton lock, or a
-// daemon starting at that moment would refuse to run.
 func TestIsRunningStaleProbeDoesNotBlockAStartingDaemon(t *testing.T) {
 	p := staleDaemonRoot(t, []byte(`{"pid":424242,"started_at":"2026-04-20T10:00:00Z"}`))
 	oldRunning := daemonProcessRunning
@@ -152,8 +146,6 @@ func TestIsRunningStaleProbeDoesNotBlockAStartingDaemon(t *testing.T) {
 	}
 }
 
-// A daemon that started between the inspection and the removal rewrote the
-// PID file; its artifacts stay.
 func TestIsRunningStaleProbeKeepsArtifactsOfADaemonThatJustStarted(t *testing.T) {
 	p := staleDaemonRoot(t, []byte(`{"pid":424242,"started_at":"2026-04-20T10:00:00Z"}`))
 	oldRunning := daemonProcessRunning
@@ -173,9 +165,6 @@ func TestIsRunningStaleProbeKeepsArtifactsOfADaemonThatJustStarted(t *testing.T)
 	}
 }
 
-// A probe holds the singleton lock while it re-checks and removes a dead
-// daemon's artifacts; a daemon starting in that window waits it out instead of
-// exiting as "already running".
 func TestStartingDaemonWaitsOutTheCleanupLockWindow(t *testing.T) {
 	p := staleDaemonRoot(t, []byte(`{"pid":424242,"started_at":"2026-04-20T10:00:00Z"}`))
 	cleanupHolder, err := os.OpenFile(p.LockFile(), os.O_CREATE|os.O_RDWR, 0o644)

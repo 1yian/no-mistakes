@@ -19,8 +19,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// fakeProviderPlugin puts the reference fake plugin on the step's PATH and
-// configures it as provider plugin "ssm" for git.example.com.
 func fakeProviderPlugin(t *testing.T, sctx *pipeline.StepContext, state fakeplugin.State) (statePath, logPath string) {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -198,10 +196,6 @@ func TestProviderPlugin_PRStepUpdatesExistingPR(t *testing.T) {
 	}
 }
 
-// A plugin that says it cannot serve the repository, a missing command, and
-// a fork URL (which no non-GitHub provider routes) skip exactly like a
-// built-in provider: Skipped with a SkipReason, which the executor persists
-// and axi reports under run.automatic_skips as passed-with-skips.
 func TestProviderPlugin_PRStepSkipsWithPluginReason(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -253,9 +247,6 @@ func TestProviderPlugin_PRStepSkipsWithPluginReason(t *testing.T) {
 	}
 }
 
-// A plugin whose status handshake breaks the contract fails the PR step and
-// the pre-push attestation instead of skipping: a skip would let the run read
-// as passed-with-skips off an answer nothing could validate.
 func TestProviderPlugin_ProtocolViolationFailsClosed(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -347,8 +338,6 @@ func TestProviderPlugin_PRStepRecordsUnavailableHeadProof(t *testing.T) {
 	}
 }
 
-// Every PR URL a plugin returns is checked against the repository path, so a
-// remote that has none can never be served and skips with a reason instead.
 func TestProviderPlugin_RemoteWithoutRepositoryPathSkips(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -361,8 +350,6 @@ func TestProviderPlugin_RemoteWithoutRepositoryPathSkips(t *testing.T) {
 	}
 }
 
-// The CI monitor fails on a deterministic contract violation but retries a
-// timed-out read like any failed read; nothing else fails a poll.
 func TestProviderPlugin_PollFailsStepOnlyOnDeterministicViolations(t *testing.T) {
 	t.Parallel()
 	violation := fmt.Errorf("pr checks: %w", plugin.ErrProtocol)
@@ -378,9 +365,6 @@ func TestProviderPlugin_PollFailsStepOnlyOnDeterministicViolations(t *testing.T)
 	}
 }
 
-// A plugin that breaks its contract while a repair fetches failed-check logs
-// would break it identically on every retry, so the repair fails the step
-// instead of being treated as an ordinary, retryable fix failure.
 func TestProviderPlugin_RepairFailsOnLogProtocolViolation(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -400,10 +384,6 @@ func TestProviderPlugin_RepairFailsOnLogProtocolViolation(t *testing.T) {
 	}
 }
 
-// A plugin whose status handshake breaks while a CI repair attests the
-// repaired head fails the step. The attestation failure is wrapped as an
-// unsettled repair push, which parks for approval; the plugin violation must
-// win, or a broken integration would read as a repair awaiting approval.
 func TestProviderPlugin_RepairFailsOnAttestationHandshakeViolation(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, false, writeCIFix)

@@ -58,16 +58,6 @@ func TestModel_Yolo_RefusalGatesSendNoAutomaticResponse(t *testing.T) {
 	}
 }
 
-// TestModel_Yolo_OpenReviewQuestionSendsNoAutomaticResponse is the TUI half of
-// the carve-out `axi --yes` has. An open question is an ask-user finding on the
-// ordinary channel, so without the guard stepHasActionableFindings counts it,
-// the selection picks it up, and the FIXER receives the question text as work -
-// then the rereview re-emits the still-open question and yolo approves the
-// fix_review gate as already-fixed. Both loop iterations matter: the first is
-// the fix that must not be sent, the second the approve that must not follow.
-//
-// It runs both gate statuses because the bug reached the approve through the
-// fix_review status specifically.
 func TestModel_Yolo_OpenReviewQuestionSendsNoAutomaticResponse(t *testing.T) {
 	for _, status := range []types.StepStatus{types.StepStatusAwaitingApproval, types.StepStatusFixReview} {
 		t.Run(string(status), func(t *testing.T) {
@@ -95,12 +85,6 @@ func TestModel_Yolo_OpenReviewQuestionSendsNoAutomaticResponse(t *testing.T) {
 	}
 }
 
-// TestModel_Yolo_UnreadableQuestionHistorySendsNoAutomaticResponse is the TUI
-// half of the second carve-out. The unreadable-history marker carries no
-// review-question category on purpose - an answer is what the daemon refuses
-// there - so the question guard above does not cover it, and without its own
-// predicate yolo selected it as ordinary work, handed the FIXER "decide this
-// gate yourself", and then approved the fix_review gate as already-fixed.
 func TestModel_Yolo_UnreadableQuestionHistorySendsNoAutomaticResponse(t *testing.T) {
 	for _, status := range []types.StepStatus{types.StepStatusAwaitingApproval, types.StepStatusFixReview} {
 		t.Run(string(status), func(t *testing.T) {
@@ -128,8 +112,6 @@ func TestModel_Yolo_UnreadableQuestionHistorySendsNoAutomaticResponse(t *testing
 	}
 }
 
-// A review gate carrying ORDINARY findings is still yolo's to fix, so the guard
-// must key on the question category and nothing broader.
 func TestModel_Yolo_OrdinaryReviewFindingsAreStillFixed(t *testing.T) {
 	sock, client, snapshot := captureRespond(t)
 	run := testRun()
@@ -219,8 +201,6 @@ func TestModel_Yolo_AutoApprovesAwaitingStep(t *testing.T) {
 	}
 }
 
-// captureRespond wires a model-facing IPC server that records every Respond
-// call, returning the connected client plus accessors for the captured params.
 func captureRespond(t *testing.T) (string, *ipc.Client, func() []ipc.RespondParams) {
 	t.Helper()
 	sock := testSocketPath(t)

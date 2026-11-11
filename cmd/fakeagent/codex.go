@@ -83,11 +83,6 @@ func runCodex(args []string, promptReader io.Reader, scenario *Scenario) int {
 	return 0
 }
 
-// patchCodexFixture rewrites the agent_message item's text body to
-// match the scenario action. The wire envelope (thread.started,
-// turn.started, item.completed shape, turn.completed.usage) stays
-// real. no-mistakes parses JSON out of the agent_message text, so for
-// structured responses we substitute the scenario JSON.
 func patchCodexFixture(raw []byte, action Action) ([]byte, error) {
 	body := action.textOrDefault()
 	if action.hasStructuredOutput() {
@@ -132,9 +127,6 @@ func patchCodexFixture(raw []byte, action Action) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// extractCodexOutputSchema returns the --output-schema value from the
-// argv, supporting both `--output-schema path` and `--output-schema=path`.
-// Returns "" when the flag is absent.
 func extractCodexOutputSchema(args []string) string {
 	for i, a := range args {
 		switch {
@@ -147,11 +139,6 @@ func extractCodexOutputSchema(args []string) string {
 	return ""
 }
 
-// filterStructuredToSchema drops fields from structured that are not
-// declared as properties on the top-level object schema at schemaPath.
-// Real codex would not emit undeclared fields under --output-schema, so
-// mirroring that behaviour keeps the fake consistent with no-mistakes'
-// additionalProperties:false validation. schemaPath == "" is a no-op.
 func filterStructuredToSchema(structured map[string]any, schemaPath string) (map[string]any, error) {
 	if schemaPath == "" {
 		return structured, nil
@@ -177,10 +164,6 @@ func filterStructuredToSchema(structured map[string]any, schemaPath string) (map
 	return filtered, nil
 }
 
-// extractCodexPrompt mirrors Codex's stdin prompt contract. Real codex argv is
-// `codex exec [user-flags...] - --json [...]` for a fresh session and
-// `codex exec resume [user-flags...] <session-id> - --json [...]` for a
-// resumed session; in both cases the complete prompt is read to EOF from stdin.
 func extractCodexPrompt(args []string, promptReader io.Reader) (string, error) {
 	flagsWithValues := map[string]bool{
 		"-m": true, "--model": true,

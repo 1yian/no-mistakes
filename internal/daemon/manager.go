@@ -41,31 +41,23 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/worktrees"
 )
 
-// StepFactory creates pipeline steps for a run. Defaults to steps.AllSteps.
 type StepFactory func() []pipeline.Step
 
 var recoveredConfigFetchTimeout = 10 * time.Second
 
-// These bounds leave the caller's IPC deadline enough time to receive the
-// timeout response. The client deadline is carried on the IPC request and is
-// preferred when it is sooner.
 var handoffRequestTimeout = 25 * time.Second
 var handoffRequestSafetyMargin = time.Second
 
 var fetchRecoveredRemoteBranch = git.FetchRemoteBranch
 
-// RunManager tracks active pipeline executors and manages run lifecycle.
 type RunManager struct {
-	mu              sync.Mutex
-	executors       map[string]*pipeline.Executor      // runID → executor
-	cancels         map[string]context.CancelCauseFunc // runID → cancel function with cause
-	dones           map[string]chan struct{}           // runID → closed when goroutine exits
-	handoffRequests map[string]*handoffRequest         // runID → pending monitor request
-	ciMonitorActive map[string]bool                    // runID → CI monitor accepts observations
-	ciWakes         map[string]chan struct{}           // runID → CI poll wake signal
-	// runQueue holds submissions waiting for setup or an execution slot under
-	// the max_concurrent_runs cap, in submission order. Guarded by mu; see
-	// run_queue.go.
+	mu                sync.Mutex
+	executors         map[string]*pipeline.Executor      // runID → executor
+	cancels           map[string]context.CancelCauseFunc // runID → cancel function with cause
+	dones             map[string]chan struct{}           // runID → closed when goroutine exits
+	handoffRequests   map[string]*handoffRequest         // runID → pending monitor request
+	ciMonitorActive   map[string]bool                    // runID → CI monitor accepts observations
+	ciWakes           map[string]chan struct{}           // runID → CI poll wake signal
 	runQueue          []queuedRun
 	nextAdmission     uint64
 	maxConcurrentRuns int
@@ -80,18 +72,8 @@ type RunManager struct {
 
 	branchLocks sync.Map // repoID+"/"+branch → *sync.Mutex
 
-	// evalCaptureMu serializes automatic eval collection. Concurrent runs
-	// finishing together would otherwise write the same per-repository object
-	// pool and the same registry file at once.
 	evalCaptureMu sync.Mutex
 
-	// subMu guards the subscriber set and the per-run state revisions. It is
-	// a plain Mutex, not an RWMutex, because revision assignment and fan-out
-	// must be one atomic step: if two concurrent state events could be
-	// enqueued out of revision order, a consumer's monotonic guard would
-	// permanently discard the older one's payload. The critical section
-	// contains no blocking operation and no I/O, so hold time is
-	// O(subscribers) memory writes.
 	subMu          sync.Mutex
 	subscribers    map[string][]*eventMailbox // runID → subscriber mailboxes
 	stateRevs      map[string]int64           // runID → monotonic state revision
@@ -99,9 +81,6 @@ type RunManager struct {
 	completedOrder []string                   // insertion order for FIFO eviction
 }
 
-// maxSubscribersPerRun bounds the global mailbox footprint: queued bytes can
-// never exceed activeRuns × maxSubscribersPerRun × mailboxMaxBytes. Refusing
-// past the cap is an ordinary error, never unbounded growth.
 const maxSubscribersPerRun = 32
 
 type handoffRequest struct {
@@ -124,7 +103,6 @@ func handoffContext(parent context.Context) (context.Context, context.CancelFunc
 	return context.WithDeadline(parent, deadline)
 }
 
-// NewRunManager creates a RunManager. Pass nil for stepFactory to use default steps.
 func NewRunManager(database *db.DB, p *paths.Paths, stepFactory StepFactory) *RunManager {
 	if stepFactory == nil {
 		stepFactory = func() []pipeline.Step { return steps.AllSteps() }
@@ -345,11 +323,6 @@ func (m *RunManager) loadRecoveredConfig(ctx context.Context, run *db.Run, repo 
 	return cfg, nil
 }
 
-// pinnedRunGates reads back the gate list a run resolved at creation. An absent
-// pin means the bare core pipeline - the only sequence a run created before
-// gates were pinned can have had - while an unusable one fails its caller
-// closed with a reason, because silently dropping it would resume the run
-// against a shorter pipeline than the one it recorded.
 func (m *RunManager) pinnedRunGates(runID string) ([]config.Gate, error) {
 	payload, err := m.db.GetRunGates(runID)
 	if err != nil {
@@ -649,13 +622,6 @@ func agentListsEqual(a, b []types.AgentName) bool {
 	return true
 }
 
-// Subscribe registers a subscriber mailbox for a run.
-//
-// The returned subscription always opens with a stream-gap frame, so a
-// subscriber's first action is always one authoritative read. That makes
-// attach and reconnect converge without each consumer needing its own
-// subscribe-then-reconcile ordering rule. A run that has already completed
-// yields that one gap and then finishes.
 func (m *RunManager) Subscribe(runID string) (*Subscription, error) {
 	m.subMu.Lock()
 	defer m.subMu.Unlock()
@@ -691,36 +657,21 @@ func (m *RunManager) Subscribe(runID string) (*Subscription, error) {
 	return &Subscription{mb: mb, unsub: unsub}, nil
 }
 
-// Subscription is one subscriber's view of a run's event stream. It owns no
-// goroutine: the caller drives it with Next.
 type Subscription struct {
 	mb    *eventMailbox
 	unsub func()
 }
 
-// Next blocks until the next frame is available and returns it. ok is false
-// once the stream is finished or ctx is done.
 func (s *Subscription) Next(ctx context.Context) (ipc.Event, bool) { return s.mb.next(ctx) }
 
-// Close unsubscribes and releases every retained payload. It is idempotent.
 func (s *Subscription) Close() { s.unsub() }
 
-// StateRev returns the current monotonic state revision for a run.
-//
-// A caller serving an authoritative snapshot must sample this BEFORE reading
-// the database. Every producer writes state and only then broadcasts, so a
-// revision sampled first is never newer than the snapshot that follows it:
-// every event at or below it is already reflected in that read, and every
-// event above it still reaches the subscriber and still applies on top.
 func (m *RunManager) StateRev(runID string) int64 {
 	m.subMu.Lock()
 	defer m.subMu.Unlock()
 	return m.stateRevs[runID]
 }
 
-// broadcast stamps a state revision and publishes an event to every subscriber
-// of the event's run. It performs no blocking channel operation and no I/O, so
-// the executor can never be stalled by a slow or dead subscriber.
 func (m *RunManager) broadcast(event ipc.Event) {
 	m.subMu.Lock()
 	defer m.subMu.Unlock()
@@ -733,37 +684,10 @@ func (m *RunManager) broadcast(event ipc.Event) {
 	}
 }
 
-// sweepRunWorktreeProcesses terminates whatever is still standing in a
-// finished run's worktree. Cancelling the run context tears down each step's
-// process group, but a descendant that called setsid(2) is no longer in any
-// group the pipeline can name - only the worktree it is standing in still
-// identifies it (see internal/procreap).
-//
-// The run's own worktree is what the sweep is pointed at, so a placement
-// outside the default tree needs no configuration lookup and cannot be hidden
-// by a worktree_roots edit made while the run was executing. The ordering rule
-// and its rationale live on procreap.SweepRunWorktree, which every removal site
-// in every package goes through.
 func (m *RunManager) sweepRunWorktreeProcesses(repoID, runID, wtDir string) {
 	procreap.SweepRunWorktree(m.paths.WorktreesDir(), repoID, runID, wtDir, "run_cleanup")
 }
 
-// cleanupRunEvidence tidies up after one finished run, then bounds the whole
-// evidence directory, the run's own step-log directory (see reapRunLogs), and
-// any leftover run worktree that immediate removal did not clear (see
-// reapWorktrees).
-//
-// The per-run half is deliberately os.Remove and not os.RemoveAll: it succeeds
-// only when the directory is empty, so a run that produced no artifact leaves
-// nothing behind while a run that did keeps every file. The test step creates
-// the directory before the agent decides whether it has evidence to write, so
-// without this nearly every run left a permanent empty directory - that alone
-// was the overwhelming majority of the accumulation this reaper exists to stop.
-//
-// The sweeps that follow keep a long-lived daemon converging on both retention
-// budgets instead of waiting for a restart. All of this is best effort: losing
-// a cleanup pass costs disk, while failing a finished run over it would cost
-// the user their result.
 func (m *RunManager) cleanupRunEvidence(cfg *config.Config, runID string) {
 	configured := ""
 	policy := evidenceReapPolicy{
@@ -800,14 +724,6 @@ func (m *RunManager) cleanupRunEvidence(cfg *config.Config, runID string) {
 	reapRunLogs(m.db, m.paths.LogsDir(), policy, now)
 }
 
-// removeRunWorktree sweeps processes before deciding whether to remove the
-// directory, so refusal retention cannot keep escaped workers alive.
-//
-// Every removal of a run worktree this package performs goes through here, and
-// none calls git.WorktreeRemove directly, because the ordering is easy to forget
-// at one site and invisible when forgotten - a run whose setup failed, whose
-// execution returned, or which was resumed after a crash all reach this point by
-// different routes. reason distinguishes the routes in the log.
 func (m *RunManager) removeRunWorktree(repoID, runID, gateDir, wtDir, reason string) {
 	m.sweepRunWorktreeProcesses(repoID, runID, wtDir)
 	run, err := m.db.GetRun(runID)
@@ -824,10 +740,6 @@ func (m *RunManager) removeRunWorktree(repoID, runID, gateDir, wtDir, reason str
 	}
 }
 
-// closeSubscribers soft-closes every subscriber for a run and marks the run
-// completed so future Subscribe calls return a gapped, immediately-finished
-// subscription. Soft close still drains queued frames and any pending gap, so
-// a coalesced terminal transition cannot be discarded by completion.
 func (m *RunManager) closeSubscribers(runID string) {
 	m.subMu.Lock()
 	defer m.subMu.Unlock()
@@ -847,19 +759,6 @@ func (m *RunManager) closeSubscribers(runID string) {
 	}
 }
 
-// ownedGateRepoID extracts the repo id from a gate path and refuses a gate this
-// root does not own. Defense in depth behind paths.ForGate, which resolves a
-// hook call's root from the gate path itself: the gate path carries the root
-// that owns it, but repoIDFromGatePath keeps only the basename, so a caller
-// that handed this daemon a gate under a different root - a hand-run CLI or a
-// direct IPC client - would otherwise re-resolve that id under this daemon's
-// own root, admitting or validating a foreign repository's push against local
-// state. The --gate value arrives absolute and symlink-resolved from git
-// rev-parse while the owned path is built from NM_HOME exactly as spelled, so
-// compare through sameGateDir - canonicalRoot's "same root" (relative against
-// absolute, symlinked against real, /var -> /private/var on macOS, case on
-// Windows) plus a filesystem identity check for spellings that differ only in
-// letter case on a case-insensitive volume - rather than textually.
 func ownedGateRepoID(p *paths.Paths, gate string) (string, error) {
 	repoID, err := repoIDFromGatePath(gate)
 	if err != nil {
@@ -871,13 +770,6 @@ func ownedGateRepoID(p *paths.Paths, gate string) (string, error) {
 	return repoID, nil
 }
 
-// sameGateDir reports whether two paths name the same gate directory. The
-// canonical spellings are compared first; when they differ, the two directories
-// must be the same on-disk object (os.SameFile). That follows the filesystem's
-// own case rule: a macOS home registered as /Users/Name but stored as
-// /Users/name resolves to one directory, while on a case-sensitive volume the
-// same two spellings are different directories and stay refused. A path that
-// cannot be stat'ed is never the same, so the guard stays fail-closed.
 func sameGateDir(a, b string) bool {
 	if canonicalRoot(a) == canonicalRoot(b) {
 		return true
@@ -893,8 +785,6 @@ func sameGateDir(a, b string) bool {
 	return os.SameFile(infoA, infoB)
 }
 
-// repoIDFromGatePath extracts the repo ID from a gate bare repo path.
-// Gate paths look like: <root>/repos/<id>.git
 func repoIDFromGatePath(gatePath string) (string, error) {
 	base := filepath.Base(gatePath)
 	if !strings.HasSuffix(base, ".git") {
@@ -903,23 +793,10 @@ func repoIDFromGatePath(gatePath string) (string, error) {
 	return strings.TrimSuffix(base, ".git"), nil
 }
 
-// branchFromRef extracts the branch name from a full git ref.
-// "refs/heads/main" → "main", "main" → "main"
 func branchFromRef(ref string) string {
 	return strings.TrimPrefix(ref, "refs/heads/")
 }
 
-// loadTrustedRepoConfig reads .no-mistakes.yaml from the trusted
-// default-branch commit (trustedSHA - the exact SHA startRun just fetched and
-// resolved) in the worktree and parses it. Reading at a pinned SHA, rather
-// than the origin/<defaultBranch> remote-tracking ref, closes the stale-ref
-// hole: the gate worktree shares refs with the bare repo, so without a fresh
-// fetch + resolve the ref could point at a commit a previous run left behind.
-//
-// trustedSHA is empty when the default branch is unknown, the fetch failed,
-// or the ref did not resolve. The caller must first reject those cases with
-// assertGateTrustedConfigReadable; returning nil here remains defensive and
-// ensures EffectiveRepoConfig never uses pushed gate-control fields.
 func loadTrustedRepoConfig(ctx context.Context, wtDir, trustedSHA, runID string) *config.RepoConfig {
 	if trustedSHA == "" {
 		// No trusted SHA means no freshly-fetched default-branch commit to
@@ -945,29 +822,10 @@ func loadTrustedRepoConfig(ctx context.Context, wtDir, trustedSHA, runID string)
 	return trusted
 }
 
-// assertGateTrustedConfigReadable fails a run LOUD when the trusted
-// default-branch copy of .no-mistakes.yaml could not be READ at all. This is the
-// security correction for disable_project_settings: that field is a boundary
-// honored only from the trusted copy, so an unreadable trusted config must NOT
-// be silently treated as "not opted out" - no-mistakes cannot know whether the
-// repo relies on the boundary, so it refuses to run rather than risk launching a
-// gate agent with the project instructions loaded.
-//
-// It distinguishes "could not read the trusted config at all" (abort) from
-// "read the trusted tree fine, there is simply no .no-mistakes.yaml on the
-// default branch" (the common ordinary-repo case, which is NOT opted out and
-// must proceed). Abort cases:
-//   - no known default branch to read a trusted copy from,
-//   - the default branch could not be fetched/resolved to a pinned SHA,
-//   - the pinned commit or tree is not readable (missing object / partial fetch),
-//   - the trusted .no-mistakes.yaml is present but unreadable or unparseable.
 func assertGateTrustedConfigReadable(ctx context.Context, wtDir, defaultBranch, trustedSHA string) error {
 	return assertTrustedConfigReadable(ctx, wtDir, defaultBranch, trustedSHA, "disable_project_settings")
 }
 
-// assertTrustedConfigReadable owns the fail-closed read of the freshly fetched
-// default-branch config. Callers name the policy they are evaluating so the
-// same trust proof retains an actionable diagnostic at each consumer seam.
 func assertTrustedConfigReadable(ctx context.Context, wtDir, defaultBranch, trustedSHA, policy string) error {
 	if defaultBranch == "" {
 		return fmt.Errorf("cannot evaluate %s: repository has no known default branch to read trusted config from", policy)
@@ -995,15 +853,10 @@ func assertTrustedConfigReadable(ctx context.Context, wtDir, defaultBranch, trus
 	return nil
 }
 
-// HandlePushReceived processes a push notification from the post-receive hook.
-// A proof-mode push creates an unclaimed row: the first matching observer
-// receives the sole `created` disposition by atomically claiming it.
 func (m *RunManager) HandlePushReceived(ctx context.Context, params *ipc.PushReceivedParams) (string, error) {
 	return m.handlePushReceived(ctx, params, false)
 }
 
-// handlePushReceived is HandlePushReceived; fromReplay marks a push an
-// earlier daemon held, which replayHeldPushes starts ahead of fresh pushes.
 func (m *RunManager) handlePushReceived(ctx context.Context, params *ipc.PushReceivedParams, fromReplay bool) (string, error) {
 	var identityErr error
 	ctx, identityErr = submittedIdentityContext(ctx, params.CommitIdentity)
@@ -1071,8 +924,6 @@ func (m *RunManager) handlePushReceived(ctx context.Context, params *ipc.PushRec
 	return runID, err
 }
 
-// HandleStartFreshRun creates or replays a proof-mode launch only after
-// checking the creation context under the repository/branch lock.
 func (m *RunManager) HandleStartFreshRun(ctx context.Context, params *ipc.StartFreshRunParams) (ipc.LaunchReceipt, error) {
 	var identityErr error
 	ctx, identityErr = submittedIdentityContext(ctx, params.CommitIdentity)
@@ -1092,9 +943,6 @@ func (m *RunManager) HandleStartFreshRun(ctx context.Context, params *ipc.StartF
 	return m.startFreshLaunch(ctx, repo, params.Branch, params.HeadSHA, "", m.paths.RepoDir(repo.ID), params.SkipSteps, params.Intent, params.LaunchNonce, params.ValidationGeneration, params.PRBaseBranch, params.OmitIntent, "fresh", params.VerificationPlanID, params.ClosingIssueRefs, db.RunPRText{Title: params.PRTitle, Body: params.PRBody}, params.TranscriptHomes, params.PiProfile, params.ReviewerProfile)
 }
 
-// startFreshLaunch owns proof identity under the branch lock. A nonce may
-// replay only its immutable submitted-head, generation, and persisted-intent
-// digest. It must never fall back to ordinary same-head reattachment.
 func (m *RunManager) startFreshLaunch(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, gateDir string, skipSteps []types.StepName, intent, launchNonce, validationGeneration, prBaseBranch string, omitIntent bool, trigger, planID string, closingIssues []string, prText db.RunPRText, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (ipc.LaunchReceipt, error) {
 	request := agentcfg.OptionalPiProfile(profiles)
 	if err := request.ValidateRequest(); err != nil {
@@ -1269,9 +1117,6 @@ func conflictingLaunchPRText(launchNonce string) error {
 	return fmt.Errorf("conflicting launch_nonce %q is already bound to a different supplied PR title or description", launchNonce)
 }
 
-// normalizeRunPRText re-checks the caller-supplied PR text the CLI already
-// validated: the push hook and IPC are boundaries a request can cross without
-// that CLI.
 func normalizeRunPRText(prText db.RunPRText) (db.RunPRText, error) {
 	title, err := steps.NormalizeRunPRTitle(prText.Title)
 	if err != nil {
@@ -1337,15 +1182,6 @@ func receiptForRun(run *db.Run, created bool) (ipc.LaunchReceipt, error) {
 	}, nil
 }
 
-// HandleRerun creates a new run for the latest recoverable head on a branch:
-// normally the gate branch, or the latest terminal run's verified unpublished
-// head while custody remains outstanding. An explicit intent overrides the
-// selected run. Otherwise an authoritative intent is inherited byte-for-byte;
-// runs without one infer intent afresh. The selected run's PR URL is inherited
-// when that PR is not already merged or closed, so a later --base-branch
-// retarget can prove it is moving the same still-open review object.
-// A supplied clean caller head must match the selected head before any run
-// starts or is superseded. It never changes head selection.
 func (m *RunManager) HandleRerun(ctx context.Context, repoID, branch, previousRunID string, skipSteps []types.StepName, intent, prBaseBranch string, omitIntent bool, callerHeadSHA, planID string, closingIssues []string, prText db.RunPRText, profiles ...agentcfg.RunSelection) (string, error) {
 	return m.handleRerun(ctx, repoID, branch, previousRunID, skipSteps, intent, prBaseBranch, omitIntent, callerHeadSHA, planID, closingIssues, prText, false, nil, profiles...)
 }
@@ -1447,8 +1283,6 @@ func (m *RunManager) handleRerun(ctx context.Context, repoID, branch, previousRu
 	return m.startRunWithIntentSource(ctx, repo, branch, headSHA, baseSHA, "rerun", skipSteps, intent, intentSource, storedPRBaseBranch, selectedRun.OmitIntent || omitIntent, inheritablePRURL(selectedRun), planID, closingIssues, inheritRunPRText(selectedRun, prText), homes, profiles...)
 }
 
-// inheritRunPRText keeps the selected run's supplied PR text, field by field,
-// unless this request supplies a replacement.
 func inheritRunPRText(run *db.Run, requested db.RunPRText) db.RunPRText {
 	inherited := db.RunPRText{}
 	if run != nil && run.PRTitle != nil {
@@ -1521,12 +1355,6 @@ func resolveRerunHead(ctx context.Context, gateDir, branch string, latest *db.Ru
 	return "", fmt.Errorf("refusing rerun from stale gate head %s: terminal run %s recorded unpublished head %s, but that head is unavailable; inspect with `no-mistakes axi status` and reconcile custody first", gateHead, latest.ID, latest.HeadSHA)
 }
 
-// fetchRunDefaultBranch fetches the trusted branch from the refreshed
-// registration when it differs from the gate worktree's inherited origin. It
-// updates only the run worktree's existing origin tracking ref and never
-// rewrites clone or gate remote configuration. When the values agree after
-// redaction, origin remains authoritative so embedded credentials retained in
-// the gate can still authenticate without ever entering the database.
 func fetchRunDefaultBranch(ctx context.Context, workDir string, repo *db.Repo) error {
 	originURL, err := git.GetRemoteURL(ctx, workDir, "origin")
 	if !repo.URLsVerified || (err == nil && safeurl.Redact(originURL) == repo.UpstreamURL) {
@@ -1535,10 +1363,6 @@ func fetchRunDefaultBranch(ctx context.Context, workDir string, repo *db.Repo) e
 	return git.FetchRemoteBranchToRef(ctx, workDir, repo.UpstreamURL, repo.DefaultBranch, "refs/remotes/origin/"+repo.DefaultBranch)
 }
 
-// fetchTrustedDefaultBranchSHA imports the live default branch into a
-// caller-owned private ref on the gate. It does not rewrite origin tracking
-// refs, FETCH_HEAD, or any shared worktree ref, so a refused Pi pin cannot
-// perturb an in-flight validation that must stay running.
 var fetchIntentTrustedDefaultBranchSHA = fetchTrustedDefaultBranchSHA
 
 func fetchTrustedDefaultBranchSHA(ctx context.Context, gateDir string, repo *db.Repo, purpose string) (string, error) {
@@ -1566,13 +1390,6 @@ func fetchTrustedDefaultBranchSHA(ctx context.Context, gateDir string, repo *db.
 	return sha, nil
 }
 
-// validatePiProfileAgentsBeforeCancel loads the effective trusted repo agent
-// selection (and, when allow_repo_commands is set, the pushed copy) from the
-// gate and runs the same check ValidatePiProfileAgents will run after merge.
-// A trusted default-branch Claude or mixed fallback list must fail here, not
-// after cancelActiveRuns has already stopped a healthy validation. This is also
-// the first point where a trusted repository Pi override can replace a global
-// auto or non-Pi selection, so profile resolution must not reject it earlier.
 func (m *RunManager) validatePiProfileAgentsBeforeCancel(ctx context.Context, repo *db.Repo, headSHA string, globalCfg *config.GlobalConfig, reviewers ...*agentcfg.ReviewerProfile) error {
 	cfg, _, err := m.effectiveConfigBeforeRun(ctx, repo, headSHA, globalCfg, "Pi run profile")
 	if err != nil {
@@ -1586,9 +1403,6 @@ func (m *RunManager) validatePiProfileAgentsBeforeCancel(ctx context.Context, re
 	return cfg.ValidatePiProfileAgents()
 }
 
-// applyPinnedIntentCheck makes an existing run keep the policy under which it
-// was admitted. Historical rows without a snapshot remain off rather than
-// acquiring a new admission rule during recovery.
 func applyPinnedIntentCheck(cfg *config.Config, run *db.Run) error {
 	if cfg == nil || run == nil {
 		return fmt.Errorf("cannot restore intent check without run configuration")
@@ -1625,9 +1439,6 @@ func (m *RunManager) effectiveIntentCheckBeforeRun(ctx context.Context, repo *db
 	return config.MergeIntentChecks(global.Intent.Check, trusted), nil
 }
 
-// effectiveConfigBeforeRun resolves the configuration a run at headSHA would
-// get, from the gate and a privately fetched trusted default branch, before
-// any run is created or superseded. purpose names the caller in errors.
 func (m *RunManager) effectiveConfigBeforeRun(ctx context.Context, repo *db.Repo, headSHA string, globalCfg *config.GlobalConfig, purpose string) (*config.Config, *config.RepoConfig, error) {
 	gateDir := m.paths.RepoDir(repo.ID)
 	trustedSHA, err := fetchTrustedDefaultBranchSHA(ctx, gateDir, repo, purpose)
@@ -1641,8 +1452,6 @@ func (m *RunManager) effectiveConfigBeforeRun(ctx context.Context, repo *db.Repo
 	return config.MergeForRemote(globalCfg, effective, repo.UpstreamURL), effective, nil
 }
 
-// effectiveRepoConfigAt resolves the repository configuration a run at headSHA
-// gets under the trusted default-branch commit trustedSHA.
 func effectiveRepoConfigAt(ctx context.Context, gateDir string, repo *db.Repo, trustedSHA, headSHA, purpose string) (*config.RepoConfig, error) {
 	if err := assertTrustedConfigReadable(ctx, gateDir, repo.DefaultBranch, trustedSHA, purpose); err != nil {
 		return nil, err
@@ -1681,21 +1490,14 @@ func loadRepoConfigAtSHA(ctx context.Context, dir, sha, purpose string) (*config
 	return cfg, nil
 }
 
-// startRun creates a run, sets up a worktree, and launches pipeline execution.
-// A non-empty intent is stamped onto the run as agent-supplied, so the intent
-// step uses it instead of inferring from transcripts.
 func (m *RunManager) startRun(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, trigger string, skipSteps []types.StepName, intent, prBaseBranch string, omitIntent bool, planID string, closingIssues []string, profiles ...agentcfg.RunSelection) (string, error) {
 	return m.startRunWithPRText(ctx, repo, branch, headSHA, baseSHA, trigger, skipSteps, intent, prBaseBranch, omitIntent, planID, closingIssues, db.RunPRText{}, nil, profiles...)
 }
 
-// startRunWithPRText is startRun with caller-supplied PR text.
 func (m *RunManager) startRunWithPRText(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, trigger string, skipSteps []types.StepName, intent, prBaseBranch string, omitIntent bool, planID string, closingIssues []string, prText db.RunPRText, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (string, error) {
 	return m.startRunWithIntentSource(ctx, repo, branch, headSHA, baseSHA, trigger, skipSteps, intent, db.RunIntentSourceAgent, prBaseBranch, omitIntent, "", planID, closingIssues, prText, homes, profiles...)
 }
 
-// startRunWithIntentSource is the common run-creation path. source is empty
-// when no intent is supplied, RunIntentSourceAgent for a new explicit
-// override, and RunIntentSourceRerun for inherited explicit intent.
 func (m *RunManager) startRunWithIntentSource(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, trigger string, skipSteps []types.StepName, intent, source, prBaseBranch string, omitIntent bool, inheritedPRURL, planID string, closingIssues []string, prText db.RunPRText, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (string, error) {
 	return m.withBranchLock(repo.ID, branch, func() (string, error) {
 		return m.startRunWithIntentSourceLocked(ctx, repo, branch, headSHA, baseSHA, trigger, skipSteps, intent, source, "", "", "", prBaseBranch, omitIntent, inheritedPRURL, planID, closingIssues, prText, nil, homes, profiles...)
@@ -1711,9 +1513,6 @@ func (m *RunManager) withBranchLock(repoID, branch string, action func() (string
 	return action()
 }
 
-// startRunWithIntentSourceLocked performs run creation while the caller owns
-// the repository/branch lock. Proof fields are empty for ordinary launches,
-// and retry is nil for every run that does not continue a failed one.
 func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, trigger string, skipSteps []types.StepName, intent, source, launchNonce, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, inheritedPRURL, planID string, closingIssues []string, prText db.RunPRText, retry *retryLaunch, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (string, error) {
 	sequence := m.reserveAdmission()
 	defer m.releaseAdmission(sequence)
@@ -1874,8 +1673,6 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 		}
 	}
 
-	// Resolve provenance before superseding a healthy run. A retry keeps the
-	// original binding even when the checkout or caller environment changed.
 	var identity git.CommitIdentity
 	var identityErr error
 	if retry != nil {
@@ -2350,26 +2147,8 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 	return run.ID, nil
 }
 
-// evalAutoCaptureTimeout bounds one automatic collection pass. Collection is
-// local Git and SQLite work whose slowest step is seeding a repository's object
-// pool the first time it is seen, so this is generous rather than tight; the
-// pass also stops early with the run context, which Shutdown cancels.
 const evalAutoCaptureTimeout = 3 * time.Minute
 
-// autoCaptureEvalCase freezes a finished run's review passes into the local
-// eval corpus.
-//
-// Everything here is subordinate to the run: collection can be slow, can fail,
-// can find nothing, and none of that may reach the pipeline. So it swallows its
-// own panic rather than letting the run goroutine's recover mark a completed
-// run as failed, it bounds its own time, and it reports failure only to the
-// log. Runs are serialized against each other because they share one object
-// pool and one registry file; the wait is harmless, since every run holding
-// this lock has already finished its pipeline.
-//
-// A run with nothing to collect is the common case (no review step, a skipped
-// gate, rounds recorded before provenance was on), so that outcome is DEBUG.
-// Only a genuine capture fault is worth a warning.
 func (m *RunManager) autoCaptureEvalCase(ctx context.Context, cfg *config.Config, runID string) {
 	if cfg == nil || !cfg.Eval.AutoCapture || !cfg.Eval.CaptureProvenance {
 		return
@@ -2405,16 +2184,6 @@ func (m *RunManager) autoCaptureEvalCase(ctx context.Context, cfg *config.Config
 	}
 }
 
-// autoIngestCIFalseNegatives writes false-negative gold for a finished run's
-// fixed CI findings onto its green review case. Any real code defect CI
-// surfaces (a failing ci-check or a review-bot comment), confirmed and fixed in
-// the run, is by definition a Review false negative: Review passed green and
-// missed it.
-//
-// Like autoCaptureEvalCase it is subordinate to the run: it swallows its own
-// panic, bounds its own time, shares the eval mutex so it never races capture,
-// and reports failure only to the log. It reads the CI findings the pipeline
-// already persisted per round, so it never fabricates a case.
 func (m *RunManager) autoIngestCIFalseNegatives(ctx context.Context, cfg *config.Config, runID string) {
 	if cfg == nil || !cfg.Eval.AutoCapture || !cfg.Eval.CaptureProvenance {
 		return
@@ -2482,10 +2251,6 @@ func (m *RunManager) relabelEvalRun(ctx context.Context, cfg *config.Config, run
 	}
 }
 
-// addRunPerformanceSummary attaches the bounded per-run performance rollup
-// to the terminal "run finished" event: low-cardinality counts only. The
-// detailed per-invocation evidence (session keys, models, timings, tokens)
-// stays in the local agent_invocations table and is never sent remotely.
 func addRunPerformanceSummary(database *db.DB, runID string, fields telemetry.Fields) {
 	summary, err := database.AgentInvocationSummaryForRun(runID)
 	if err != nil {
@@ -2519,15 +2284,11 @@ func telemetryFailedStepName(database *db.DB, runID string) string {
 	return ""
 }
 
-// HandleRespond routes a gate response to the executor for the given run.
 func (m *RunManager) HandleRespond(runID string, step types.StepName, action types.ApprovalAction, findingIDs []string) error {
 	_, err := m.HandleRespondWithOverrides(runID, step, action, findingIDs, nil, nil, nil, "")
 	return err
 }
 
-// HandleRespondWithOverrides is like HandleRespond but also forwards explicit
-// declines, user instructions, and user-authored findings to the executor, and
-// returns the dispositions the response recorded.
 func (m *RunManager) HandleRespondWithOverrides(runID string, step types.StepName, action types.ApprovalAction, findingIDs, ignoreFindingIDs []string, instructions *pipeline.FixInstructions, addedFindings []types.Finding, approvalReason string, options ...pipeline.ResponseOptions) (pipeline.RespondDispositions, error) {
 	release, err := m.beginGateResponse()
 	if err != nil {
@@ -2545,35 +2306,6 @@ func (m *RunManager) HandleRespondWithOverrides(runID string, step types.StepNam
 	return exec.RespondWithOverrides(step, action, findingIDs, ignoreFindingIDs, instructions, addedFindings, approvalReason, options...)
 }
 
-// HandleAnswerReviewQuestion records one operator answer to a question the
-// run's reviewer asked, and releases the review gate once nothing is left
-// open.
-//
-// The three outcomes are all correct and all expected:
-//
-//   - the reviewer is still working (no gate parked yet). The answer is
-//     durably appended and the reviewer reads it at its next checkpoint, which
-//     is the whole point of emitting questions mid-turn: an early answer can
-//     redirect the pass instead of arriving after the effort is spent.
-//   - the reviewer has parked in waiting-on-answers. Once this answer closes
-//     the last open question, types.ActionAnswer resumes the reviewer's own
-//     session with the answers. That is the push the captain required: nothing
-//     polls, and the reviewer receives a message it did not ask for.
-//   - this answer closed no question that was open before the append - an id
-//     nobody asked, or a correction sent after the last question was already
-//     answered. It is recorded and NO gate is released; see the wasOpen
-//     snapshot below, which exists because the open count alone would let such
-//     an answer steal the verdict on a gate parked on ordinary findings.
-//
-// Every answer is stamped with the ask it settles, so a correction binds to the
-// already-settled ask instead of pre-answering a later re-ask of the same id.
-// The two ways that stamp cannot be trusted are refused before anything is
-// written, and they stay distinguishable from each other and from the third
-// outcome above: a conversation that cannot be READ AT ALL, and one whose
-// question history could not be read TO THE END.
-//
-// The write happens before the release decision, so a failure to resume never
-// loses the answer - the next answer, or a recovered gate, finds it on disk.
 func (m *RunManager) HandleAnswerReviewQuestion(runID, questionID, answer, answeredBy string) (*ipc.AnswerReviewQuestionResult, error) {
 	release, err := m.beginGateResponse()
 	if err != nil {
@@ -2705,8 +2437,6 @@ func (m *RunManager) HandleAnswerReviewQuestion(runID, questionID, answer, answe
 	return result, nil
 }
 
-// Shutdown cancels all active runs. Called during daemon shutdown to prevent
-// orphaned goroutines from continuing agent calls and git operations.
 func (m *RunManager) Shutdown() {
 	m.shuttingDown.Store(true)
 
@@ -2744,9 +2474,6 @@ func (m *RunManager) Shutdown() {
 	}
 }
 
-// HandleCancel stops an active run and propagates cancellation to the executor.
-// A queued run is removed and recorded cancelled without starting or resuming
-// its executor.
 func (m *RunManager) HandleCancel(runID string) error {
 	m.mu.Lock()
 	if qe, ok := m.extractQueuedLocked(runID); ok {
@@ -2907,11 +2634,6 @@ func (m *RunManager) HandleHandoff(ctx context.Context, runID string) error {
 	}
 }
 
-// cancelActiveRuns cancels any in-progress runs for the given repo+branch
-// and waits for their goroutines to finish before returning, preventing
-// concurrent pushes to upstream.
-// The cancellation cause is propagated to the executor via context.Cause,
-// which uses it as the run's error message in the DB.
 func (m *RunManager) cancelActiveRuns(repoID, branch string) {
 	runs, err := m.db.GetRunsByRepo(repoID)
 	if err != nil {

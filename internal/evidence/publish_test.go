@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// Ambient GIT_CONFIG_* injection from agent harnesses would leak into every
-// git call these tests make, so drop it for the package.
 func TestMain(m *testing.M) {
 	os.Unsetenv("GIT_CONFIG_COUNT")
 	// Fixtures must not depend on the machine's system git config: some
@@ -53,8 +51,6 @@ func runGitFails(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// newRepoWithRemote builds a bare remote plus a working clone holding one
-// commit on main, which is what a repository looks like when a run starts.
 func newRepoWithRemote(t *testing.T) (remote, work string) {
 	t.Helper()
 	root := t.TempDir()
@@ -386,18 +382,6 @@ func TestPublish_ReportsPublishedFilesRelativeToTheSourceDirectory(t *testing.T)
 	}
 }
 
-// TestPublish_ExcludedDirectoryIsNeverCollected covers the boundary the review
-// conversation depends on. Its files live in the run's evidence directory - the
-// PR step's `ExcludeDirs` names them - but they are NOT test evidence: publishing
-// them would put the operator's questions and answers on the orphan branch
-// permanently, with none of the bounding the deliberate PR-body rendering
-// applies.
-//
-// The exclusion has to skip the directory WHOLE, not filter its files out at the
-// end, because an excluded file must not count against the publication budgets
-// either. So this also writes an oversized excluded file: it would fail the
-// whole publish if the walk still looked at it, taking the real evidence down
-// with it.
 func TestPublish_ExcludedDirectoryIsNeverCollected(t *testing.T) {
 	remote, work := newRepoWithRemote(t)
 	source := writeEvidence(t, t.TempDir(), map[string]string{
@@ -428,8 +412,6 @@ func TestPublish_ExcludedDirectoryIsNeverCollected(t *testing.T) {
 	}
 }
 
-// With the conversation the only content there is nothing to publish, and that
-// must be "no publication" rather than an empty commit on the branch.
 func TestPublish_ExcludedDirectoryAlonePublishesNothing(t *testing.T) {
 	remote, work := newRepoWithRemote(t)
 	source := writeEvidence(t, t.TempDir(), map[string]string{
@@ -450,11 +432,6 @@ func TestPublish_ExcludedDirectoryAlonePublishesNothing(t *testing.T) {
 	}
 }
 
-// Captured command output carries absolute paths under the operator's home, so
-// a text file gets the same home-directory redaction the PR body gets before it
-// reaches the branch. A binary artifact and the local file are left as written.
-// Each binary fixture trips exactly one of the two binary checks, so removing
-// either check fails this test.
 func TestPublish_RedactsHomePathsInTextEvidence(t *testing.T) {
 	remote, work := newRepoWithRemote(t)
 	binaries := map[string]string{

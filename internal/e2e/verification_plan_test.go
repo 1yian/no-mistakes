@@ -18,8 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The product under test is the real CLI/daemon/gate. The agent is a controlled
-// process boundary: its invocation log proves precisely which bytes it received.
 func TestVerificationPlanLaunchAndReattach(t *testing.T) {
 	for _, proof := range []bool{false, true} {
 		t.Run(fmt.Sprintf("proof=%t", proof), func(t *testing.T) {

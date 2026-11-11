@@ -15,8 +15,6 @@ const declinedTestFindings = `{"findings":[` +
 	`{"id":"journal-version-deduplication","severity":"error","file":"x.js","line":497,` +
 	`"description":"dedup checks only the last event; check all prior events instead","action":"ask-user"}]}`
 
-// runGateAndRespond drives one review gate to the given resolution and returns
-// the review step's rounds.
 func runGateAndRespond(t *testing.T, action types.ApprovalAction, findings string) []*db.StepRound {
 	t.Helper()
 	database, p, run, repo := setupTest(t)
@@ -59,10 +57,6 @@ func runGateAndRespond(t *testing.T, action types.ApprovalAction, findings strin
 	return nil
 }
 
-// A human who resolves a gate without picking anything to fix has still made a
-// decision. Before this was recorded, that resolution left no finding-level
-// trace at all, so nothing downstream could tell "the human declined every
-// finding" from "there were no findings".
 func TestExecutor_GateResolutionsWithoutASelectionRecordTheDecline(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -84,8 +78,6 @@ func TestExecutor_GateResolutionsWithoutASelectionRecordTheDecline(t *testing.T)
 			if r.SelectedFindingIDs == nil || *r.SelectedFindingIDs != db.DeclinedSelectionJSON {
 				t.Fatalf("selected_finding_ids = %v, want %q", r.SelectedFindingIDs, db.DeclinedSelectionJSON)
 			}
-			// The decline must be derivable as the complement, which needs the
-			// round's findings to stay intact.
 			var parsed struct {
 				Findings []struct {
 					ID string `json:"id"`
@@ -104,9 +96,6 @@ func TestExecutor_GateResolutionsWithoutASelectionRecordTheDecline(t *testing.T)
 	}
 }
 
-// Recovery must preserve the same decision semantics as the live executor.
-// Otherwise a daemon restart while parked would silently reopen the original
-// drift path for approve, skip, and abort.
 func TestExecutor_RecoveredGateResolutionsWithoutASelectionRecordTheDecline(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -183,9 +172,6 @@ func TestExecutor_RecoveredGateResolutionsWithoutASelectionRecordTheDecline(t *t
 	}
 }
 
-// A response recorded before a daemon restart leaves the same declined round
-// parked. A retry must refresh that round's caller origin rather than silently
-// keeping the first response's provenance.
 func TestExecutor_RecoveredIgnoreOnlyResponseUpdatesDeclinedRoundOrigin(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {
@@ -275,8 +261,6 @@ func TestExecutor_RecoveredIgnoreOnlyResponseUpdatesDeclinedRoundOrigin(t *testi
 	}
 }
 
-// A round that produced nothing to decide about must not be labelled a
-// decision, or every clean step would render as a decline.
 func TestExecutor_GateResolutionWithNoFindingsRecordsNoDecision(t *testing.T) {
 	rounds := runGateAndRespond(t, types.ActionApprove, `{"findings":[]}`)
 	if len(rounds) != 1 {
@@ -287,7 +271,6 @@ func TestExecutor_GateResolutionWithNoFindingsRecordsNoDecision(t *testing.T) {
 	}
 }
 
-// Choosing to fix is still recorded as a selection, not as a decline.
 func TestExecutor_FixResolutionStillRecordsAUserSelection(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

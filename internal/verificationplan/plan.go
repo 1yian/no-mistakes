@@ -1,4 +1,3 @@
-// Package verificationplan owns opt-in, local-only run input snapshots.
 package verificationplan
 
 import (
@@ -16,8 +15,6 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// Snapshot identifies captured evidence, never instructions or user intent.
-// ID reserves the future run ID so an attachment cannot be rebound to a second run.
 type Snapshot struct {
 	ID         string `json:"id"`
 	Path       string `json:"path"`
@@ -33,8 +30,6 @@ type capture struct {
 	HeadSHA string `json:"head_sha"`
 }
 
-// Capture reads the source once, before any branch mutation. The manifest binds
-// this input to the proposed launch; neither launch nor recovery reopens source.
 func Capture(root, source, repoID, branch, head string) (_ *Snapshot, err error) {
 	if !filepath.IsAbs(source) {
 		return nil, fmt.Errorf("verification plan source must be absolute")
@@ -99,7 +94,6 @@ func Capture(root, source, repoID, branch, head string) (_ *Snapshot, err error)
 	return &s, nil
 }
 
-// Resolve accepts only an application-owned capture for this exact launch.
 func Resolve(root, id, repoID, branch, head string) (*Snapshot, error) {
 	if id == "" {
 		return nil, nil
@@ -125,7 +119,6 @@ func Resolve(root, id, repoID, branch, head string) (*Snapshot, error) {
 	return &c.Snapshot, nil
 }
 
-// Read validates the pinned digest on every consumer, including recovery.
 func (s *Snapshot) Read() ([]byte, error) {
 	if s == nil {
 		return nil, nil

@@ -7,8 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// HasReviewFixRoundLimit identifies an exhausted Review budget. Automatic
-// resolvers must leave this gate for an explicit decision, never approve it.
 func HasReviewFixRoundLimit(raw string) bool {
 	return hasFindingID(raw, types.FindingIDReviewFixRoundsExhausted)
 }

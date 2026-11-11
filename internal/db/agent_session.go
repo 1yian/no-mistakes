@@ -2,12 +2,6 @@ package db
 
 import "fmt"
 
-// RunAgentSession is the minimum session-resume metadata for one durable
-// per-run, per-role agent session. Production resumes only the review-fixer
-// role; legacy reviewer rows remain readable for crash recovery but are never
-// resumed. Only the adapter-native session identity is stored - never prompts,
-// transcripts, or any conversation content - so the review loop can resume
-// its fixer session across parking and daemon process boundaries.
 type RunAgentSession struct {
 	RunID     string
 	Role      string
@@ -17,8 +11,6 @@ type RunAgentSession struct {
 	UpdatedAt int64
 }
 
-// UpsertRunAgentSession stores or replaces the session identity for a
-// run+role. A run has at most one session per role.
 func (d *DB) UpsertRunAgentSession(runID, role, agent, sessionID string) error {
 	ts := now()
 	_, err := d.sql.Exec(
@@ -33,7 +25,6 @@ func (d *DB) UpsertRunAgentSession(runID, role, agent, sessionID string) error {
 	return nil
 }
 
-// GetRunAgentSessions returns all stored session identities for a run.
 func (d *DB) GetRunAgentSessions(runID string) ([]RunAgentSession, error) {
 	rows, err := d.sql.Query(
 		`SELECT run_id, role, agent, session_id, created_at, updated_at FROM run_agent_sessions WHERE run_id = ?`,
@@ -55,8 +46,6 @@ func (d *DB) GetRunAgentSessions(runID string) ([]RunAgentSession, error) {
 	return sessions, rows.Err()
 }
 
-// DeleteRunAgentSession drops one role's session identity so the next turn
-// starts a fresh same-role session (used after a failed resume).
 func (d *DB) DeleteRunAgentSession(runID, role string) error {
 	_, err := d.sql.Exec(`DELETE FROM run_agent_sessions WHERE run_id = ? AND role = ?`, runID, role)
 	if err != nil {

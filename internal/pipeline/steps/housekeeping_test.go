@@ -15,8 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// newHousekeepingContext builds a StepContext with a Shared scope, matching
-// how the executor wires steps at runtime.
 func newHousekeepingContext(t *testing.T, ag agent.Agent, workDir, baseSHA, headSHA string, cmds config.Commands) *pipeline.StepContext {
 	t.Helper()
 	sctx := newTestContextWithDBRecords(t, ag, workDir, baseSHA, headSHA, cmds)
@@ -24,10 +22,6 @@ func newHousekeepingContext(t *testing.T, ag agent.Agent, workDir, baseSHA, head
 	return sctx
 }
 
-// TestDocumentStep_CombinedPassCoversBothDutiesAndSplitsFindings proves the
-// combined pass asks for both duties in ONE invocation and routes each
-// finding category to its owning gate: documentation findings park the
-// document step, lint findings are stashed for the lint step.
 func TestDocumentStep_CombinedPassCoversBothDutiesAndSplitsFindings(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -67,7 +61,6 @@ func TestDocumentStep_CombinedPassCoversBothDutiesAndSplitsFindings(t *testing.T
 		t.Fatal("combined prompt lost the documentation placement policy")
 	}
 
-	// Document gate sees only the documentation finding.
 	var docFindings Findings
 	if err := json.Unmarshal([]byte(outcome.Findings), &docFindings); err != nil {
 		t.Fatalf("unmarshal document findings: %v", err)
@@ -93,10 +86,6 @@ func TestDocumentStep_CombinedPassCoversBothDutiesAndSplitsFindings(t *testing.T
 	}
 }
 
-// TestDocumentStep_ConfiguredLintCommandKeepsDocOnlyPrompt proves the
-// combined duty is only merged when lint would otherwise need its own agent
-// pass: with commands.lint configured the document prompt stays doc-only and
-// nothing is stashed.
 func TestDocumentStep_ConfiguredLintCommandKeepsDocOnlyPrompt(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -155,9 +144,6 @@ func TestDocumentStep_ConfiguredLintCommandKeepsLintCategorizedFindingInDocument
 	}
 }
 
-// TestLintStep_ConsumesCombinedResultWithoutAgentPass proves the lint step
-// reports the combined pass's lint findings with its own gate semantics and
-// pays no second agent invocation.
 func TestLintStep_ConsumesCombinedResultWithoutAgentPass(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -227,9 +213,6 @@ func TestLintStep_MalformedCombinedResultFailsClosed(t *testing.T) {
 	}
 }
 
-// TestLintStep_RunsOwnPassWithoutCombinedResult proves the lint duty is
-// never silently dropped: with no stashed result (document step skipped or
-// failed to produce trustworthy output) the lint step runs its own pass.
 func TestLintStep_RunsOwnPassWithoutCombinedResult(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -292,9 +275,6 @@ func TestDocumentStep_CombinedRetryDropsPriorLintResultWhenOutputIsUntrusted(t *
 	}
 }
 
-// TestLintStep_FixRoundReassessesWithOwnAgentPass proves a user-driven lint
-// fix round does not trust the stale combined result: the fix turn runs the
-// lint agent itself.
 func TestLintStep_FixRoundReassessesWithOwnAgentPass(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -318,10 +298,6 @@ func TestLintStep_FixRoundReassessesWithOwnAgentPass(t *testing.T) {
 	}
 }
 
-// TestPipeline_DocumentPlusLintIsOneAgentInvocation is the cold-start
-// regression: driving the real document and lint steps through the executor
-// with agent-driven lint used to cost two cold agent passes; the combined
-// pass must cost exactly one.
 func TestPipeline_DocumentPlusLintIsOneAgentInvocation(t *testing.T) {
 	t.Parallel()
 	workDir, baseSHA, headSHA := setupGitRepo(t)
@@ -371,9 +347,6 @@ func TestPipeline_DocumentPlusLintIsOneAgentInvocation(t *testing.T) {
 	}
 }
 
-// TestPipeline_ConfiguredLintCommandStaysFirstClassGate proves a configured
-// deterministic lint command still runs and its failure still parks the lint
-// step, unchanged by the combined pass.
 func TestPipeline_ConfiguredLintCommandStaysFirstClassGate(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

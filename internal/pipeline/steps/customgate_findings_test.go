@@ -28,7 +28,6 @@ func gateTestCommand(t *testing.T, dir, unixCommand, windowsCommand string) stri
 	return unixCommand
 }
 
-// The command writes the same protocol bytes a trusted repository check would.
 func gateReportCommand(t *testing.T, dir string, exitCode int) string {
 	t.Helper()
 	return gateTestCommand(

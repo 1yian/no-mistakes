@@ -754,9 +754,6 @@ func TestCIStep_OpenPRKeepsMonitoringAfterChecksPass(t *testing.T) {
 	}
 }
 
-// TestCIStep_EmptyChecksWithoutNoCIStaysNotReadyPastOldGracePeriod proves the
-// PR 607 failure mode is closed: a generic empty forge response never becomes
-// ready, even after the historical 60s grace period and longer timing windows.
 func TestCIStep_EmptyChecksWithoutNoCIStaysNotReadyPastOldGracePeriod(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -828,10 +825,6 @@ func TestCIStep_EmptyChecksWithoutNoCIStaysNotReadyPastOldGracePeriod(t *testing
 	}
 }
 
-// TestCIStep_EmptyChecksWithTrustedNoCIBecomesReady proves a positively
-// declared no-CI repository with zero checks returns the selected
-// all-checks-passed agent-facing result, with the declaration inspectable in
-// the log line.
 func TestCIStep_EmptyChecksWithTrustedNoCIBecomesReady(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -886,10 +879,6 @@ func TestCIStep_EmptyChecksWithTrustedNoCIBecomesReady(t *testing.T) {
 	}
 }
 
-// TestCIStep_DelayedCheckRegistrationStaysNotReadyUntilGreen replays the
-// delayed-registration path: empty forge results stay not-ready, pending
-// checks stay not-ready, failures stay failures, and only all-green becomes
-// ready.
 func TestCIStep_DelayedCheckRegistrationStaysNotReadyUntilGreen(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -997,8 +986,6 @@ func TestCIStep_DelayedCheckRegistrationStaysNotReadyUntilGreen(t *testing.T) {
 	}
 }
 
-// TestCIStep_DeclaredNoCIWithUnexpectedChecksHonorsThem proves no_ci never
-// waives registered pending or failing checks.
 func TestCIStep_DeclaredNoCIWithUnexpectedChecksHonorsThem(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -1100,10 +1087,6 @@ func TestCIStep_NonEmptyPassingChecksContinueMonitoring(t *testing.T) {
 	}
 }
 
-// TestCIStep_BaseBranchAdvanceRearmsTimeout verifies the monitor survives past
-// its original idle timeout when the base branch advances mid-monitoring: each
-// advance re-arms the deadline so a long-held green PR keeps getting watched
-// and rebased instead of being silently dropped.
 func TestCIStep_BaseBranchAdvanceRearmsTimeout(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -1169,9 +1152,6 @@ func TestCIStep_BaseBranchAdvanceRearmsTimeout(t *testing.T) {
 	}
 }
 
-// TestCIStep_StableBaseStillTimesOut verifies the timeout still fires normally
-// for a PR whose base branch never moves, preserving the bounded-monitoring
-// behavior for genuinely idle/abandoned PRs.
 func TestCIStep_StableBaseStillTimesOut(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -1370,9 +1350,6 @@ func TestCIStep_BaseTipResolverDeadlineIsBoundedByRemainingTimeout(t *testing.T)
 	}
 }
 
-// TestCIStep_UnlimitedTimeoutNeverExpires verifies that an unlimited timeout
-// (ci_timeout: "unlimited" / non-positive) makes the monitor watch until the
-// PR merges or closes, never self-terminating, and skips base-tip polling.
 func TestCIStep_UnlimitedTimeoutNeverExpires(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -1432,10 +1409,6 @@ func TestCIStep_UnlimitedTimeoutNeverExpires(t *testing.T) {
 	}
 }
 
-// setupCIRerunRepo builds a worktree whose feature branch is published on a
-// local bare origin, so the CI step can verify the published head with
-// ls-remote exactly as it does in production. The returned upstream URL remains
-// a GitHub URL because it is also the SCM provider's repository identity.
 func setupCIRerunRepo(t *testing.T) (dir, upstreamURL, baseSHA, headSHA string) {
 	t.Helper()
 
@@ -1473,9 +1446,6 @@ func ghLog(t *testing.T, logFile string) string {
 	return string(data)
 }
 
-// A check the provider cancelled is not a verdict on the code: it is re-run for
-// the same commit, the fix agent is never involved, and the monitor reports
-// checks as running again rather than leaving an earlier state to look current.
 func TestCIStep_CancelledCheckIsRerunBeforeEscalating(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1567,11 +1537,6 @@ func TestCIStep_CancelledCheckIsRerunBeforeEscalating(t *testing.T) {
 	t.Logf("fix-agent rounds consumed: %d", len(ag.Calls))
 }
 
-// `gh run rerun` returns as soon as the provider accepts the request, while the
-// new attempt replaces the cancelled check in the status rollup asynchronously.
-// A poll that still reads the pre-rerun outcome must keep waiting: parking there
-// would escalate the very check this run just re-ran, and asking again would
-// bill the repository a duplicate workflow run.
 func TestCIStep_LaggingRerunRollupKeepsWaitingForTheRepublishedCheck(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1647,9 +1612,6 @@ func TestCIStep_LaggingRerunRollupKeepsWaitingForTheRepublishedCheck(t *testing.
 	t.Logf("fix-agent rounds consumed: %d", len(ag.Calls))
 }
 
-// A check that comes back cancelled after its rerun is unresolved, not green: it
-// must reach the same gate a failing check does, and it must never produce a
-// ready-to-merge signal.
 func TestCIStep_CancelledCheckStaysUnresolvedAfterItsBudget(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1722,10 +1684,6 @@ func TestCIStep_CancelledCheckStaysUnresolvedAfterItsBudget(t *testing.T) {
 	t.Log("ci ready: not set")
 }
 
-// A cancellation is never a verdict on the code, so a check that stayed
-// cancelled after its rerun must not be handed to the fix agent even with
-// auto_fix.ci at its default: there is nothing to repair, and the round would
-// let an agent edit code the provider never tested.
 func TestCIStep_UnresolvedCancelledCheckNeverEntersTheAutoFixLoop(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1797,8 +1755,6 @@ func TestCIStep_UnresolvedCancelledCheckNeverEntersTheAutoFixLoop(t *testing.T) 
 	}
 }
 
-// A rerun cannot certify a commit this run never delivered, and the run must not
-// leave an earlier ready-to-merge signal behind when it parks for that reason.
 func TestCIStep_MovedPublishedHeadClearsCIReadiness(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1854,8 +1810,6 @@ func TestCIStep_MovedPublishedHeadClearsCIReadiness(t *testing.T) {
 	}
 }
 
-// Check names are not unique on a PR, and same-named checks share one budget
-// key, so one poll must not spend that budget once per check.
 func TestCIStep_SameNamedCancelledChecksShareOneRerunBudget(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1903,9 +1857,6 @@ func TestCIStep_SameNamedCancelledChecksShareOneRerunBudget(t *testing.T) {
 	}
 }
 
-// A genuine failure must reach the fix agent on its first failure. A cancelled
-// sibling in the same poll must not buy it another CI cycle, because no rerun
-// can clear the genuine failure.
 func TestCIStep_GenuineCheckFailureEscalatesOnFirstFailure(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -1966,8 +1917,6 @@ func TestCIStep_GenuineCheckFailureEscalatesOnFirstFailure(t *testing.T) {
 	t.Logf("outcome: needs_approval=%v findings=%s", outcome.NeedsApproval, outcome.Findings)
 }
 
-// A merge conflict is the one CI-step issue no rerun can ever clear, so a
-// cancelled check must not defer it by a whole CI cycle.
 func TestCIStep_MergeConflictEscalatesWithoutRerunningChecks(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2027,8 +1976,6 @@ func TestCIStep_MergeConflictEscalatesWithoutRerunningChecks(t *testing.T) {
 	}
 }
 
-// A job that exceeded its own timeout is the provider reporting the job, not
-// itself: it escalates on the first failure like any other genuine failure.
 func TestCIStep_TimedOutCheckEscalatesWithoutRerunning(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2075,10 +2022,6 @@ func TestCIStep_TimedOutCheckEscalatesWithoutRerunning(t *testing.T) {
 	}
 }
 
-// Reruns are opt-out: with the budget at 0 nothing is re-run. The cancelled
-// check cannot make the PR look ready, and because no rerun is coming it is
-// also the run's final word on that check, so it escalates rather than being
-// waited on.
 func TestCIStep_ZeroRerunBudgetEscalatesCancelledCheckWithoutMakingItReady(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2139,20 +2082,6 @@ func TestCIStep_ZeroRerunBudgetEscalatesCancelledCheckWithoutMakingItReady(t *te
 	}
 }
 
-// Incident replay (firstmate PR 1495, 2026-08-02): the pipeline pushed its fix
-// commits, GitHub ran the resulting workflow, every job finished, and one of
-// them ended CANCELLED (GitHub reports a job that exceeds its timeout-minutes
-// that way) while the rest passed. The CI monitor logged "CI checks running,
-// waiting for results..." and kept polling that already-final rollup for the
-// rest of the run's idle timeout - about 30 minutes before a manual abort.
-//
-// A cancelled check is terminal: the provider published a conclusion and will
-// not publish another one on its own. With no rerun authorized there is
-// nothing left for this run to wait for, so the poll must produce a decision.
-// The regression arrived in #628, which started counting every non
-// pass/fail/skip bucket as "pending" to stop empty and unknown check states
-// from reading green, and thereby routed a terminal cancellation into the
-// wait-for-more-results branch it can never leave.
 func TestCIStep_CancelledCheckAmongPassingChecksEscalatesInsteadOfPollingForever(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2236,11 +2165,6 @@ func TestCIStep_CancelledCheckAmongPassingChecksEscalatesInsteadOfPollingForever
 	}
 }
 
-// Readiness is read from the PR's live check rollup on every poll, so it always
-// describes the commit the forge currently has for that PR. No recorded head
-// SHA gates it: a run whose own record still names the pre-advance commit must
-// still recognize the green terminal state the forge published for the head the
-// pipeline last pushed.
 func TestCIStep_GreenChecksAtAdvancedHeadAreRecognizedWhileRunTracksOlderHead(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2302,10 +2226,6 @@ func TestCIStep_GreenChecksAtAdvancedHeadAreRecognizedWhileRunTracksOlderHead(t 
 	}
 }
 
-// A rerun re-runs whatever commit the branch now points at, so it is only
-// meaningful while that is still the commit this run delivered. When the
-// published head has moved, the step terminates with the expected and observed
-// commits instead of certifying a revision it never produced.
 func TestCIStep_MovedPublishedHeadTerminatesInsteadOfRerunning(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2392,9 +2312,6 @@ func TestCIStep_MovedPublishedHeadTerminatesInsteadOfRerunning(t *testing.T) {
 	t.Logf("rerun requests: %d", strings.Count(ghLog(t, logFile), "run rerun"))
 }
 
-// A provider that refuses the rerun must not stall the run: the budget is spent
-// on the attempt, so the check escalates on the next poll instead of asking for
-// the same rerun forever.
 func TestCIStep_RefusedRerunSpendsBudgetAndEscalates(t *testing.T) {
 	t.Parallel()
 	dir, upstream, baseSHA, headSHA := setupCIRerunRepo(t)
@@ -2658,11 +2575,6 @@ func TestCIStep_DelayedSameNameCheckRetainsLegacyNameBehavior(t *testing.T) {
 	}
 }
 
-// A pull request whose workflows GitHub is holding for maintainer approval
-// reports its runs as action_required with no jobs and carries no check runs at
-// all. That hold is a wait on a human, so the monitor must keep waiting and name
-// it - not report failing checks and start an auto-fix round against work that
-// never executed (issue #1182).
 func TestCIStep_WorkflowHeldForMaintainerApprovalWaitsInsteadOfRepairing(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -2725,9 +2637,6 @@ func TestCIStep_WorkflowHeldForMaintainerApprovalWaitsInsteadOfRepairing(t *test
 	}
 }
 
-// The hold is told from a verdict by the run's job list, so a workflow run that
-// concluded action_required after actually executing jobs still escalates as a
-// failing check.
 func TestCIStep_ActionRequiredWorkflowRunWithJobsStillEscalates(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -2769,9 +2678,6 @@ func TestCIStep_ActionRequiredWorkflowRunWithJobsStillEscalates(t *testing.T) {
 	}
 }
 
-// A held workflow will not finish without a maintainer, so it must not defer a
-// genuine failure elsewhere on the head: the real failure escalates on its own,
-// the hold produces no finding, and the monitor still names the hold.
 func TestCIStep_HeldWorkflowDoesNotDeferAGenuineFailureBesideIt(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)

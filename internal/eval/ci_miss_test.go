@@ -9,12 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ciObservationFindings is a settled CI observation carrying one finding of
-// every category the classifier emits: a failing check attributed to the job
-// (ci-check), a review bot's comment with a code location (ci-review-bot), a
-// provider/infra outcome (ci-transient), and a second review-bot finding that
-// the human left unselected at the gate. The selection below fixes the first
-// three; the fourth is dismissed.
 const ciObservationFindings = `{"findings":[
 	{"id":"ci-1","severity":"error","action":"auto-fix","category":"ci-check","check":"build","check_id":"gh:build:1","description":"CI check failing: build - provider reported failure"},
 	{"id":"ci-2","severity":"warning","action":"ask-user","category":"ci-review-bot","check":"greptile","check_id":"gh:greptile:1","file":"pkg/svc.go","line":42,"description":"greptile[bot]: possible nil dereference here"},
@@ -22,12 +16,6 @@ const ciObservationFindings = `{"findings":[
 	{"id":"ci-4","severity":"warning","action":"ask-user","category":"ci-review-bot","check":"greptile","check_id":"gh:greptile:1","file":"pkg/other.go","line":7,"description":"greptile[bot]: style nit the human dismissed"}
 ],"summary":"1 CI check failing; review bot needs a decision (2 findings); 1 transient"}`
 
-// setupRunWithGreenReviewAndCI builds on the captured-run fixture: it adds a
-// green (clean) review round so a false-negative has a case to attach to, then
-// a CI step with one settled observation round. selected is the JSON array of
-// finding IDs the pipeline chose to fix after that observation; overrideReason,
-// when non-empty, marks the CI step as passed-with-override. Both the review and
-// CI steps are completed and the run is marked completed.
 func setupRunWithGreenReviewAndCI(t *testing.T, ctx context.Context, selected, overrideReason string) (*paths.Paths, *db.DB, *db.Run, *db.StepRound) {
 	t.Helper()
 	return setupRunWithCIRepairEvidence(t, ctx, selected, overrideReason, true, "fixed and published", true, false)

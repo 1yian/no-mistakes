@@ -19,12 +19,8 @@ import (
 
 const spinnerTickInterval = 120 * time.Millisecond
 
-// reconcileTimeout bounds one authoritative run read so a wedged daemon
-// surfaces as an error instead of a silently stalled view.
 const reconcileTimeout = 30 * time.Second
 
-// Reconnect pacing for a dropped event stream. Bounded so a daemon that is
-// genuinely gone surfaces the error instead of spinning on failed dials.
 const (
 	resubscribeDelay    = 500 * time.Millisecond
 	maxResubscribeTries = 60
@@ -34,7 +30,6 @@ var runBrowserCommand = func(name string, args ...string) error {
 	return exec.Command(name, args...).Run()
 }
 
-// openBrowserCmd returns a tea.Cmd that opens the given URL in the default browser.
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
 		name, args := browserCommandSpec(runtime.GOOS, url)
@@ -110,14 +105,6 @@ func (m Model) rerunCmd(requestID uint64) tea.Cmd {
 	}
 }
 
-// maybeAutoApproveCmd auto-resolves the current awaiting step when yolo mode is
-// on, returning nil otherwise. Yolo means "agree to fix every finding": a gate
-// whose findings are actionable gets a fix request (all findings selected),
-// while a gate with only non-actionable (no-op) findings - or none at all - is
-// approved as-is. A step is fixed at most once; the fix re-runs the step and
-// re-enters the gate as a fix_review, which yolo then approves so the pipeline
-// runs to completion without looping. Each terminal action fires once so
-// duplicate events while waiting for the round-trip don't resend it.
 func (m Model) maybeAutoApproveCmd() tea.Cmd {
 	if !m.yoloMode {
 		return nil
@@ -291,12 +278,6 @@ func (m Model) subscribeCmd() tea.Cmd {
 	}
 }
 
-// reconcileCmd reads authoritative run state exactly once.
-//
-// Requests coalesce: at most one read is in flight, and a gap arriving while
-// one is running schedules exactly one follow-up. That keeps overflow from
-// turning into a reconciliation storm, and it is the only read the TUI ever
-// makes on its own - there is no interval poll.
 func (m *Model) reconcileCmd() tea.Cmd {
 	if m.reconcilePending {
 		m.reconcileAgain = true
@@ -327,7 +308,6 @@ func (m *Model) reconcileCmd() tea.Cmd {
 	}
 }
 
-// drainDiffFetches converts queued fix-review diff requests into commands.
 func (m *Model) drainDiffFetches() []tea.Cmd {
 	if len(m.pendingDiffFetch) == 0 {
 		return nil
@@ -340,9 +320,6 @@ func (m *Model) drainDiffFetches() []tea.Cmd {
 	return cmds
 }
 
-// fetchStepDiffCmd reads one fix-review gate's working-tree diff on demand.
-// The diff is derived from the run's worktree rather than carried by the event
-// stream, where an unbounded frame would break the subscription.
 func (m *Model) fetchStepDiffCmd(request stepDiffRequest) tea.Cmd {
 	subID := m.subscriptionID
 	fetch := m.fetchStepDiff
@@ -361,8 +338,6 @@ func (m *Model) fetchStepDiffCmd(request stepDiffRequest) tea.Cmd {
 	}
 }
 
-// resubscribeCmd waits out the reconnect delay before reattaching to the
-// event stream.
 func (m Model) resubscribeCmd() tea.Cmd {
 	subID := m.subscriptionID
 	return tea.Tick(resubscribeDelay, func(time.Time) tea.Msg {

@@ -317,8 +317,6 @@ func TestDetectProvider_UsesForgejoBaseEnvironment(t *testing.T) {
 	}
 }
 
-// writeGlabConfig writes a synthetic glab config.yml into a temp dir and points
-// GLAB_CONFIG_DIR at it. The host names are placeholders only.
 func writeGlabConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -393,8 +391,6 @@ func TestDetectProvider_GlabConfigMalformedFailsClosed(t *testing.T) {
 	}
 }
 
-// writeGhConfig writes a synthetic gh hosts.yml into a temp dir and points
-// GH_CONFIG_DIR at it. The host names are placeholders only.
 func writeGhConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -449,8 +445,6 @@ func TestDetectProvider_GhConfigMalformedFailsClosed(t *testing.T) {
 	}
 }
 
-// writeTeaConfig writes a synthetic tea config.yml into a temp dir and points
-// XDG_CONFIG_HOME at it. The host names are placeholders only.
 func writeTeaConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -566,8 +560,6 @@ func TestResolveTeaAccount_NoConfigFailsClosed(t *testing.T) {
 	}
 }
 
-// writeTeaHosts writes a synthetic tea 1.0 hosts.yml (gitea/tea#1126) into
-// dir, the directory tea 1.0 reads its config from.
 func writeTeaHosts(t *testing.T, dir, body string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

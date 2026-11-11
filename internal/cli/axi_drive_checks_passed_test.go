@@ -13,11 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestRenderDriveResult_TerminalChecksPassed is the default green shape: the
-// run already reached its verdict and released the branch, so it reports the
-// same outcome word with the released contract - and specifically not the
-// still-monitoring guidance, which would tell an agent to wait for a monitor
-// that no longer exists.
 func TestRenderDriveResult_TerminalChecksPassed(t *testing.T) {
 	run := &ipc.RunInfo{
 		ID:      "run-1",
@@ -60,9 +55,6 @@ func TestRenderDriveResult_TerminalChecksPassed(t *testing.T) {
 	}
 }
 
-// TestOutcomeFor_ChecksPassedStatus pins the outcome vocabulary: a run that
-// ended at checks_passed keeps reporting checks-passed, and stays distinct from
-// an ordinary completion (a merged or otherwise finished PR).
 func TestOutcomeFor_ChecksPassedStatus(t *testing.T) {
 	if got := outcomeFor(string(types.RunChecksPassed)); got != "checks-passed" {
 		t.Fatalf("outcomeFor(%s) = %q, want checks-passed", types.RunChecksPassed, got)

@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// validateSkippedReview guards continuation from durable state, regardless of
-// how Review became skipped or whether the executor was recovered. A reviewed
-// candidate is not approval authority. Only completing Review grants that.
 func (e *Executor) validateSkippedReview(run *db.Run, repo *db.Repo) error {
 	results, err := e.db.GetStepsByRun(run.ID)
 	if err != nil {

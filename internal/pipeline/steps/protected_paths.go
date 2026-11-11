@@ -8,9 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// unfinishedGitOperationError refuses staging and CI repair commits while a
-// merge or rebase is still in progress. git add -A would mark conflicted
-// paths resolved, and the following commit would conclude the merge.
 type unfinishedGitOperationError struct {
 	rebase bool
 	merge  bool
@@ -36,8 +33,6 @@ func refuseUnfinishedGitOperation(sctx *pipeline.StepContext) error {
 	return &unfinishedGitOperationError{rebase: rebase, merge: merge}
 }
 
-// stagePipelineChanges guards every pipeline-owned catch-all staging path,
-// including Push's leftover commit. Refusal preserves the index and worktree.
 func stagePipelineChanges(sctx *pipeline.StepContext) error {
 	if err := refuseUnfinishedGitOperation(sctx); err != nil {
 		return err
@@ -71,13 +66,6 @@ func stagePipelineChanges(sctx *pipeline.StepContext) error {
 	return unstageSubmodulePointerMoves(sctx)
 }
 
-// unstageSubmodulePointerMoves keeps catch-all staging from recording a
-// submodule checkout as a new pointer. A rebase moves the recorded pointer but
-// not the populated checkout, so `git add -A` would commit the stale checkout
-// as a silent revert of the base's submodule bump, and a populated checkout
-// whose gitlink the base removed would be re-added as an embedded repository;
-// pipeline corrections never move a submodule pointer. A gitlink addition the
-// staged .gitmodules registers is a deliberately added submodule and stays.
 func unstageSubmodulePointerMoves(sctx *pipeline.StepContext) error {
 	raw, err := stepGitRunRaw(sctx, "diff", "--cached", "--raw", "-z", "--no-renames", "--ignore-submodules=none")
 	if err != nil {
@@ -117,8 +105,6 @@ func unstageSubmodulePointerMoves(sctx *pipeline.StepContext) error {
 	return nil
 }
 
-// stagedRegisteredSubmodules returns the submodule paths the staged .gitmodules
-// registers.
 func stagedRegisteredSubmodules(sctx *pipeline.StepContext) (map[string]bool, error) {
 	registered := map[string]bool{}
 	if _, err := stepGitRun(sctx, "cat-file", "-e", ":.gitmodules"); err != nil {

@@ -9,7 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// isTestFile returns true if the file path matches common test file naming patterns.
 func isTestFile(path string) bool {
 	base := filepath.Base(path)
 	if base == "" {
@@ -48,8 +47,6 @@ func isTestFile(path string) bool {
 	return false
 }
 
-// detectNewTestFiles returns paths of new (untracked or staged-new) files that
-// match common test file naming patterns. Uses git status --porcelain.
 func detectNewTestFiles(ctx context.Context, dir string) []string {
 	out, err := git.Run(ctx, dir, "status", "--porcelain")
 	if err != nil || out == "" {
@@ -73,17 +70,6 @@ func detectNewTestFiles(ctx context.Context, dir string) []string {
 	return testFiles
 }
 
-// matchIgnorePattern checks if a file path matches an ignore pattern.
-// Patterns follow gitignore-like semantics:
-//   - No slash: match against filename only (e.g., "*.generated.go" matches "pkg/foo.generated.go")
-//   - Ends with "/**": match any file under that directory (e.g., "vendor/**" matches "vendor/pkg/foo.go")
-//   - Otherwise: path.Match against the full path
-//
-// file is always a git path, which is "/"-separated on every platform, so the
-// slash-based path.Match is the matcher rather than filepath.Match: the latter
-// splits on os.PathSeparator, so on Windows its "*" would run straight through
-// "/" and silently widen "docs/*.md" into the whole docs subtree. The documented
-// rule - "*" never crosses a "/" - is therefore the rule on every host.
 func matchIgnorePattern(file, pattern string) bool {
 	// "vendor/**" → matches anything under "vendor/"
 	if strings.HasSuffix(pattern, "/**") {
@@ -100,9 +86,6 @@ func matchIgnorePattern(file, pattern string) bool {
 	return matched
 }
 
-// changedPathList splits a NUL-delimited `git diff --name-only -z` payload,
-// preserving raw paths and git's order. The result is the complete changed set:
-// callers that want the ignore-filtered subset use reviewablePaths.
 func changedPathList(changedFiles string) []string {
 	paths := strings.Split(changedFiles, "\x00")
 	if paths[len(paths)-1] == "" {
@@ -111,12 +94,6 @@ func changedPathList(changedFiles string) []string {
 	return paths
 }
 
-// reviewablePaths filters changed paths by the supplied ignore patterns. It
-// must never decide which trusted configuration applies to a run. Review's
-// final scope is owned by reviewPathsAndInstructions, which combines pushed
-// exclusions with instruction-covered paths and trusted exclusions.
-//
-// changed is the already-split complete set from changedPathList.
 func reviewablePaths(changed []string, ignorePatterns []string) []string {
 	var paths []string
 	for _, file := range changed {
@@ -134,9 +111,6 @@ func reviewablePaths(changed []string, ignorePatterns []string) []string {
 	return paths
 }
 
-// filterDiff removes diff sections for files matching any of the ignore patterns.
-// Input is a unified diff; output is the same diff with matching file sections removed.
-// Returns the original diff unchanged if patterns is empty.
 func filterDiff(diff string, patterns []string) string {
 	if len(patterns) == 0 || diff == "" {
 		return diff
@@ -167,9 +141,6 @@ func filterDiff(diff string, patterns []string) string {
 	return strings.Join(result, "\n")
 }
 
-// extractDiffPath extracts the file path from a "diff --git a/<path> b/<path>" header.
-// For non-rename diffs both paths are identical, so we derive the path length from
-// the known structure rather than splitting on " b/" which could appear in filenames.
 func extractDiffPath(diffLine string) string {
 	const prefix = "diff --git a/"
 	rest := strings.TrimPrefix(diffLine, prefix)

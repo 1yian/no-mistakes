@@ -50,10 +50,6 @@ func TestRunViewFromDBAwaitingStep(t *testing.T) {
 	}
 }
 
-// TestRunViewFromDBCarriesCIOverrideReason pins that a completed run whose step
-// recorded an approval override reads as passed-with-override on the DB-backed
-// status path, matching the live IPC path. Regression: runViewFromDB used to
-// drop step OverrideReason, so axi status reported a plain pass for an override.
 func TestRunViewFromDBCarriesCIOverrideReason(t *testing.T) {
 	run := &db.Run{ID: "r1", Branch: "feature/x", HeadSHA: "abcdef1234567890", Status: types.RunCompleted}
 	steps := []*db.StepResult{
@@ -518,9 +514,6 @@ func TestAxiDocEncodingFailureIsNeverSilent(t *testing.T) {
 	}
 }
 
-// TestGateNote_ReviewOnly verifies the review-auto-fix-disabled note appears
-// only at the review gate, while the keep-driving reminder appears at every
-// gate.
 func TestGateNote_ReviewOnly(t *testing.T) {
 	mk := func(step string) string {
 		gate := stepView{
@@ -593,12 +586,6 @@ func TestOutcomeFor(t *testing.T) {
 	}
 }
 
-// TestOutcomeForRun pins that a run's outcome word distinguishes a genuinely
-// green completion from one where a human approved past a live CI failure
-// (rv.CIOverrideReason, see pipeline.ApprovalOverrideVerifier). Without this,
-// "outcome=passed" in axi's agent-facing output is ambiguous between the two -
-// exactly the ambiguity that let no-mistakes self-report a passing terminal
-// outcome while the live PR still showed a failed check.
 func TestOutcomeForRun(t *testing.T) {
 	cases := []struct {
 		name string
@@ -758,8 +745,6 @@ func TestAxiRunClosesFlagIsValidatedAndCanonicalized(t *testing.T) {
 	}
 }
 
-// An older daemon would drop closing_issue_refs from the push silently, so a
-// run with --closes probes for the capability before anything is pushed.
 func TestRequireDaemonHonorsClosingIssueRefs(t *testing.T) {
 	if err := requireDaemonHonorsClosingIssueRefs(&scriptedClosingIssueRefsUpdateClient{err: errors.New("method not found")}, nil); err != nil {
 		t.Fatalf("no --closes must not probe: %v", err)
@@ -808,9 +793,6 @@ func TestForwardClosingIssueRefsToActiveRunSkipsEmptyIssue(t *testing.T) {
 	}
 }
 
-// A rejection because the PR body was already composed is distinguishable from
-// a transport failure, so the caller can say "not applied, edit the PR" instead
-// of advising a retry that can never succeed.
 func TestForwardClosingIssueRefsToActiveRunReportsPRBodyAlreadyComposed(t *testing.T) {
 	client := &scriptedClosingIssueRefsUpdateClient{
 		reject: ipc.ClosingIssueRefsRejectedPRBodyComposed,
@@ -825,8 +807,6 @@ func TestForwardClosingIssueRefsToActiveRunReportsPRBodyAlreadyComposed(t *testi
 	}
 }
 
-// A rejection with no recognized reason must stay an error rather than passing
-// as success, so an unknown refusal never reports a link that was not added.
 func TestForwardClosingIssueRefsToActiveRunRejectsUnknownReason(t *testing.T) {
 	client := &scriptedClosingIssueRefsUpdateClient{reject: "some_future_reason"}
 
@@ -843,7 +823,6 @@ type scriptedClosingIssueRefsUpdateClient struct {
 	method string
 	params interface{}
 	err    error
-	// reject, when set, makes the daemon refuse the update with this reason.
 	reject string
 }
 
@@ -1278,10 +1257,6 @@ func TestAxiRunReportsInvalidGlobalConfig(t *testing.T) {
 	}
 }
 
-// TestAxiAbortByRunIDNoOpWhenDaemonStopped covers the abort-by-id path when no
-// daemon is running and the durable database proves the requested id is
-// unknown. That exact case remains a successful no-op without needing a repo
-// or worktree.
 func TestAxiAbortByRunIDNoOpWhenDaemonStopped(t *testing.T) {
 	nmHome := t.TempDir()
 	t.Setenv("NM_HOME", nmHome)
@@ -1381,15 +1356,6 @@ func TestSkillExitCodeGuidanceDistinguishesDecisionGates(t *testing.T) {
 	}
 }
 
-// TestAxiHomeLeadsWithAnsweringWhenTheGateHasAnOpenQuestion pins the home
-// view's answering branch, which was unpinned before the rendering it used to
-// read was deleted.
-//
-// The condition now comes from pipeline.HasUnansweredReviewQuestion - the same
-// predicate the two auto-resolve carve-outs read - rather than from
-// string-splitting the finding's prose, so it is keyed on the review-question
-// CATEGORY. A gate parked on ordinary findings must still be told to respond,
-// not to answer.
 func TestAxiHomeLeadsWithAnsweringWhenTheGateHasAnOpenQuestion(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -1468,9 +1434,6 @@ func TestAxiHomeLeadsWithAnsweringWhenTheGateHasAnOpenQuestion(t *testing.T) {
 			if err := runAxiHome(cmd); err != nil {
 				t.Fatalf("runAxiHome: %v", err)
 			}
-			// The HOME-level help line, not the gate block's - the gate still
-			// offers approve/fix either way, because a human may knowingly
-			// approve over an open question.
 			const homeAnswerHelp = "for each question in the gate; the reviewer resumes when none are open"
 			const homeGateHelp = "to clear the current gate"
 			got := out.String()

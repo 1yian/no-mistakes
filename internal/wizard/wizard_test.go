@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// recording stubs capture calls for assertions.
 type recorder struct {
 	createdBranch string
 	commitMsg     string
@@ -74,8 +73,6 @@ func baseConfig(r *recorder) Config {
 	return cfg
 }
 
-// step the model through a command synchronously by running the returned
-// Cmd and feeding the result back into Update.
 func drain(m Model, cmd tea.Cmd) Model {
 	for cmd != nil {
 		msg := cmd()

@@ -20,15 +20,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// axiIntent is a distinctive intent string so we can prove it flowed all the
-// way into the pipeline's agent prompts rather than being inferred.
 const axiIntent = "wire the feature flag into the config loader"
 
-// axiScenario gates exactly one step: the review step returns a single
-// ask-user finding (so the pipeline blocks for a human/agent decision), while
-// every other step returns no findings and completes on its own. Matching on
-// the review prompt text - not the branch - keeps gating to that one step
-// regardless of branch name, giving the axi journey crisp assertions.
 func axiScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "axi-scenario.yaml")
@@ -74,13 +67,6 @@ func axiScenario(t *testing.T) string {
 	return path
 }
 
-// TestAxiAgentJourney proves an autonomous agent can drive a full no-mistakes
-// pipeline headlessly through the `no-mistakes axi` surface in an isolated
-// dummy environment: init installs the skill, the home view reports state,
-// `axi run` blocks at an approval gate and emits TOON, `axi respond` clears it
-// and runs to completion, and `axi status`/`logs` inspect the result. It also
-// proves the agent-supplied intent is used verbatim (no transcript inference)
-// and that `axi run --yes` auto-approves the gate end to end.
 func branchSyncScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "branch-sync-scenario.yaml")
@@ -133,8 +119,6 @@ func branchSyncScenario(t *testing.T) string {
 	return path
 }
 
-// TestAxiBranchSyncJourney reproduces the end-user stale-local journey with the
-// real binary, fake agent, isolated daemon, and local bare push target.
 func TestAxiBranchSyncJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: branchSyncScenario(t)})
 	h.CommitChange("init-sync", "seed.txt", "seed\n", "seed sync init")
@@ -212,10 +196,6 @@ func TestAxiBranchSyncJourney(t *testing.T) {
 	}
 }
 
-// TestAxiRunReattachesAfterManagedFix reproduces the v1.39.0 dogfood failure:
-// a review fix advances the active run head while the gate branch and submitting
-// worktree remain at the immutable submitted head. A second axi run from that
-// unchanged worktree must reattach without pushing or creating another run.
 func TestAxiRunReattachesAfterManagedFix(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: branchSyncScenario(t)})
 	h.CommitChange("init-reattach", "seed.txt", "seed\n", "seed reattach init")
@@ -344,13 +324,6 @@ func TestAxiRunReattachesAfterManagedFix(t *testing.T) {
 	}
 }
 
-// TestAxiCustodyRecoveryJourney reproduces the first real dogfood catch of the
-// guarded branch sync (run 01KXN8YJ6DWF8XPP582DWQC3HV) with the real binary: a
-// run cancelled at the pre_push phase leaves the branch pipeline_owned with
-// the fix commits preserved only in the local gate. The journey proves the
-// state is no longer a dead end: sync --check points at the guarded recovery,
-// sync --recover returns custody and fast-forwards to the preserved head, and
-// the operator can then commit and start a fresh run without losing anything.
 func TestAxiCustodyRecoveryJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: branchSyncScenario(t)})
 	h.CommitChange("init-recover", "seed.txt", "seed\n", "seed recover init")
@@ -606,11 +579,6 @@ func TestAxiTerminalEqualTreeRecoveryJourney(t *testing.T) {
 	}
 }
 
-// rebaseCustodyScenario differs from branchSyncScenario in exactly one way that
-// matters here: its fix round ADDS a file instead of rewriting the operator's
-// own line. Both shapes advance the gate branch, but only this one leaves the
-// operator's content intact in the preserved head, which is the case custody
-// recovery is allowed to adopt.
 func rebaseCustodyScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "rebase-custody-scenario.yaml")
@@ -662,15 +630,6 @@ func rebaseCustodyScenario(t *testing.T) string {
 	return path
 }
 
-// TestAxiCustodyRecoveryAfterRebaseJourney is the same cancelled-validation
-// custody return, in the shape that used to over-escalate: the default branch
-// advanced before the run, so the pipeline's own rebase step replayed the
-// operator's commits onto the newer base. The preserved gate head then carries
-// the same logical work under different SHAs, which equality and ancestry alone
-// read as plain divergence - and recovery refused, stranding a branch that
-// could lose nothing by adopting the preserved head. The journey proves the
-// real binary now auto-recovers, keeps the operator's file content, brings the
-// advanced base into the worktree, and anchors the exact pre-recovery commits.
 func TestAxiCustodyRecoveryAfterRebaseJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: rebaseCustodyScenario(t)})
 	h.CommitChange("init-rebase-recover", "seed.txt", "seed\n", "seed rebase recover init")
@@ -777,20 +736,6 @@ func TestAxiCustodyRecoveryAfterRebaseJourney(t *testing.T) {
 	}
 }
 
-// TestAxiPrePushAbortUnmovedHeadCustodyJourney reproduces the ownership gap
-// hit when delivery switches to a direct PR mid-validation: the worker aborts
-// the run at the review gate BEFORE the pipeline changes anything, so the
-// terminal run's head still equals the submitted head. That cancellation
-// shape used to be invisible to branch-sync selection - status omitted the
-// branch_sync object and sync --check refused with wrong-branch ambiguity -
-// leaving the worker with no supported answer. The contract: cancellation
-// RELEASES ownership. The journey proves it end to end: abort waits for the
-// terminal state and returns the final structured ownership truth, status and
-// the guarded check report the exact branch and head as user_owned and
-// immediately usable with no sync action, a recovery request is an idempotent
-// no-op, repeated abort is an idempotent no-op with the same truth, and the
-// worker continues through a separately authorized direct delivery path
-// without starting another validation.
 func TestAxiPrePushAbortUnmovedHeadCustodyJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: branchSyncScenario(t)})
 	h.CommitChange("init-unmoved", "seed.txt", "seed\n", "seed unmoved init")
@@ -990,11 +935,6 @@ func TestAxiPrePushAbortUnmovedHeadCustodyJourney(t *testing.T) {
 
 func operatorContext() context.Context { return context.Background() }
 
-// TestAxiRunSkipsRepositoryPrePushHookForLocalGate reproduces the launch hang
-// from a repository whose ordinary upstream pushes run a substantial pre-push
-// gate. The no-mistakes push is only the control-plane trigger for the real
-// validation pipeline, so invoking that repository hook here can block before
-// the gate's post-receive hook registers any run.
 func TestAxiRunSkipsRepositoryPrePushHookForLocalGate(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 
@@ -1226,11 +1166,6 @@ func TestAxiRunReportsImmediateAgentlessFailureWithoutRerun(t *testing.T) {
 	}
 }
 
-// TestAxiParkedAwaitingAgentSignal proves the parked / awaiting-agent signal is
-// observable end to end: when a run stops at a gate it reports awaiting_agent
-// (with how long it has been parked) in a single `axi status` read and over IPC,
-// and the moment the agent responds the signal clears. This is observability
-// only - the drive/resolve behavior is unchanged.
 func TestAxiParkedAwaitingAgentSignal(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 
@@ -1348,9 +1283,6 @@ func TestAxiAttachCommandsIgnoreInvalidConfigWhenDaemonRunning(t *testing.T) {
 	}
 }
 
-// TestAxiRunPreflightGuards proves `axi run` refuses to start a run with
-// structured, actionable errors instead of silently doing the wrong thing:
-// missing intent, the default branch, and an uncommitted working tree.
 func TestAxiRunPreflightGuards(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 
@@ -1395,7 +1327,6 @@ func TestAxiRunPreflightGuards(t *testing.T) {
 	}
 }
 
-// readStepLog returns the contents of a step's log file for a run.
 func readStepLog(t *testing.T, h *Harness, runID, step string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(h.NMHome, "logs", runID, step+".log"))
@@ -1405,7 +1336,6 @@ func readStepLog(t *testing.T, h *Harness, runID, step string) string {
 	return string(data)
 }
 
-// anyPromptContains reports whether any recorded fake-agent prompt contains sub.
 func anyPromptContains(h *Harness, sub string) bool {
 	for _, inv := range h.AgentInvocations() {
 		if strings.Contains(inv.Prompt, sub) {
@@ -1415,10 +1345,6 @@ func anyPromptContains(h *Harness, sub string) bool {
 	return false
 }
 
-// assertSkillInstalled verifies init wrote the no-mistakes skill into both
-// user-level agent skill directories (the Claude Code and vendor-neutral
-// conventions under the user's home) with valid frontmatter, and left the
-// repo's working tree untouched by skill files.
 func assertSkillInstalled(t *testing.T, h *Harness) {
 	t.Helper()
 	for _, rel := range []string{

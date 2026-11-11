@@ -14,8 +14,6 @@ import (
 	nmgit "github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// Disambiguator chooses among multiple accepted transcript matches when the
-// deterministic file-overlap matcher cannot make a decisive selection.
 type Disambiguator interface {
 	Disambiguate(ctx context.Context, diffFiles []string, candidates []*Match) (DisambiguationChoice, error)
 }
@@ -44,8 +42,6 @@ type agentDisambiguator struct {
 	cwd   string
 }
 
-// NewAgentDisambiguator wraps an agent.Agent as a Disambiguator. The agent is
-// run in cwd so it can inspect changed repository files progressively.
 func NewAgentDisambiguator(a agent.Agent, cwd string) Disambiguator {
 	return &agentDisambiguator{agent: a, cwd: cwd}
 }

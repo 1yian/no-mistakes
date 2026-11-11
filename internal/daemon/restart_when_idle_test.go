@@ -19,8 +19,6 @@ import (
 // A scheduled restart lets the executing run finish on the running daemon,
 // holds pushes that arrive meanwhile, and the restarted daemon runs them.
 
-// heldStep executes until the test releases it, so "a run is executing when
-// the restart is scheduled" is a state the test controls rather than a race.
 type heldStep struct {
 	name     types.StepName
 	started  chan struct{}
@@ -207,8 +205,6 @@ func errText(s *string) string {
 	return *s
 }
 
-// A push held while a replay is running belongs to the next restart: the
-// replay must never delete it along with the pushes it just handed over.
 func TestReplayHeldPushesKeepsAPushHeldWhileReplaying(t *testing.T) {
 	p, d := newParkedRunEnv(t)
 	repo, headSHA := setupTestGitRepo(t, p, d, "replay-keeps-held")
@@ -235,8 +231,6 @@ func TestReplayHeldPushesKeepsAPushHeldWhileReplaying(t *testing.T) {
 	}
 }
 
-// A held push that fails only because the daemon is stopping must survive for
-// the next start; dropping it would lose a push the hook never retries.
 func TestReplayHeldPushFileKeepsTheFileWhenTheDaemonIsStopping(t *testing.T) {
 	p, d := newParkedRunEnv(t)
 	repo, headSHA := setupTestGitRepo(t, p, d, "replay-stopping")
@@ -260,9 +254,6 @@ func TestReplayHeldPushFileKeepsTheFileWhenTheDaemonIsStopping(t *testing.T) {
 	}
 }
 
-// A gate response that passed its due check must finish dispatching before the
-// restart is marked due and recounted; otherwise the stop cancels the run the
-// response just resumed.
 func TestRestartDueWaitsForAGateResponseInFlight(t *testing.T) {
 	p, d := newParkedRunEnv(t)
 	m := NewRunManager(d, p, nil)
@@ -293,9 +284,6 @@ func TestRestartDueWaitsForAGateResponseInFlight(t *testing.T) {
 	}
 }
 
-// Greptile on #1697: while the pushes an earlier daemon held are replaying, a
-// fresh push is held behind them, so an older held push can never replace the
-// run of a newer push to the same branch.
 func TestFreshPushDuringReplayIsHeldBehindTheBacklog(t *testing.T) {
 	p, d := newParkedRunEnv(t)
 	repo, headSHA := setupTestGitRepo(t, p, d, "replay-order")
@@ -328,9 +316,6 @@ func TestFreshPushDuringReplayIsHeldBehindTheBacklog(t *testing.T) {
 	}
 }
 
-// Greptile on #1697: a plain push that passed the first check and was then
-// refused because a restart was scheduled meanwhile is held, not dropped: the
-// hook never retries it.
 func TestPushRefusedByALateRestartIsHeld(t *testing.T) {
 	p, d := newParkedRunEnv(t)
 	repo, headSHA := setupTestGitRepo(t, p, d, "late-restart")
@@ -347,11 +332,6 @@ func TestPushRefusedByALateRestartIsHeld(t *testing.T) {
 	}
 }
 
-// Kun's triage on #1697: a second restart scheduled while held pushes replay
-// must not re-hold the unreplayed older pushes behind a fresh push held during
-// the replay, or the next daemon starts the older push last and it replaces
-// the newer run on the same branch. The unreplayed rest stays in the replay
-// file, which the next daemon replays first.
 func TestRestartDuringReplayKeepsTheUnreplayedPushesAheadOfNewerOnes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

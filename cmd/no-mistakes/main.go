@@ -154,8 +154,6 @@ func daemonRunRootFromArgs(args []string) (string, bool, error) {
 	return "", false, nil
 }
 
-// cliLogWriter returns a writer for CLI logs. Falls back to io.Discard
-// if the log file cannot be opened (e.g. before first init).
 func cliLogWriter() io.Writer {
 	p, err := paths.New()
 	if err != nil {

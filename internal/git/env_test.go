@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// resolveEnv collapses a KEY=VALUE slice into a map using last-wins semantics,
-// matching how exec resolves duplicate keys.
 func resolveEnv(env []string) map[string]string {
 	m := make(map[string]string, len(env))
 	for _, kv := range env {
@@ -83,10 +81,6 @@ func TestNonInteractiveEnvFrom_UsesBaseAndOverridesGitKeys(t *testing.T) {
 	}
 }
 
-// TestNonInteractiveEnv_SetsPWDToDir locks in the PWD coupling. Assigning
-// cmd.Env disables os/exec's automatic PWD=Cmd.Dir injection, so the helper
-// must restore it; otherwise os.Getwd in the child resolves symlinks (e.g.
-// /tmp -> /private/tmp on macOS) and reports a different working directory.
 func TestNonInteractiveEnv_SetsPWDToDir(t *testing.T) {
 	t.Setenv("PWD", "/somewhere/else")
 
@@ -104,11 +98,6 @@ func TestNonInteractiveEnv_SetsPWDToDir(t *testing.T) {
 	}
 }
 
-// TestNonInteractiveEnv_AbsolutizesRelativeDir locks in that a relative dir is
-// absolutized before injection, matching os/exec (go.dev/issue/50599). POSIX
-// defines PWD as an absolute pathname; a relative value like "." propagates
-// through git receive-pack into hooks, where macOS /bin/sh (bash 3.2) trusts
-// it and `pwd` collapses to "." (issue #269).
 func TestNonInteractiveEnv_AbsolutizesRelativeDir(t *testing.T) {
 	t.Setenv("PWD", "/somewhere/else")
 

@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Repo represents a registered repository.
 type Repo struct {
 	ID            string
 	WorkingPath   string
@@ -16,8 +15,6 @@ type Repo struct {
 	DefaultBranch string
 	CreatedAt     int64
 
-	// URLsVerified is run-scoped, in-memory evidence that the URL fields were
-	// just validated against the working clone. It is never persisted.
 	URLsVerified bool `json:"-"`
 }
 
@@ -31,7 +28,6 @@ func (d *DB) repoColumns() (string, error) {
 	return d.readProjection("repos", repoReadColumns, repoScanTargets(&Repo{})...)
 }
 
-// PushURL returns the remote URL that should receive branch updates.
 func (r *Repo) PushURL() string {
 	if r == nil {
 		return ""
@@ -42,12 +38,10 @@ func (r *Repo) PushURL() string {
 	return r.UpstreamURL
 }
 
-// InsertRepoWithID creates a new repo record with a caller-provided ID.
 func (d *DB) InsertRepoWithID(id, workingPath, upstreamURL, defaultBranch string) (*Repo, error) {
 	return d.InsertRepoWithIDAndFork(id, workingPath, upstreamURL, "", defaultBranch)
 }
 
-// InsertRepoWithIDAndFork creates a repo record with an optional fork push URL.
 func (d *DB) InsertRepoWithIDAndFork(id, workingPath, upstreamURL, forkURL, defaultBranch string) (*Repo, error) {
 	r := &Repo{
 		ID:            id,
@@ -67,12 +61,10 @@ func (d *DB) InsertRepoWithIDAndFork(id, workingPath, upstreamURL, forkURL, defa
 	return r, nil
 }
 
-// InsertRepo creates a new repo record and returns it with a generated ID.
 func (d *DB) InsertRepo(workingPath, upstreamURL, defaultBranch string) (*Repo, error) {
 	return d.InsertRepoWithFork(workingPath, upstreamURL, "", defaultBranch)
 }
 
-// InsertRepoWithFork creates a new repo record with an optional fork push URL.
 func (d *DB) InsertRepoWithFork(workingPath, upstreamURL, forkURL, defaultBranch string) (*Repo, error) {
 	r := &Repo{
 		ID:            newID(),
@@ -92,13 +84,6 @@ func (d *DB) InsertRepoWithFork(workingPath, upstreamURL, forkURL, defaultBranch
 	return r, nil
 }
 
-// RepoWorkingPaths returns the working path of every registered repository.
-//
-// It is the set of checkouts a run worktree placement must stay out of (see
-// worktrees.CheckPlacement): a run worktree inside a checkout leaves it dirty
-// for the duration of the run. Both gates that judge placement read the set from
-// here - the daemon at startup and `init --worktree-root` before it prints an
-// entry - so the two cannot diverge on which checkouts exist.
 func (d *DB) RepoWorkingPaths() ([]string, error) {
 	rows, err := d.sql.Query(`SELECT working_path FROM repos ORDER BY id`)
 	if err != nil {
@@ -120,7 +105,6 @@ func (d *DB) RepoWorkingPaths() ([]string, error) {
 	return paths, nil
 }
 
-// GetRepos returns every authoritative repository record ordered by ID.
 func (d *DB) GetRepos() ([]*Repo, error) {
 	columns, err := d.repoColumns()
 	if err != nil {
@@ -148,7 +132,6 @@ func (d *DB) GetRepos() ([]*Repo, error) {
 	return repos, nil
 }
 
-// GetRepo returns a repo by ID.
 func (d *DB) GetRepo(id string) (*Repo, error) {
 	columns, err := d.repoColumns()
 	if err != nil {
@@ -167,13 +150,6 @@ func (d *DB) GetRepo(id string) (*Repo, error) {
 	return r, nil
 }
 
-// GetRepoByPath returns the repo registered for the directory workingPath
-// names. An exact match on the stored path wins. When there is none, the lookup
-// falls back to filesystem identity (os.SameFile), so one checkout keeps one
-// repository identity across spellings of its path: a case variant on a
-// case-insensitive volume, or a symlinked path. Two directories that merely
-// differ in case on a case-sensitive volume are different files and stay
-// distinct. A path that cannot be stat'ed matches nothing but itself.
 func (d *DB) GetRepoByPath(workingPath string) (*Repo, error) {
 	columns, err := d.repoColumns()
 	if err != nil {
@@ -192,11 +168,6 @@ func (d *DB) GetRepoByPath(workingPath string) (*Repo, error) {
 	return d.getRepoBySameFile(workingPath)
 }
 
-// getRepoBySameFile scans the registered repos, oldest first, for one whose
-// working path is the same directory as workingPath. Rows registered under
-// different spellings of one directory therefore resolve to the oldest, in
-// insertion order (rowid) when created_at ties, rather than to whichever row
-// sorts first by its path-derived id.
 func (d *DB) getRepoBySameFile(workingPath string) (*Repo, error) {
 	columns, err := d.repoColumns()
 	if err != nil {
@@ -232,9 +203,6 @@ func (d *DB) getRepoBySameFile(workingPath string) (*Repo, error) {
 	return nil, nil
 }
 
-// ReplaceRepoURLs atomically replaces both registered repository URLs and
-// returns the committed record. A failure leaves the exact prior registration
-// intact.
 func (d *DB) ReplaceRepoURLs(id, upstreamURL, forkURL string) (*Repo, error) {
 	tx, err := d.sql.Begin()
 	if err != nil {
@@ -267,8 +235,6 @@ func (d *DB) ReplaceRepoURLs(id, upstreamURL, forkURL string) (*Repo, error) {
 	return r, nil
 }
 
-// UpdateRepoMetadata refreshes mutable repository metadata while preserving the
-// stable repo ID, created_at timestamp, and any existing fork push URL.
 func (d *DB) UpdateRepoMetadata(id, upstreamURL, defaultBranch string) (*Repo, error) {
 	_, err := d.sql.Exec(
 		`UPDATE repos SET upstream_url = ?, default_branch = ? WHERE id = ?`,
@@ -280,8 +246,6 @@ func (d *DB) UpdateRepoMetadata(id, upstreamURL, defaultBranch string) (*Repo, e
 	return d.GetRepo(id)
 }
 
-// UpdateRepoMetadataWithFork refreshes repo metadata and explicitly sets the
-// optional fork push URL.
 func (d *DB) UpdateRepoMetadataWithFork(id, upstreamURL, forkURL, defaultBranch string) (*Repo, error) {
 	_, err := d.sql.Exec(
 		`UPDATE repos SET upstream_url = ?, fork_url = ?, default_branch = ? WHERE id = ?`,
@@ -293,7 +257,6 @@ func (d *DB) UpdateRepoMetadataWithFork(id, upstreamURL, forkURL, defaultBranch 
 	return d.GetRepo(id)
 }
 
-// UpdateRepoForkURL sets or clears the optional fork push URL.
 func (d *DB) UpdateRepoForkURL(id, forkURL string) (*Repo, error) {
 	_, err := d.sql.Exec(
 		`UPDATE repos SET fork_url = ? WHERE id = ?`,
@@ -305,9 +268,6 @@ func (d *DB) UpdateRepoForkURL(id, forkURL string) (*Repo, error) {
 	return d.GetRepo(id)
 }
 
-// UpdateRepoWorkingPath moves a repo record to a new working path, preserving
-// the repo ID (and with it the gate and run history) when the working
-// directory is renamed or moved on disk.
 func (d *DB) UpdateRepoWorkingPath(id, workingPath string) (*Repo, error) {
 	_, err := d.sql.Exec(
 		`UPDATE repos SET working_path = ? WHERE id = ?`,
@@ -319,7 +279,6 @@ func (d *DB) UpdateRepoWorkingPath(id, workingPath string) (*Repo, error) {
 	return d.GetRepo(id)
 }
 
-// DeleteRepo deletes a repo by ID (cascade deletes runs and steps).
 func (d *DB) DeleteRepo(id string) error {
 	_, err := d.sql.Exec(`DELETE FROM repos WHERE id = ?`, id)
 	if err != nil {

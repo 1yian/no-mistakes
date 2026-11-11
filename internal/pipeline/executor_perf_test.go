@@ -13,8 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// usageAgent is a minimal agent that reports token usage and echoes session
-// starts, for perf-recording tests.
 type usageAgent struct{ resumable bool }
 
 func (u *usageAgent) Name() string                { return "usage-agent" }
@@ -53,10 +51,6 @@ func (a *fallbackUsageAgent) Run(context.Context, agent.RunOpts) (*agent.Result,
 
 func (a *fallbackUsageAgent) Close() error { return nil }
 
-// TestExecutor_RecordsAgentInvocationsLocally proves every agent invocation
-// produces one local agent_invocations row carrying run/step identity,
-// purpose, round, session mode, model, timing, and token usage - and that
-// the raw session id never lands in the telemetry row.
 func TestExecutor_RecordsAgentInvocationsLocally(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -183,8 +177,6 @@ func TestPerfRecordingAgent_MixedFallbackRecordsActualProviderCold(t *testing.T)
 	}
 }
 
-// TestExecutor_AccumulatesParkedDuration proves a gate wait lands in the
-// run's persisted parked total once the wait ends.
 func TestExecutor_AccumulatesParkedDuration(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

@@ -14,8 +14,6 @@ import (
 	toon "github.com/toon-format/toon-go"
 )
 
-// Keep the public shape separate from DB rows, which also hold private config
-// snapshots and internal bookkeeping
 type axiRoundsDocument struct {
 	SchemaVersion int            `json:"schema_version"`
 	RunID         string         `json:"run_id"`
@@ -192,7 +190,6 @@ type roundFindingsPayload struct {
 	Findings []map[string]any `json:"findings"`
 }
 
-// Both columns store a findings object, never a bare array
 func decodeRoundFindings(raw string) (roundFindingsPayload, error) {
 	var payload roundFindingsPayload
 	if err := decodeRoundJSON(raw, &payload); err != nil {
@@ -201,7 +198,6 @@ func decodeRoundFindings(raw string) (roundFindingsPayload, error) {
 	return payload, requireNoNullMembers(payload.Findings)
 }
 
-// A null member decodes to a zero value that would export as real data
 func requireNoNullMembers[T any](members []T) error {
 	for i, m := range members {
 		if reflect.ValueOf(m).IsNil() {
@@ -211,7 +207,6 @@ func requireNoNullMembers[T any](members []T) error {
 	return nil
 }
 
-// Preserve numbers in optional finding fields without float64 rounding
 func decodeRoundJSON(raw string, target any) error {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
@@ -228,8 +223,6 @@ func decodeRoundJSON(raw string, target any) error {
 	return nil
 }
 
-// toon-go parses json.Number as float64 but renders a big.Int beyond 2^53 as a
-// decimal string, so integers survive TOON exactly
 func exactTOONIntegers(v any) any {
 	switch val := v.(type) {
 	case json.Number:

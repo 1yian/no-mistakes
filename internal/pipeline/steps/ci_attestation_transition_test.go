@@ -18,18 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestPipeline_CIRepairRefreshesPublishedAttestationBeforeReadiness exercises
-// the complete late-repair transition through the step and executor interfaces:
-// publish the initial PR content, commit a CI repair, revalidate it, push the
-// repaired head, republish the PR, then let CI inspect the raw body.
-//
-// The initiating transition and the masking condition are deliberately
-// separate. The successful case proves the current repair-publication route.
-// The failed-refresh case reproduces the remaining mask before CI starts:
-// PRStep used to downgrade an UpdatePR error to a warning, so CI ran against
-// the pushed head while the body still carried the prior attestation. The
-// simulated required check then reports the same user-visible head mismatch as
-// the live incident.
 func TestPipeline_CIRepairRefreshesPublishedAttestationBeforeReadiness(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

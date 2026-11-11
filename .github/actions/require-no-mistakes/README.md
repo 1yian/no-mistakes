@@ -32,8 +32,7 @@ already-superseded failed run reproduces its stale verdict with a brand-new
 timestamp - which both GitHub's own required-check view and this repository's
 `collapseLatestByName` check-collapsing treat as the current state, pinning a
 stale FAILURE next to an already-green commit with no clean recovery short of
-a new SHA. See `verify.py`'s module docstring for the full incident this
-guards against. When a live lookup is required (no explicit `pr-body`/
+a new SHA. When a live lookup is required (no explicit `pr-body`/
 `pr-head-sha` input was forwarded - the default zero-input integration) and it
 is not possible (no `pull-requests: read`, no token, or the API call fails),
 the action **fails the whole gate closed** instead of falling back to the

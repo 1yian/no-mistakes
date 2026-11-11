@@ -106,10 +106,6 @@ func TestLastFixedTrackingUsesProviderIdentityForSameNamedChecks(t *testing.T) {
 	}
 }
 
-// A cancelled check can be a fix target, so the completion snapshot that lets
-// the step notice its own CI re-run has to cover it. Keyed on the fail bucket
-// alone, a cancelled-only fix round records nothing and the step can only log
-// "fix already attempted" until its idle timeout.
 func TestTerminalFailureCompletionTimesCoverCancelledChecks(t *testing.T) {
 	t.Parallel()
 
@@ -144,7 +140,6 @@ func TestTerminalFailureFreshnessUsesExecutionIDWithoutCompletionTime(t *testing
 	}
 }
 
-// The fail bucket keeps the behavior it always had.
 func TestTerminalFailureCompletionTimesStillCoverFailingChecks(t *testing.T) {
 	t.Parallel()
 

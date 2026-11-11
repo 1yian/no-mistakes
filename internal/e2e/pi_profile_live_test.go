@@ -18,9 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// assertParkedRunIntact proves a refused dispatch never superseded a healthy
-// in-flight validation: the named run keeps running at its review gate and no
-// replacement run appeared on the branch.
 func assertParkedRunIntact(t *testing.T, h *Harness, runID, branch string) {
 	t.Helper()
 	run := h.RunInfo(runID)
@@ -49,10 +46,6 @@ func writeGlobalAutoPiPath(t *testing.T, h *Harness) {
 	}
 }
 
-// TestLivePiProfileTrustedPiOverridesGlobalAuto drives the real CLI through a
-// complete launch decision. The project opts into Pi on its trusted default
-// branch while the operator keeps global auto selection; the run must launch
-// with and persist the requested model and effort.
 func TestLivePiProfileTrustedPiOverridesGlobalAuto(t *testing.T) {
 	const (
 		branch = "feature/trusted-pi-over-auto"
@@ -100,9 +93,6 @@ func TestLivePiProfileTrustedPiOverridesGlobalAuto(t *testing.T) {
 	t.Logf("trusted project launched run %s with model=%s effort=xhigh under global agent:auto", parked.ID, model)
 }
 
-// TestLivePiProfileFeatureBranchPiCannotOverrideGlobalAuto proves the trust
-// boundary through the real CLI: a feature branch cannot opt itself into Pi
-// when neither the global config nor trusted default branch selects Pi.
 func TestLivePiProfileFeatureBranchPiCannotOverrideGlobalAuto(t *testing.T) {
 	const branch = "feature/untrusted-pi-over-auto"
 	noRepoCommands := false
@@ -143,9 +133,6 @@ func TestLivePiProfileFeatureBranchPiCannotOverrideGlobalAuto(t *testing.T) {
 	t.Logf("feature-branch-only Pi selection refused before replacing run %s: %s", parked.ID, firstErrorLine(out))
 }
 
-// TestLivePiProfileInvalidSelectionRefusedAtCli drives the real binary's flag
-// parsing for the dispatch surface: malformed or ambiguous selections must be
-// refused before the daemon, the gate, or any run is touched.
 func TestLivePiProfileInvalidSelectionRefusedAtCli(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "pi", Scenario: writeReviewAgentsRoutingScenario(t)})
 	if out, err := h.Run("init"); err != nil {
@@ -177,15 +164,6 @@ func TestLivePiProfileInvalidSelectionRefusedAtCli(t *testing.T) {
 	}
 }
 
-// TestLivePiProfileMixedHarnessRefusedBeforeActiveRunCancelled is the
-// pre-cancel guarantee against the running daemon: a pin request that cannot
-// resolve - because the operator's global harness is mixed, or because the
-// trusted default branch selects Claude - must be refused before the branch's
-// healthy active validation is cancelled.
-//
-// The caller commits on top of the parked run first, so the CLI no longer
-// treats that run as the active run for the current head and takes the
-// fresh-launch path that reaches the daemon's pre-cancel check.
 func TestLivePiProfileMixedHarnessRefusedBeforeActiveRunCancelled(t *testing.T) {
 	t.Run("mixed global harness", func(t *testing.T) {
 		const branch = "feature/mixed-global-pin"
@@ -262,10 +240,6 @@ func TestLivePiProfileMixedHarnessRefusedBeforeActiveRunCancelled(t *testing.T) 
 	}
 }
 
-// TestLivePiProfileReattachAndRerunSemantics drives the full dispatch surface
-// of one branch: a pinned run keeps its pin when reattached without flags, a
-// different selection cannot change it, and a rerun is a brand-new run that
-// takes a new pin or, with no flags, falls back to global configuration.
 func TestLivePiProfileReattachAndRerunSemantics(t *testing.T) {
 	const (
 		branch      = "feature/pi-reattach"
@@ -411,10 +385,6 @@ func TestLivePiProfileReattachAndRerunSemantics(t *testing.T) {
 	t.Logf("persisted pin mutation refused: %s", strings.TrimSpace(string(mutateOut)))
 }
 
-// TestLivePiProfileConcurrentRunsStayIsolated proves two pinned validations for
-// different branches run at the same time with independent profiles: each run's
-// agent subprocesses carry only that run's model, and a conflicting dispatch
-// against one branch leaves the other untouched.
 func TestLivePiProfileConcurrentRunsStayIsolated(t *testing.T) {
 	const (
 		branchA = "feature/iso-a"
@@ -484,11 +454,6 @@ func TestLivePiProfileConcurrentRunsStayIsolated(t *testing.T) {
 	t.Logf("isolated pinned runs: A=%d invocations on %s, B=%d invocations on %s", len(invsA), modelA, len(invsB), modelB)
 }
 
-// TestLivePiProfileResumeAfterDaemonRestartKeepsPin proves a pinned run keeps
-// its persisted profile across a daemon restart: the run is parked, the
-// operator's live configuration is rewritten to a conflicting harness, the
-// daemon is restarted, and the resumed fix/review turns still carry the
-// original pin rather than the newly written global selection.
 func TestLivePiProfileResumeAfterDaemonRestartKeepsPin(t *testing.T) {
 	const (
 		branch      = "feature/pi-restart"
@@ -564,8 +529,6 @@ func TestLivePiProfileResumeAfterDaemonRestartKeepsPin(t *testing.T) {
 	t.Logf("resumed across daemon restart with %d turns on %s", len(invs), pinnedModel)
 }
 
-// invocationsForRun returns the captured agent turns that ran inside the
-// named run's own worktree.
 func invocationsForRun(t *testing.T, h *Harness, runID string) []Invocation {
 	t.Helper()
 	dir := paths.WithRoot(h.NMHome).WorktreeDir(h.repoID(), runID)
@@ -578,7 +541,6 @@ func invocationsForRun(t *testing.T, h *Harness, runID string) []Invocation {
 	return out
 }
 
-// waitForRunIDTerminal polls until the named run reaches a terminal status.
 func waitForRunIDTerminal(t *testing.T, h *Harness, runID string, timeout time.Duration) *ipc.RunInfo {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -598,7 +560,6 @@ func waitForRunIDTerminal(t *testing.T, h *Harness, runID string, timeout time.D
 	return nil
 }
 
-// firstErrorLine returns the emitted error field from a CLI transcript.
 func firstErrorLine(out string) string {
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "error") || strings.Contains(line, "Pi run profile") {

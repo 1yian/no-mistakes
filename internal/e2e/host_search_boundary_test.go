@@ -10,20 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// hostSearchBoundaryClauses are the behaviors the workspace-boundary preamble
-// must deliver to every pipeline agent after a Test run froze before its suite
-// started. The agent's first tool call was `find / -maxdepth 4` looking for an
-// installed helper (`tg-axi`); it blocked at 0% CPU in a macOS directory-service
-// automount under /home until the 30-minute budget killed it, so no scenario
-// ever ran.
-//
-// These are asserted against the prompt the real daemon hands a real agent
-// process (captured from the fake agent's log), which is the generated
-// interface a user experiences - not against the source that builds it. The
-// clauses cover the whole rule: whole-root searches are disallowed by name
-// (including the exact observed shape and the `-maxdepth` misconception),
-// bounded worktree/evidence/repo-local reads must survive, and the missing-tool
-// fallback must tell the agent to report and stop instead of searching.
 var hostSearchBoundaryClauses = []string{
 	"Do not search the host filesystem",
 	"Never run a filesystem-wide search such as `find /` or `mdfind /`",
@@ -36,19 +22,8 @@ var hostSearchBoundaryClauses = []string{
 	"report the missing tool and the work it blocked in your normal result",
 }
 
-// testOnlyUntestedFallback is the Test-step half of the missing-tool rule. Only
-// the Test result schema has scenarios and an "untested" state, so this wording
-// must stay on the Test prompt and must not leak into other roles.
 const testOnlyUntestedFallback = `report the affected scenario as "untested"`
 
-// TestHostSearchBoundaryReachesEveryPipelinePrompt drives a real gate push
-// through the real daemon and inspects the prompts the daemon delivered to the
-// agent process. It proves the incident's fix at the user-facing boundary: the
-// step the agent actually froze in (Test) now carries the bounded-search rule
-// and the report-instead-of-hunt fallback, every other steering-wrapped step
-// carries the same shared rule, and bounded repository/evidence reads remain
-// allowed rather than the rule becoming a blanket ban on reading outside the
-// worktree.
 func TestHostSearchBoundaryReachesEveryPipelinePrompt(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: cleanReviewScenario(t)})
 	if out, err := h.Run("init"); err != nil {
@@ -137,8 +112,6 @@ func TestHostSearchBoundaryReachesEveryPipelinePrompt(t *testing.T) {
 	t.Logf("review prompt host-search boundary, as delivered:\n%s", hostSearchBoundaryLines(reviewPrompt))
 }
 
-// hostSearchBoundaryLines returns the delivered boundary bullet lines verbatim
-// so the test log shows the real prompt text for this run.
 func hostSearchBoundaryLines(prompt string) string {
 	var sb strings.Builder
 	for _, line := range strings.Split(prompt, "\n") {

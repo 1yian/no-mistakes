@@ -15,10 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// fakePreRunHost is a scm.Host that also reports pre-run infrastructure
-// failures from a fixed set, so markPreRunInfraFailures can be exercised without
-// a live provider. The embedded nil scm.Host is never called: the CI step only
-// invokes the detector method here.
 type fakePreRunHost struct {
 	scm.Host
 	flagged map[string]bool
@@ -44,11 +40,6 @@ func markContext(t *testing.T, rerunBudget int) *pipeline.StepContext {
 	}
 }
 
-// A GitHub Actions action-download outage fails a job in setup, before any
-// repository step runs. markPreRunInfraFailures must route that into the
-// transient path (re-run, do not fail the run), while a genuine test failure
-// that cleared setup stays a real failure. Proving both directions here is the
-// masking-safety contract: infra retried, real failure still fails.
 func TestMarkPreRunInfraFailures_RetriesInfraButNotGenuine(t *testing.T) {
 	t.Parallel()
 
@@ -80,8 +71,6 @@ func TestMarkPreRunInfraFailures_RetriesInfraButNotGenuine(t *testing.T) {
 	}
 }
 
-// The detection is opt-in: with the default rerun budget of 0 the provider is
-// never consulted and an action-download outage fails the run exactly as before.
 func TestMarkPreRunInfraFailures_OptInGated(t *testing.T) {
 	t.Parallel()
 
@@ -98,10 +87,6 @@ func TestMarkPreRunInfraFailures_OptInGated(t *testing.T) {
 	}
 }
 
-// Check names are not unique on a PR: two workflows can both name a job
-// "build". If one fails at setup (infra) and the other fails a real repository
-// step, only the infra one may be re-bucketed. A positional detector result
-// keeps them apart; a name-keyed one would flag both and mask the real failure.
 func TestMarkPreRunInfraFailures_SameNameGenuineNotMasked(t *testing.T) {
 	t.Parallel()
 
@@ -173,10 +158,6 @@ func TestClassifyCheckFailure(t *testing.T) {
 	}
 }
 
-// A setup failure uses the cancel-shaped policy path, but it is still a failed
-// setup rather than a provider cancellation. The approval result must preserve
-// that cause after the rerun budget is spent so the user can make the decision
-// with an accurate diagnosis.
 func TestCIUnresolvedCancelledOutcomePreservesPreRunFailureCause(t *testing.T) {
 	t.Parallel()
 
@@ -218,9 +199,6 @@ func TestCIUnresolvedCancelledOutcomePreservesPreRunFailureCause(t *testing.T) {
 	}
 }
 
-// Names identify shared rerun budgets, not unique checks. If two workflows use
-// the same job name, the approval result must retain each check's own cause
-// instead of letting a setup failure relabel its cancelled sibling.
 func TestCIUnresolvedCancelledOutcomeKeepsSameNamedCausesPositional(t *testing.T) {
 	t.Parallel()
 
@@ -259,8 +237,6 @@ func TestCIUnresolvedCancelledOutcomeKeepsSameNamedCausesPositional(t *testing.T
 	}
 }
 
-// A stale check must also stay non-terminal, so the classifier's verdict for it
-// cannot be reached through a path that counts it as a failure.
 func TestCheckFailedTerminallyMatchesTheBucketMapping(t *testing.T) {
 	t.Parallel()
 
@@ -399,10 +375,6 @@ func TestTransientRerunCandidates(t *testing.T) {
 	}
 }
 
-// Selection and spending together are the whole cap, so they are walked
-// together here: no sequence of polls may spend more reruns than the limit for
-// one check name, which selecting purely on already-spent counts would allow
-// within a single poll.
 func TestTransientRerunSelectionCannotExceedTheBudget(t *testing.T) {
 	t.Parallel()
 
@@ -429,11 +401,6 @@ func TestTransientRerunSelectionCannotExceedTheBudget(t *testing.T) {
 	}
 }
 
-// A budget of two or more must not let a lagging rollup buy a second rerun of a
-// job that is already re-running: the request either bounces or bills the
-// repository a duplicate workflow run. Selection declines while the recorded
-// completion is still the one being observed, and the check spends rollup grace
-// instead of budget.
 func TestTransientRerunSelectionDeclinesWhileTheRollupIsUnrefreshed(t *testing.T) {
 	t.Parallel()
 
@@ -473,8 +440,6 @@ func TestTransientRerunSelectionDeclinesWhileTheRollupIsUnrefreshed(t *testing.T
 	}
 }
 
-// A refreshed rollup is a real second cancellation, so the remaining budget is
-// available immediately rather than after the grace.
 func TestTransientRerunSelectionResumesOnceTheRollupRefreshes(t *testing.T) {
 	t.Parallel()
 
@@ -493,8 +458,6 @@ func TestTransientRerunSelectionResumesOnceTheRollupRefreshes(t *testing.T) {
 	}
 }
 
-// The accounting primitives only. The cap that matters is enforced by selection,
-// which TestTransientRerunSelectionCannotExceedTheBudget covers.
 func TestCheckRerunBudgetAccounting(t *testing.T) {
 	t.Parallel()
 
@@ -572,10 +535,6 @@ func TestCancelledChecksAfterRerun(t *testing.T) {
 	}
 }
 
-// `gh run rerun` returns as soon as the provider accepts the request, while the
-// new attempt replaces the cancelled check asynchronously. A poll that still
-// reads the exact completion the rerun was requested for has observed nothing
-// new, so it must not escalate a check that was never actually re-run.
 func TestCancelledCheckAwaitsItsRerunBeforeBeingCalledUnresolved(t *testing.T) {
 	t.Parallel()
 
@@ -598,8 +557,6 @@ func TestCancelledCheckAwaitsItsRerunBeforeBeingCalledUnresolved(t *testing.T) {
 	assertNames(t, "awaiting after the grace ran out", awaiting, nil)
 }
 
-// Once the rerun's own attempt is visible, a check that came back cancelled is
-// the provider reporting a second cancellation, not a stale rollup.
 func TestRerunThatEndsCancelledAgainIsUnresolvedImmediately(t *testing.T) {
 	t.Parallel()
 
@@ -649,9 +606,6 @@ func assertNames(t *testing.T, label string, got, want []string) {
 	}
 }
 
-// A cancelled conclusion does not say who cancelled it, so rerunning is opt-in.
-// This guards the default rather than the plumbing: flipping it back to a
-// non-zero value would silently restart jobs a maintainer stopped on purpose.
 func TestRerunningCancelledChecksIsOffByDefault(t *testing.T) {
 	t.Parallel()
 	if config.DefaultCIRerunTransient != 0 {
@@ -664,9 +618,6 @@ func TestRerunningCancelledChecksIsOffByDefault(t *testing.T) {
 	}
 }
 
-// The budget has to survive a daemon restart. Before it was durable, a
-// recovered run started from zero spent and could issue another rerun past the
-// documented limit.
 func TestRerunBudgetSurvivesARestart(t *testing.T) {
 	t.Parallel()
 	completed := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
@@ -717,8 +668,6 @@ func TestRerunBudgetSurvivesARestart(t *testing.T) {
 	}
 }
 
-// An empty budget writes nothing, so a run that never spent a rerun does not
-// persist a payload.
 func TestUnspentRerunBudgetMarshalsToNothing(t *testing.T) {
 	t.Parallel()
 	encoded, err := (&checkRerunBudget{}).marshal()
@@ -730,9 +679,6 @@ func TestUnspentRerunBudgetMarshalsToNothing(t *testing.T) {
 	}
 }
 
-// A transitional rollup can omit the check a rerun was requested for. Tracking
-// only what the response carries dropped it from both buckets, so the run could
-// read as green while its replacement was still unknown.
 func TestOutstandingRerunMissingFromTheRollupStaysTracked(t *testing.T) {
 	t.Parallel()
 	completed := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
@@ -762,8 +708,6 @@ func TestOutstandingRerunMissingFromTheRollupStaysTracked(t *testing.T) {
 	}
 }
 
-// A check that came back in a non-cancelled bucket is published, not missing:
-// it must not consume the missing-check grace.
 func TestOutstandingRerunPublishedInAnotherBucketIsNotTreatedAsMissing(t *testing.T) {
 	t.Parallel()
 	completed := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)

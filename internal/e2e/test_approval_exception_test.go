@@ -16,8 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// This is a real CLI/daemon/gate journey with a local bare push target and a
-// canned evidence agent, not a claim that the canned agent tested a product.
 func TestAxiTestApprovalExceptionJourney(t *testing.T) {
 	for _, tc := range []struct {
 		name, action, reason string

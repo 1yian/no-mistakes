@@ -22,18 +22,13 @@ import (
 // remote.no-mistakes.url, the first home's. init must never rewrite it from
 // the second home, on a fresh init or on a refresh.
 
-// sharedHome is one no-mistakes home gating a checkout whose .git it shares.
 type sharedHome struct {
-	p   *paths.Paths
-	d   *db.DB
-	dir string // the checkout this home runs init from
-	// gitconfig is this home's own global git config, standing in for the
-	// account's ~/.gitconfig.
+	p         *paths.Paths
+	d         *db.DB
+	dir       string // the checkout this home runs init from
 	gitconfig string
 }
 
-// newSharedHome creates a home under a fresh temp dir; a non-empty homeLeaf
-// names the home's root directory inside it.
 func newSharedHome(t *testing.T, dir, homeLeaf string) *sharedHome {
 	t.Helper()
 	p := paths.WithRoot(filepath.Join(resolveSymlinks(t, t.TempDir()), homeLeaf))
@@ -47,23 +42,17 @@ func newSharedHome(t *testing.T, dir, homeLeaf string) *sharedHome {
 	return &sharedHome{p: p, d: openTestDB(t, p), dir: dir, gitconfig: gitconfig}
 }
 
-// act makes git calls in this test run under this home's own global git
-// config, as they would in this account's shell.
 func (h *sharedHome) act(t *testing.T) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", h.gitconfig)
 }
 
-// init runs Init as this home: with its NM_HOME paths, its database, and its
-// own global git config.
 func (h *sharedHome) init(t *testing.T) (*db.Repo, bool, error) {
 	t.Helper()
 	h.act(t)
 	return Init(context.Background(), h.d, h.p, h.dir)
 }
 
-// mapGate adds the per-account rewrite the refusal recommends to this home's
-// global git config.
 func (h *sharedHome) mapGate(t *testing.T, key, value string) {
 	t.Helper()
 	if out, err := exec.Command("git", "config", "--file", h.gitconfig, key, value).CombinedOutput(); err != nil {
@@ -71,9 +60,6 @@ func (h *sharedHome) mapGate(t *testing.T, key, value string) {
 	}
 }
 
-// followRecipe runs the command a refusal printed through a POSIX shell, as
-// the account would by pasting it, and checks that it mapped otherGate onto
-// ownGate in this home's global git config.
 func (h *sharedHome) followRecipe(t *testing.T, recipe, ownGate, otherGate string) {
 	t.Helper()
 	cmd := exec.Command("sh", "-c", recipe)
@@ -97,9 +83,6 @@ func (h *sharedHome) unmapGate(t *testing.T, key string) {
 	}
 }
 
-// setupSharedGit returns home A, which has initialized the main checkout, and
-// home B, which works in a linked worktree of that same checkout. A non-empty
-// homeLeaf names each home's root directory.
 func setupSharedGit(t *testing.T, homeLeaf string) (a, b *sharedHome) {
 	t.Helper()
 	workDir := setupTestRepo(t)
@@ -115,8 +98,6 @@ func setupSharedGit(t *testing.T, homeLeaf string) (a, b *sharedHome) {
 	return a, b
 }
 
-// literalGateURL is remote.no-mistakes.url exactly as the shared .git/config
-// holds it, before any insteadOf rewrite.
 func literalGateURL(t *testing.T, dir string) string {
 	t.Helper()
 	url, err := gitpkg.GetConfiguredRemoteURL(context.Background(), dir, RemoteName)
@@ -137,8 +118,6 @@ func gateBareDir(t *testing.T, h *sharedHome) string {
 
 const recipePrefix = "  git config --global "
 
-// assertSharedHomeRefusal checks that err refuses with the guidance the issue
-// asks for and returns the insteadOf recipe command it prints.
 func assertSharedHomeRefusal(t *testing.T, err error, otherGate, ownGate string) (recipe string) {
 	t.Helper()
 	if err == nil {
@@ -166,9 +145,6 @@ func assertSharedHomeRefusal(t *testing.T, err error, otherGate, ownGate string)
 	return ""
 }
 
-// The silent overwrite the issue reproduced: B maps A's gate onto its own with
-// a url.insteadOf rewrite, and its refresh then wrote B's path into the shared
-// config, so A's next `git push no-mistakes` reached B's gate.
 func TestInitRefreshLeavesAnotherHomesGateRemoteAloneUnderInsteadOf(t *testing.T) {
 	a, b := setupSharedGit(t, "")
 	aGate := literalGateURL(t, a.dir)
@@ -263,9 +239,6 @@ func TestInitRefusesAnotherHomesGateRemoteWithGuidance(t *testing.T) {
 	})
 }
 
-// The recipe is pasted into a shell, so gate paths holding shell syntax must
-// reach git byte for byte: an unquoted $1 would expand, a stray quote would
-// end the word, and git would store a rewrite that never matches.
 func TestInitRefusalRecipeSurvivesShellSyntaxInGatePaths(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows file names cannot contain a double quote")
@@ -286,8 +259,6 @@ func TestInitRefusalRecipeSurvivesShellSyntaxInGatePaths(t *testing.T) {
 	}
 }
 
-// A refresh keeps the promise a fresh init already made: a no-mistakes remote
-// the operator pointed somewhere else is theirs, not stale gate wiring.
 func TestInitRefreshDoesNotOverwriteACustomNoMistakesRemote(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -316,7 +287,6 @@ func TestInitRefreshDoesNotOverwriteACustomNoMistakesRemote(t *testing.T) {
 	}
 }
 
-// Stale wiring inside this home's own repos dir is still repaired on refresh.
 func TestInitRefreshRepointsStaleWiringInOwnReposDir(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -341,8 +311,6 @@ func TestInitRefreshRepointsStaleWiringInOwnReposDir(t *testing.T) {
 	}
 }
 
-// Under a shared .git, B's own wiring is only a rewrite in B's global config;
-// the remote itself is A's. Nothing B tears down may take A's remote with it.
 func TestTearingDownAnotherHomesGateKeepsTheSharedRemote(t *testing.T) {
 	t.Run("fresh init rollback", func(t *testing.T) {
 		a, b := setupSharedGit(t, "")
@@ -382,9 +350,6 @@ func TestTearingDownAnotherHomesGateKeepsTheSharedRemote(t *testing.T) {
 	})
 }
 
-// A failed fresh init removes only the remote it wrote. A copied checkout's
-// remote to the original's gate sits in the same repos dir, but this init
-// never wrote it.
 func TestInitRollbackKeepsARemoteItDidNotWrite(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -410,9 +375,6 @@ func TestInitRollbackKeepsARemoteItDidNotWrite(t *testing.T) {
 	}
 }
 
-// A rewrite that maps only fetches onto this gate is not enough: the pipeline
-// pushes through the remote, and a pushInsteadOf sending pushes elsewhere would
-// leave this home's runs unreachable.
 func TestInitRefusesAnotherHomesGateWhenOnlyFetchesReachThisGate(t *testing.T) {
 	a, b := setupSharedGit(t, "")
 	aGate := literalGateURL(t, a.dir)
@@ -427,8 +389,6 @@ func TestInitRefusesAnotherHomesGateWhenOnlyFetchesReachThisGate(t *testing.T) {
 	}
 }
 
-// A remote with several URLs pushes to all of them, so init cannot judge it
-// from one and leaves it alone.
 func TestInitRefusesANoMistakesRemoteWithSeveralURLs(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())

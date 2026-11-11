@@ -24,9 +24,6 @@ func (a *intentChangeAgent) Run(_ context.Context, opts agent.RunOpts) (*agent.R
 	return a.run(opts)
 }
 
-// Exercise the production Git -> readers -> matcher -> summarizer path without
-// reading a real transcript or calling a model. The agent refuses a request that
-// cannot distinguish the later change from the older task in the same session.
 func TestIntentStep_SummarizesValidatedChange(t *testing.T) {
 	for _, kind := range []string{"text", "large", "binary", "unpublished", "zero-base"} {
 		t.Run(kind, func(t *testing.T) {

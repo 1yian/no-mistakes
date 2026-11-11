@@ -138,11 +138,6 @@ func TestCIStep_BitbucketFailureNeedsApproval(t *testing.T) {
 	}
 }
 
-// A stopped Bitbucket pipeline is terminal in the same way a cancelled GitHub
-// check is: Bitbucket will not move it to SUCCESSFUL or FAILED on its own. It
-// is not a job failure either, so it parks for a decision rather than entering
-// the fix loop - and never by continuing to poll a result that has stopped
-// changing.
 func TestCIStep_BitbucketStoppedCheckParksForADecision(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

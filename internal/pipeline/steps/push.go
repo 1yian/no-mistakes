@@ -18,7 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// PushStep force-pushes the worktree state to the configured push remote.
 type PushStep struct{}
 
 func (s *PushStep) Name() types.StepName { return types.StepPush }
@@ -99,35 +98,6 @@ func (s *PushStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, e
 	return &pipeline.StepOutcome{}, nil
 }
 
-// publishRunHead is the single guarded publication path for a run's head. Both
-// the Push step and a CI repair published without revalidation
-// (ci.revalidate_repairs: false) go through it, so the review-approved-head
-// continuity check, the force-with-lease anchor, the remote verification, the
-// push binding, and the gate-mirror update are written once and can never
-// drift apart between the two callers.
-//
-// localRefUpdate, when non-empty, is the SHA the run's local branch ref is
-// moved to after a verified push. Callers that already advanced the ref with
-// their commit pass "".
-//
-// Every worktree git call here is step-scoped (stepGitRun), not git.Run,
-// because the CI step runs with a step-local PATH and credential environment
-// that a plain runner would not see. Gate-mirror calls stay on git.Run: they
-// operate on the bare gate directory, not the run worktree.
-// Publication becomes durable only after the remote and gate mirror settle;
-// the push binding and recorded head then land in one database update.
-//
-// It deliberately does not relax the review-approved-head check for anyone.
-// Whether a CI repair may be published at all is decided before publication, by
-// ciRepairContinuityGap.
-//
-// attestationSteps is forwarded to attestHeadBeforePush, which writes this
-// run's pipeline attestation for headBeingPushed BEFORE it is pushed - see
-// that function's doc comment for why this ordering, not a post-push write,
-// closes the push-then-attest race. Pass nil to carry an existing
-// attestation's own step statuses forward (a CI repair published without
-// revalidation); pass this run's current steps (sctx.DB.GetStepsByRun) for
-// the ordinary Push step.
 func publishRunHead(sctx *pipeline.StepContext, headBeingPushed, localRefUpdate string, attestationSteps []*db.StepResult) error {
 	// Refuse before remote reads, attestation writes, or mirror reconciliation.
 	// Both ordinary pushes and direct CI-repair publication pass this boundary.
@@ -255,12 +225,6 @@ func publishRunHead(sctx *pipeline.StepContext, headBeingPushed, localRefUpdate 
 	return nil
 }
 
-// planGateMirrorReconciliation inspects the gate mirror without mutating it.
-// Only the heads this run itself placed on the mirror - its exact submitted
-// head and its exact durable last-published head - are eligible for the policy
-// exception owned by docs/src/content/docs/concepts/gate-model.md. Do not
-// substitute an agent-created or other recorded head: those still require
-// preservation checks.
 func planGateMirrorReconciliation(ctx context.Context, sctx *pipeline.StepContext, ref, branch, headBeingPushed string) (gatepkg.StaleBranchPlan, error) {
 	var plan gatepkg.StaleBranchPlan
 	if sctx.Repo == nil || strings.TrimSpace(sctx.GateDir) == "" {
@@ -294,16 +258,6 @@ func runOwnedSubmittedHead(sctx *pipeline.StepContext) string {
 	return strings.TrimSpace(*sctx.Run.SubmittedHeadSHA)
 }
 
-// runOwnedPublishedHead returns the head this run last published, read from
-// the durable run record. Once a run has published, the mirror carries that
-// head rather than the submitted one, so a reviewed rewrite of an already
-// published run - a CI merge-conflict repair revalidated from Review - needs
-// the same exception to replace it. UpdateRunPublication writes the value only
-// after a verified push and mirror settlement, so it is never an external or
-// newer head, and the upstream push is leased on the same SHA
-// (lastKnownBranchTip). The in-memory run is not the source: publication
-// advances only its HeadSHA, so within one executor pass its LastPushedSHA
-// still predates the first push.
 func runOwnedPublishedHead(sctx *pipeline.StepContext) (string, error) {
 	run, err := sctx.DB.GetRun(sctx.Run.ID)
 	if err != nil {
@@ -379,10 +333,6 @@ func updateGateMirrorAfterPush(ctx context.Context, sctx *pipeline.StepContext, 
 	return nil
 }
 
-// assertReviewApprovedPushHead refuses to publish a head that is not the
-// durably review-approved commit or a descendant of it. There is no exception:
-// a head that cannot show that ancestry has not been reviewed, and the CI
-// repair path answers that case by revalidating instead of publishing.
 func assertReviewApprovedPushHead(sctx *pipeline.StepContext, proposedHead string) error {
 	run, err := sctx.DB.GetRun(sctx.Run.ID)
 	if err != nil {
@@ -401,10 +351,6 @@ func assertReviewApprovedPushHead(sctx *pipeline.StepContext, proposedHead strin
 	return nil
 }
 
-// reviewApprovedHead returns the run's durable review-approved commit, or ""
-// plus the reason it is unusable. It is the single reader of that authority, so
-// the pre-publication continuity decision and the publication guard itself can
-// never disagree about what "reviewed" means.
 func reviewApprovedHead(sctx *pipeline.StepContext, run *db.Run) (string, string) {
 	if run == nil || run.ReviewApprovedHeadSHA == nil || strings.TrimSpace(*run.ReviewApprovedHeadSHA) == "" {
 		return "", "run has no durably recorded review-approved head"
@@ -439,10 +385,6 @@ func shortObjectID(value string) string {
 	return value
 }
 
-// lastKnownBranchTip returns the commit SHA the pipeline last observed or
-// produced for this branch on the remote. It checks the current run's recorded
-// pushed head, then prior pipeline runs for the same repo and branch, and
-// finally falls back to the worktree's remote-tracking ref.
 func lastKnownBranchTip(ctx context.Context, sctx *pipeline.StepContext, branch string, fork bool) string {
 	// Publication updates the durable run row after the remote and mirror settle,
 	// but the executor's in-memory run only advances HeadSHA. Reload the current

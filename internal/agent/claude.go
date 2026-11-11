@@ -17,36 +17,19 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// claudeMaxRetries is the number of additional attempts past the initial
-// invocation. With 3 retries the agent makes up to 4 total attempts before
-// surfacing a transient API error to the pipeline.
 const claudeMaxRetries = 3
 
-// errNoStructuredOutput is returned when Claude succeeds but omits structured output.
 var errNoStructuredOutput = errors.New("claude returned no structured output")
 
 const claudeScannerMaxTokenSize = 256 * 1024 * 1024
 
-// claudeResultGrace is how long a process may stay open after writing a
-// finished result. Print mode exits within a second of it unless background
-// work it started (a background shell, a Monitor watch) holds the session open.
 var claudeResultGrace = 10 * time.Second
 
-// claudeAPIErrorMessageMaxRunes bounds the CLI's API error text in a step
-// failure message.
 const claudeAPIErrorMessageMaxRunes = 400
 
-// claudeAPIError is the API error an invocation ended on, read from the
-// structured fields of the CLI's result event. The CLI writes that event once,
-// after its own retries, so an API error it recovered from never appears here.
-// The retry decision reads these fields and never the assistant text, which
-// can quote a status code or an error phrase of its own.
 type claudeAPIError struct {
-	Status  int
-	Message string
-	// usageLimitReached records that the CLI's last rate_limit_event rejected
-	// the request. Such a 429 clears at the limit's reset time, not after a
-	// backoff.
+	Status            int
+	Message           string
 	usageLimitReached bool
 }
 
@@ -85,37 +68,19 @@ func (e *claudeAPIError) classify() (string, bool) {
 	return "", false
 }
 
-// claudeAgent spawns the claude CLI for each invocation.
 type claudeAgent struct {
 	bin       string
 	extraArgs []string
 	subprocessContext
-	// disableProjectSettings is the resolved, trusted-only opt-out. When true,
-	// buildArgs suppresses claude's project-level settings/memory surface.
 	disableProjectSettings bool
 }
 
 func (a *claudeAgent) Name() string { return "claude" }
 
-// SupportsSessionResume reports claude's native durable-session capability:
-// every stream-json event carries a session_id, and `claude -p --resume <id>`
-// continues that session in print mode with the same identity.
 func (a *claudeAgent) SupportsSessionResume() bool { return true }
 
 func (a *claudeAgent) ReportsAgentAttempts() bool { return true }
 
-// NeutralizesGateInstructions reports whether claude is currently launched with
-// the target repo's project-level settings/memory suppressed. It is meaningful
-// only under the opt-out (disableProjectSettings): the gate only consults it
-// when the repo opted out. It is honest about the EFFECTIVE setting sources -
-// claude's project surface (project CLAUDE.md/AGENTS.md, .claude/settings.json,
-// and .claude/settings.local.json) is dropped iff the effective
-// --setting-sources excludes both `project` and `local`. buildArgs appends
-// `--setting-sources user` when the operator did not pin their own; an operator
-// override that re-adds `project`/`local` defeats neutralization, so this
-// returns false and the gate fails closed. Verified empirically: with project
-// memory loaded claude adopts the firstmate identity; with --setting-sources
-// user it does not.
 func (a *claudeAgent) NeutralizesGateInstructions() bool {
 	return a.disableProjectSettings && claudeEffectiveSettingSourcesNeutral(a.extraArgs)
 }
@@ -161,9 +126,6 @@ func (a *claudeAgent) runOnce(ctx context.Context, opts RunOpts) (*Result, error
 	var usage TokenUsage
 	var result *claudeResult
 	var stdoutTail claudeStdoutTail
-	// A finished result ends the turn: background work the agent started can
-	// hold print mode open long past it (issue #1659), so after a grace the
-	// process group is stopped rather than left idling to the budget.
 	var graceTimer *time.Timer
 	onResult := func(r *claudeResult) {
 		if graceTimer == nil && claudeFinishedWithOutput(r, opts.JSONSchema) {
@@ -255,9 +217,6 @@ func claudeExitError(waitErr error, stderr string, apiErr *claudeAPIError, evide
 	return fmt.Errorf("claude exited: %w: %s: %w", waitErr, strings.TrimSpace(stderr), apiErr)
 }
 
-// claudeFinishedWithOutput reports whether the invocation produced a successful
-// result event carrying the output the caller asked for, so a nonzero exit
-// after it loses nothing.
 func claudeFinishedWithOutput(result *claudeResult, schema json.RawMessage) bool {
 	if result == nil || result.IsError || result.Subtype != "success" {
 		return false
@@ -274,13 +233,8 @@ const (
 	claudeNoOutputEvidence   = "no stderr or stdout output"
 )
 
-// claudeStdoutTail keeps the last few non-event lines the CLI wrote to stdout.
-// The usage-limit banner and similar CLI messages arrive there as plain text
-// between stream-json events, and an exit with empty stderr has no other
-// evidence of its cause.
 type claudeStdoutTail struct {
-	partial []byte
-	// skipping drops the rest of a line that outgrew the buffer.
+	partial  []byte
 	skipping bool
 	lines    []string
 }
@@ -323,9 +277,6 @@ func (t *claudeStdoutTail) add(line string) {
 	}
 }
 
-// evidence describes why an invocation with empty stderr exited nonzero: the
-// plain-text stdout tail, else the result event's own subtype, else an explicit
-// marker.
 func (t *claudeStdoutTail) evidence(result *claudeResult) string {
 	t.add(string(t.partial))
 	t.partial = nil
@@ -338,10 +289,6 @@ func (t *claudeStdoutTail) evidence(result *claudeResult) string {
 	return claudeNoOutputEvidence
 }
 
-// terminalAPIError returns the API error the result event reports, or nil when
-// the invocation did not end on one. The fields are decoded apart from
-// claudeEvent so a change of their wire type costs only this diagnostic and
-// never the result event itself.
 func (r *claudeResult) terminalAPIError() *claudeAPIError {
 	if r == nil || !r.IsError {
 		return nil
@@ -381,13 +328,6 @@ func finalizeClaudeResult(result *claudeResult, schema json.RawMessage, usage To
 	}, nil
 }
 
-// buildArgs constructs the claude CLI arguments. User-supplied extraArgs
-// (from agent_args_override in the global config) are inserted ahead of the
-// managed flags, so user choices win over no-mistakes' defaults. If the user
-// supplied their own permission mode, the default --dangerously-skip-permissions
-// is not added. A non-empty resumeID continues that session via --resume
-// (never --fork-session: the session identity must stay stable so later
-// turns keep resuming the same conversation).
 func (a *claudeAgent) buildArgs(schema json.RawMessage, resumeID string) []string {
 	args := make([]string, 0, len(a.extraArgs)+11)
 	args = append(args, a.extraArgs...)
@@ -421,16 +361,11 @@ func (a *claudeAgent) buildArgs(schema json.RawMessage, resumeID string) []strin
 	return args
 }
 
-// claudeUserSetSettingSources reports whether extraArgs pin --setting-sources at
-// all, in which case buildArgs does not add its own.
 func claudeUserSetSettingSources(extraArgs []string) bool {
 	_, pinned := claudeUserSettingSources(extraArgs)
 	return pinned
 }
 
-// claudeUserSettingSources returns the operator-pinned --setting-sources value
-// (last occurrence wins) and whether it was pinned. Handles `--setting-sources
-// <v>` and `--setting-sources=<v>`.
 func claudeUserSettingSources(extraArgs []string) (string, bool) {
 	value := ""
 	pinned := false
@@ -446,11 +381,6 @@ func claudeUserSettingSources(extraArgs []string) (string, bool) {
 	return value, pinned
 }
 
-// claudeEffectiveSettingSourcesNeutral reports whether the EFFECTIVE claude
-// setting sources drop the target repo's project and local surface: true when
-// the operator did not pin --setting-sources (buildArgs appends `user`) or
-// pinned a value that contains neither `project` nor `local`, and false when the
-// operator's value re-adds `project`/`local`.
 func claudeEffectiveSettingSourcesNeutral(extraArgs []string) bool {
 	value, pinned := claudeUserSettingSources(extraArgs)
 	if !pinned {
@@ -465,8 +395,6 @@ func claudeEffectiveSettingSourcesNeutral(extraArgs []string) bool {
 	return true
 }
 
-// claudeUserSetPermissionMode reports whether extraArgs already declare a
-// permission flag, in which case buildArgs skips its default.
 func claudeUserSetPermissionMode(extraArgs []string) bool {
 	for _, arg := range extraArgs {
 		if arg == "--dangerously-skip-permissions" ||
@@ -478,19 +406,16 @@ func claudeUserSetPermissionMode(extraArgs []string) bool {
 	return false
 }
 
-// claudeEvent is the top-level JSONL event from claude CLI.
 type claudeEvent struct {
 	Type      string          `json:"type"`
 	Message   json.RawMessage `json:"message,omitempty"`
 	SessionID string          `json:"session_id,omitempty"`
 
-	// result fields
 	Subtype          string          `json:"subtype,omitempty"`
 	IsError          bool            `json:"is_error,omitempty"`
 	StructuredOutput json.RawMessage `json:"structured_output,omitempty"`
 	Usage            *claudeUsage    `json:"usage,omitempty"`
 
-	// rate_limit_event fields
 	RateLimitInfo *claudeRateLimitInfo `json:"rate_limit_info,omitempty"`
 }
 
@@ -498,17 +423,14 @@ type claudeRateLimitInfo struct {
 	Status string `json:"status"`
 }
 
-// claudeResult captures the parsed result event.
 type claudeResult struct {
-	Subtype          string
-	IsError          bool
-	StructuredOutput json.RawMessage
-	text             string // accumulated text from assistant events
-	rawEvent         json.RawMessage
-	sessionID        string // durable session identity from the event stream
-	model            string // model reported by assistant events
-	// usageLimitReached is true when the last rate_limit_event before the
-	// result rejected the request.
+	Subtype           string
+	IsError           bool
+	StructuredOutput  json.RawMessage
+	text              string // accumulated text from assistant events
+	rawEvent          json.RawMessage
+	sessionID         string // durable session identity from the event stream
+	model             string // model reported by assistant events
 	usageLimitReached bool
 }
 
@@ -541,24 +463,16 @@ type claudeContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
 
-	// tool_use fields
 	ID    string          `json:"id,omitempty"`
 	Name  string          `json:"name,omitempty"`
 	Input json.RawMessage `json:"input,omitempty"`
 
-	// tool_result fields
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
 }
 
-// claudeStructuredOutputTool is the tool Claude Code exposes for submitting
-// the --json-schema payload. A run can call it several times; the latest
-// accepted call is the review's current state.
 const claudeStructuredOutputTool = "StructuredOutput"
 
-// parseClaudeEvents reads JSONL from the reader and dispatches events.
-// It accumulates token usage and captures the final result event.
-// onResult, when set, is called with each result event as it is parsed.
 func parseClaudeEvents(ctx context.Context, r io.Reader, onChunk func(string), usage *TokenUsage, result **claudeResult, onResult func(*claudeResult)) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), claudeScannerMaxTokenSize)

@@ -18,21 +18,9 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// intentExtractTimeout caps total wall-clock time spent on intent extraction.
 const intentExtractTimeout = 300 * time.Second
 
-// IntentStep is a best-effort pipeline step that infers the user's intent
-// from local agent transcripts and attaches it to the run so downstream
-// steps can surface it in their prompts. Extraction failures are intentionally
-// swallowed and surface as a "skipped" outcome: missing transcripts, slow
-// summarizers, or DB hiccups must not block the pipeline. A configured reject
-// policy is different; it fails the step before a matched summary is stored.
-// Disambiguator cleanup failures are fatal because they may leave worktree side
-// effects that could affect later steps.
 type IntentStep struct {
-	// runIntent computes the intent for a step context. It is overridden
-	// in tests; the zero value falls back to defaultRunIntent which wires
-	// up readers, summarizer, and the real intent.Extract pipeline.
 	runIntent func(ctx context.Context, sctx *pipeline.StepContext) (*intent.Result, error)
 }
 
@@ -172,13 +160,8 @@ func (s *IntentStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.Step
 	return &pipeline.StepOutcome{}, nil
 }
 
-// errIntentEmptyDiff is returned by defaultRunIntent when the diff between
-// base and head produces no files. It is reported as the "empty_diff"
-// telemetry outcome.
 var errIntentEmptyDiff = errors.New("intent: empty diff")
 
-// defaultRunIntent is the production implementation: it derives intent
-// extraction inputs from the run's git state and calls intent.Extract.
 func defaultRunIntent(ctx context.Context, sctx *pipeline.StepContext) (*intent.Result, error) {
 	if sctx.Agent == nil {
 		return nil, intent.ErrNoMatch
@@ -282,12 +265,6 @@ func splitDiffNameOnly(out string) []string {
 	return files
 }
 
-// resolveIntentBaseSHA returns a usable base SHA for diff'ing against head.
-// Prefers an explicit run.BaseSHA when reachable in the worktree, but falls
-// back to merge-base against the default branch when the SHA is the zero ref
-// (new branch push) or has been orphaned by a force push that rewrote the
-// prior remote tip away. Final fallback is git's empty-tree SHA so the diff
-// always succeeds.
 func resolveIntentBaseSHA(ctx context.Context, workDir, baseSHA, defaultBranch string) string {
 	if !git.IsZeroSHA(baseSHA) && commitReachable(ctx, workDir, baseSHA) {
 		return baseSHA

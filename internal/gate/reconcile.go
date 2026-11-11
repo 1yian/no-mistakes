@@ -10,30 +10,19 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// StaleBranchReconciliation reports a private gate branch that was archived
-// and removed so the caller can submit the live head with an ordinary push.
 type StaleBranchReconciliation struct {
 	Reconciled   bool
 	PreviousHead string
 	ArchivedTag  string
 }
 
-// ReconciliationUpstream binds the upstream URL and integration branch selected
-// by the caller. An empty field gives no base-deletion credit.
 type ReconciliationUpstream struct {
 	URL        string
 	BaseBranch string
 }
 
-// ReconciliationUpstreamResolver supplies one caller-owned upstream identity.
-// Planning invokes it once, only if the deletion-aware proof is needed.
 type ReconciliationUpstreamResolver func() ReconciliationUpstream
 
-// StaleBranchPlan is the verdict of a non-mutating stale-branch inspection.
-// Planning checks containment, recovery-anchor preservation, or the exact
-// run-owned-head policy exception without touching any ref, so a caller can
-// decide before it publishes anything; applying the plan is the only step that
-// archives and removes the branch.
 type StaleBranchPlan struct {
 	PreserveDescendantOf string
 	Reconcile            bool
@@ -41,15 +30,9 @@ type StaleBranchPlan struct {
 	BranchRef            string
 	PreviousHead         string
 	ArchiveTag           string
-	// PreservedByRecovery names the recovery anchor that keeps each
-	// private-only commit reachable for commits this plan excluded from the
-	// at-risk set on that basis. Keyed by full commit ID. Empty when no commit
-	// needed the recovery-anchor credit.
-	PreservedByRecovery map[string]string
+	PreservedByRecovery  map[string]string
 }
 
-// ReconcileStaleBranch plans and immediately applies stale private gate branch
-// reconciliation. See PlanStaleBranchReconciliation for preservation requirements.
 func ReconcileStaleBranch(ctx context.Context, gateDir, workDir, branch, liveHead, runOwnedHead string, resolveUpstream ReconciliationUpstreamResolver) (StaleBranchReconciliation, error) {
 	plan, err := PlanStaleBranchReconciliation(ctx, gateDir, workDir, branch, liveHead, runOwnedHead, resolveUpstream)
 	if err != nil || !plan.Reconcile {
@@ -58,30 +41,10 @@ func ReconcileStaleBranch(ctx context.Context, gateDir, workDir, branch, liveHea
 	return ApplyStaleBranchReconciliation(ctx, gateDir, plan)
 }
 
-// PlanStaleBranchReconciliation inspects a private gate branch and reports
-// whether it must be archived and removed before the live head can enter
-// through an ordinary push. It mutates no ref: outside the run-owned-head
-// exception, a private head carrying a private-only commit that is neither
-// proven to survive nor preserved by a recovery anchor is refused before
-// publication.
-//
-// runOwnedHead is a policy exception, not containment evidence:
-// fresh submissions must leave it empty, and pipeline publication goes through
-// PlanMirrorPublicationReconciliation instead. The preservation contract,
-// including selected-base deletions, is owned by
-// docs/src/content/docs/concepts/gate-model.md (Private mirror reconciliation).
 func PlanStaleBranchReconciliation(ctx context.Context, gateDir, workDir, branch, liveHead, runOwnedHead string, resolveUpstream ReconciliationUpstreamResolver) (StaleBranchPlan, error) {
 	return planStaleBranchReconciliation(ctx, gateDir, workDir, branch, liveHead, resolveUpstream, false, runOwnedHead)
 }
 
-// PlanMirrorPublicationReconciliation is the pipeline-publication variant of
-// PlanStaleBranchReconciliation: it also leaves a newer descendant of the live
-// head in place. runOwnedHeads are the exact heads the publishing run itself
-// placed on the private mirror - Run.SubmittedHeadSHA and, once the run has
-// published, its durable Run.LastPushedSHA - and nothing else. Neither an
-// agent-created head nor any other recorded head is eligible; every other
-// mirror head still needs the full preservation proof or the recovery-anchor
-// preservation credit.
 func PlanMirrorPublicationReconciliation(ctx context.Context, gateDir, workDir, branch, liveHead string, resolveUpstream ReconciliationUpstreamResolver, runOwnedHeads ...string) (StaleBranchPlan, error) {
 	return planStaleBranchReconciliation(ctx, gateDir, workDir, branch, liveHead, resolveUpstream, true, runOwnedHeads...)
 }
@@ -207,9 +170,6 @@ func planStaleBranchReconciliation(ctx context.Context, gateDir, workDir, branch
 	}, nil
 }
 
-// isRunOwnedHead reports whether the private mirror head is exactly one of the
-// run-owned heads. Matching is on the full object ID only: an abbreviated or
-// empty entry never matches, so an unknown owner cannot widen the exception.
 func isRunOwnedHead(gateHead string, runOwnedHeads []string) bool {
 	for _, owned := range runOwnedHeads {
 		if owned = strings.TrimSpace(owned); owned != "" && owned == gateHead {
@@ -219,7 +179,6 @@ func isRunOwnedHead(gateHead string, runOwnedHeads []string) bool {
 	return false
 }
 
-// hasRunOwnedHead reports whether the caller supplied any run-owned head.
 func hasRunOwnedHead(runOwnedHeads []string) bool {
 	for _, owned := range runOwnedHeads {
 		if strings.TrimSpace(owned) != "" {
@@ -229,9 +188,6 @@ func hasRunOwnedHead(runOwnedHeads []string) bool {
 	return false
 }
 
-// ApplyStaleBranchReconciliation archives the planned head and then removes the
-// branch ref. It revalidates that the branch still points at the exact head the
-// plan proved, so a private head that appeared after planning is never deleted.
 func ApplyStaleBranchReconciliation(ctx context.Context, gateDir string, plan StaleBranchPlan) (StaleBranchReconciliation, error) {
 	var result StaleBranchReconciliation
 	if !plan.Reconcile {
@@ -302,9 +258,6 @@ func RestoreReconciledBranch(ctx context.Context, gateDir, branch string, result
 	return nil
 }
 
-// ArchivedHeadRecorded reports whether head is the exact commit archived for
-// branch by a prior reconciliation. It is the gate's own evidence that a
-// caller-reported pre-reconciliation head is genuine.
 func ArchivedHeadRecorded(ctx context.Context, gateDir, branch, head string) bool {
 	branch = strings.TrimSpace(branch)
 	head = strings.TrimSpace(head)
@@ -323,16 +276,8 @@ func ArchivedHeadRecorded(ctx context.Context, gateDir, branch, head string) boo
 	return err == nil && objectType == "commit"
 }
 
-// recoveryAnchorPrefix is the ref namespace terminalization pins a run's
-// unpublished pipeline head to (custody.RecoveryRef). An anchor is created only
-// by the guarded custody path and never replaced: PreserveRecoveryAnchor
-// creates it with an expected-old-value of the zero ID and fails closed on any
-// conflicting existing ref, so a commit reachable from one is held by
-// deliberate, immutable preservation evidence rather than by accident.
 const recoveryAnchorPrefix = "refs/no-mistakes/recover/"
 
-// Rewritten-remote recovery uses a separate, generation-scoped namespace to
-// preserve each superseded push without replacing earlier custody evidence.
 const rewrittenRecoveryAnchorPrefix = "refs/no-mistakes/recover-rewritten/"
 
 type recoveryAnchor struct {
@@ -340,13 +285,6 @@ type recoveryAnchor struct {
 	head string
 }
 
-// listRecoveryAnchors returns the direct commit targets under
-// refs/no-mistakes/recover/ and recover-rewritten/ by default. for-each-ref
-// reports a direct commit ref as
-// exactly three fields and a symbolic ref with a fourth %(symref) field, so a
-// symbolic, zero, or non-commit target is skipped rather than dereferenced:
-// it contributes no preservation evidence, and skipping is the conservative
-// direction (nothing gets credited).
 func listRecoveryAnchors(ctx context.Context, repoDir string, prefixes ...string) ([]recoveryAnchor, error) {
 	if len(prefixes) == 0 {
 		prefixes = []string{recoveryAnchorPrefix, rewrittenRecoveryAnchorPrefix}
@@ -371,9 +309,6 @@ func listRecoveryAnchors(ctx context.Context, repoDir string, prefixes ...string
 	return anchors, nil
 }
 
-// reconcileSatisfiers names the proofs that can clear a reconciliation refusal
-// in this call shape, so the refusal is actionable instead of a dead end. The
-// recovery-anchor credit is always last.
 func reconcileSatisfiers(runOwnedHeads []string) []string {
 	satisfiers := []string{
 		"the live head descending from the private head (ancestry)",
@@ -392,29 +327,8 @@ func joinSatisfiers(satisfiers []string) string {
 	return strings.Join(satisfiers[:len(satisfiers)-1], "; ") + "; or " + satisfiers[len(satisfiers)-1]
 }
 
-// maxRecoveryCandidates bounds how many candidate commits one recovery-anchor
-// membership scan passes to git, keeping each rev-list argument list bounded.
-// Larger candidate sets are scanned in successive batches, never truncated or
-// refused: dropping any candidate would silently drop its preservation credit
-// and reintroduce the deadlock this credit exists to prevent.
 const maxRecoveryCandidates = 512
 
-// preservedByRecoveryAnchors reports, for each candidate commit only, a
-// recovery anchor that keeps it reachable in the gate or invoking worktree.
-// Reachable means reachable: the anchor's history contains the commit, so the
-// object and its history survive whatever happens to the private branch ref.
-//
-// The membership scan excludes liveHead as well as the anchors. The candidates
-// are private-only commits, so that walk is bounded by the private-only range
-// rather than by the history the anchors or the live branch can see; anchors
-// accumulate for the life of the gate. Attribution then probes anchors only for
-// the credited commits, stopping at the first anchor that covers each.
-//
-// This is a PRESERVATION credit only. It says nothing about whether the content
-// lands in the published tree, which the ancestry and tree-survival
-// checks are responsible for proving. It exists so that the sanctioned
-// recover -> rerun -> push loop cannot deadlock against the very anchor that
-// loop wrote to declare the work preserved.
 func preservedByRecoveryAnchors(ctx context.Context, gateDir, liveHead string, commits []string, workDirs ...string) (map[string]string, error) {
 	preserved := make(map[string]string)
 	if len(commits) == 0 {
@@ -483,15 +397,6 @@ func preservedByRecoveryAnchors(ctx context.Context, gateDir, liveHead string, c
 	return preserved, nil
 }
 
-// privateCommitsAbsentFromLive returns nil when the private head's content is
-// proven to survive in the live history, and the entire private-only range
-// otherwise. A clean merge of the private head into the live head that leaves
-// the live tree unchanged proves every commit contained, including a rebased
-// copy whose patch ID differs only by context the base moved; when that merge
-// conflicts, privateTreeSurvives proves survival instead. Both are whole-tree
-// proofs, so a commit's own patch ID is never required to match: a rebase that
-// moved context and a later live edit of the copied lines would otherwise
-// refuse content that demonstrably landed.
 func privateCommitsAbsentFromLive(ctx context.Context, repoDir, liveHead, privateHead string) ([]string, error) {
 	privateOnly, err := commitList(ctx, repoDir, "--right-only", liveHead+"..."+privateHead)
 	if err != nil {
@@ -517,12 +422,6 @@ func privateCommitsAbsentFromLive(ctx context.Context, repoDir, liveHead, privat
 	return privateOnly, nil
 }
 
-// privateTreeSurvivesBaseDeletion handles a rebase that accepted deletions from
-// its upstream base. Neither merge-tree nor -X ours resolves modify/delete
-// conflicts. Only paths deleted by the verified upstream base and still absent
-// from live may be removed from the private tree for this proof. All remaining
-// content must pass the ordinary whole-tree survival proof. In particular, a
-// deletion made only on the branch earns no credit.
 func privateTreeSurvivesBaseDeletion(ctx context.Context, repoDir, liveHead, privateHead string, upstream ReconciliationUpstream) (bool, error) {
 	selectedBase := strings.TrimSpace(upstream.BaseBranch)
 	upstreamURL := strings.TrimSpace(upstream.URL)
@@ -609,10 +508,6 @@ func privateTreeSurvivesBaseDeletion(ctx context.Context, repoDir, liveHead, pri
 	return len(absent) == 0 && err == nil, err
 }
 
-// privateOnlyPaths names the paths the private-only commits touch, bounding
-// the live scan for a survival point to those paths. A merge commit
-// contributes no paths of its own: its combined meaning is not safely
-// represented by first-parent patches.
 func privateOnlyPaths(ctx context.Context, repoDir string, commits []string) (map[string]bool, error) {
 	paths := make(map[string]bool)
 	for _, commit := range commits {
@@ -629,23 +524,8 @@ func privateOnlyPaths(ctx context.Context, repoDir string, commits []string) (ma
 	return paths, nil
 }
 
-// maxSurvivalCandidates bounds the first-parent live commits tried as
-// survival points. Past it the proof fails closed.
 const maxSurvivalCandidates = 64
 
-// privateTreeSurvives proves the private head's changes are present in the
-// live history once the direct proof, a clean three-way merge of the private
-// head into the live head that leaves the live tree unchanged, has failed.
-//
-// A rebased branch whose later live commits edit the lines the private commits
-// wrote fails that proof by conflicting although nothing was dropped, so this
-// proof has two halves. Resolving each conflicting hunk toward the live
-// head must still leave the live tree unchanged, so every private hunk that
-// merges cleanly is already live and a change the live head reverted or lacks
-// still refuses. And some first-parent live commit touching the private paths
-// must pass the direct proof, placing all of the private content in the live
-// history. First-parent only, so a merge that discarded a side branch never
-// serves as that point.
 func privateTreeSurvives(ctx context.Context, repoDir, liveHead, privateHead string, paths map[string]bool) (bool, error) {
 	if len(paths) == 0 {
 		return false, nil
@@ -675,9 +555,6 @@ func privateTreeSurvives(ctx context.Context, repoDir, liveHead, privateHead str
 	return false, nil
 }
 
-// mergeLeavesTree reports whether merging privateHead into liveCommit with the
-// given merge options is clean and leaves liveCommit's tree unchanged. A Git
-// too old for an option fails the merge, and so the proof.
 func mergeLeavesTree(ctx context.Context, repoDir, liveCommit, privateHead string, options ...string) (bool, error) {
 	args := append([]string{"merge-tree", "--write-tree"}, options...)
 	mergedTree, mergeErr := git.Run(ctx, repoDir, append(args, liveCommit, privateHead)...)

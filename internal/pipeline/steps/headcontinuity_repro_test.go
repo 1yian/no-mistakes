@@ -26,10 +26,6 @@ import (
 // cannot be silently lost - while still allowing a legitimate forward agent
 // commit (e.g. git rebase --continue).
 
-// TestCommitAgentFixes_RefusesToCommitOnOutOfBandResetHead reproduces the
-// incident shape: a concurrent / divergent-sibling reset. It also proves the
-// anchor integrity requirement - sctx.Run.HeadSHA at the commit point is the
-// reviewed head and is NOT corrupted by the out-of-band reset.
 func TestCommitAgentFixes_RefusesToCommitOnOutOfBandResetHead(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -95,10 +91,6 @@ func TestCommitAgentFixes_RefusesToCommitOnOutOfBandResetHead(t *testing.T) {
 	t.Logf("guard refused divergent clobber: reviewed fix at %s protected", reviewedHead[:8])
 }
 
-// TestCommitAgentFixes_RefusesOnBackwardReset covers the other out-of-band shape
-// (captain requirement d): a reset BACKWARD to an ancestor of the reviewed head.
-// The recorded head is a descendant of the live HEAD, not an ancestor, so the
-// guard must still refuse - a backward reset would also silently drop the fix.
 func TestCommitAgentFixes_RefusesOnBackwardReset(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -170,11 +162,6 @@ func TestCommitAgentFixes_RefusesResetDuringCommit(t *testing.T) {
 	}
 }
 
-// TestCommitAgentFixes_AllowsForwardAgentCommit confirms the guard does not
-// false-positive when an agent legitimately advances HEAD forward (e.g. a
-// `git rebase --continue` during conflict resolution) before the pipeline
-// commits its own fixes: the recorded head stays an ancestor, so committing is
-// allowed.
 func TestCommitAgentFixes_AllowsForwardAgentCommit(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -365,10 +352,6 @@ func TestPostReviewStepEntryAllowsEqualAndPipelineDescendantHeads(t *testing.T) 
 	}
 }
 
-// TestAssertPipelineHeadContinuity_AnchorIsRecordedReviewedHead directly
-// exercises the guard (captain requirement b): it anchors on the recorded
-// reviewed head (sctx.Run.HeadSHA), NOT on the mutable worktree, and an
-// out-of-band reset leaves that anchor intact so the guard still fires.
 func TestAssertPipelineHeadContinuity_AnchorIsRecordedReviewedHead(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

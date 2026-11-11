@@ -10,8 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Real CLI -> gate hook -> IPC -> durable run -> every subprocess, including
-// review repair and fresh rereview. Config edits while parked must be inert.
 func TestPiRunProfileSurvivesGlobalChangesAcrossEveryDuty(t *testing.T) {
 	h := NewHarness(t, SetupOpts{
 		Agent:             "pi",

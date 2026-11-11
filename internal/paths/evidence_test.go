@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-// TestEvidenceRootResolvesUnderAppRoot pins evidence to the app root.
-//
-// It asserts structural equality against the root Paths already owns rather
-// than "the result is not under os.TempDir()": under `go test`, NM_HOME is
-// itself a t.TempDir() beneath TMPDIR, so a not-under-temp assertion would pass
-// even if the old os.TempDir() join came back. Naming the expected path is what
-// actually catches the regression.
 func TestEvidenceRootResolvesUnderAppRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("NM_HOME", root)
@@ -34,10 +27,6 @@ func TestEvidenceRootResolvesUnderAppRoot(t *testing.T) {
 	}
 }
 
-// TestEvidenceRootIsNeverTheLegacySharedTempDirectory guards the specific path
-// this relocation removed: a fixed "no-mistakes-evidence" directory created
-// straight inside the system temp directory, which on Linux is the shared /tmp
-// that current Ubuntu backs with RAM.
 func TestEvidenceRootIsNeverTheLegacySharedTempDirectory(t *testing.T) {
 	legacy := filepath.Join(os.TempDir(), "no-mistakes-evidence")
 
@@ -54,10 +43,6 @@ func TestEvidenceRootIsNeverTheLegacySharedTempDirectory(t *testing.T) {
 	}
 }
 
-// TestEvidenceRootHonorsAbsoluteOverrideAndIgnoresRelative covers the operator
-// escape hatch. A relative override is ignored rather than resolved: the daemon
-// runs from a bare gate repository, so a relative path would land somewhere the
-// operator never named.
 func TestEvidenceRootHonorsAbsoluteOverrideAndIgnoresRelative(t *testing.T) {
 	root := t.TempDir()
 	p := WithRoot(root)
@@ -87,8 +72,6 @@ func TestValidateEvidenceRootRefusesWorktreeOverlap(t *testing.T) {
 	}
 }
 
-// TestEnsureDirsDoesNotCreateEvidence keeps a machine that never gathers
-// evidence from growing the directory: the test step creates it on demand.
 func TestEnsureDirsDoesNotCreateEvidence(t *testing.T) {
 	p := WithRoot(filepath.Join(t.TempDir(), "nm"))
 	if err := p.EnsureDirs(); err != nil {

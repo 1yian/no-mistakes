@@ -18,17 +18,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// CodexReaderName is the agent name used in cache keys and DB rows.
 const CodexReaderName = "codex"
 
-// codexReader reads Codex CLI sessions. Session metadata (cwd, timestamps,
-// rollout path) lives in the selected account's state_*.sqlite; the transcript is
-// a JSONL rollout file referenced by threads.rollout_path. We use the
-// SQLite to filter candidates fast, then parse the rollout to recover the
-// full user/assistant turn-by-turn text needed for intent inference.
 type codexReader struct{}
 
-// NewCodexReader returns a Reader for Codex CLI transcripts.
 func NewCodexReader() Reader { return &codexReader{} }
 
 func (r *codexReader) Name() string { return CodexReaderName }
@@ -145,11 +138,6 @@ func (r *codexReader) Load(_ context.Context, s *Session) error {
 	return nil
 }
 
-// parseCodexLine returns a Message for the user/assistant turns we care
-// about. Tool calls produce file-path hints attached to a file-path-only
-// Message so the matcher can use them; their arguments do NOT enter
-// Message.Text since that would leak shell commands and tool I/O into
-// the summarizer's input.
 func parseCodexLine(line []byte) (Message, bool) {
 	var raw struct {
 		Type    string          `json:"type"`
@@ -239,9 +227,6 @@ func parseCodexResponseItem(payload json.RawMessage) (Message, bool) {
 	}
 }
 
-// codexJoinContent flattens a content array into a single string. The schema
-// allows `[{"type":"output_text","text":"..."}]` for assistant text and
-// `[{"type":"input_text","text":"..."}]` for user text. We accept both.
 func codexJoinContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -271,17 +256,12 @@ func codexJoinContent(raw json.RawMessage) string {
 	return sb.String()
 }
 
-// codexExtractToolPaths pulls file paths out of a tool call's arguments
-// JSON. Codex's main tools are `shell` (a command list) and read/write
-// helpers that pass file_path/path keys. We handle both shapes so the
-// matcher gets useful hints without needing Codex-specific knowledge.
 func codexExtractToolPaths(toolName, argumentsJSON string) []string {
 	if argumentsJSON == "" {
 		return nil
 	}
 	var args map[string]any
 	if err := json.Unmarshal([]byte(argumentsJSON), &args); err != nil {
-		// Some shells double-encode; try one level of unwrap.
 		var asString string
 		if err := json.Unmarshal([]byte(argumentsJSON), &asString); err == nil {
 			return scanFilePathsInText(asString)
@@ -307,12 +287,6 @@ func codexExtractToolPaths(toolName, argumentsJSON string) []string {
 	return out
 }
 
-// resolveCodexStateDB picks the highest-numbered state_<N>.sqlite under root.
-// Codex versions its state DB; we want the most recent one without hard-coding
-// the suffix. Sort numerically by the <N> suffix - lexicographic order would
-// rank state_9 above state_10 once Codex reaches two-digit versions.
-// Files whose suffix doesn't parse as an integer are placed at the end so
-// they never override a real numbered DB.
 func resolveCodexStateDB(root string) (string, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -349,8 +323,6 @@ func resolveCodexStateDB(root string) (string, error) {
 	return filepath.Join(root, candidates[0]), nil
 }
 
-// codexStateVersion extracts the integer N from "state_N.sqlite". Returns
-// (0, false) when the suffix is missing or non-numeric.
 func codexStateVersion(name string) (int, bool) {
 	trimmed := strings.TrimSuffix(strings.TrimPrefix(name, "state_"), ".sqlite")
 	if trimmed == "" {

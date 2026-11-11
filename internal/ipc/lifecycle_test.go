@@ -159,7 +159,6 @@ func TestCallServerDisconnect(t *testing.T) {
 	srv.Close()
 	time.Sleep(50 * time.Millisecond) // let server close propagate
 
-	// Call should return an error (connection closed or send failure).
 	var result json.RawMessage
 	err = c.Call("health", nil, &result)
 	if err == nil {

@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Pi reports model and provider as separate fields, so a candidate spelled
-// xai/grok-4.6 is served as model "grok-4.6" plus provider "xai".
 const piReviewOutput = `{"findings":[],"risk_level":"low","risk_rationale":"clean","risk_scope":"source-or-external"}`
 
 const piReviewToolResult = `{"type":"tool_execution_end","toolCallId":"final-1","toolName":"no_mistakes_output","isError":false,"result":{"terminate":true,"details":{"output":` + piReviewOutput + `}}}` + "\n"

@@ -109,9 +109,6 @@ func TestUpdaterRunWithActiveRunsStillRefusesWithoutWhenIdle(t *testing.T) {
 	}
 }
 
-// Greptile on #1697: a run can start while the archive downloads, so with
-// --when-idle an idle daemon is restarted through the scheduled restart too,
-// never by an immediate reset that would stop that run.
 func TestUpdaterRunWhenIdleWithNoActiveRunStillSchedulesTheRestart(t *testing.T) {
 	u, _, stdout, _ := newActiveRunUpdater(t)
 	finishActiveRuns(t, u.paths)
@@ -138,8 +135,6 @@ func TestUpdaterRunWhenIdleWithNoActiveRunStillSchedulesTheRestart(t *testing.T)
 	}
 }
 
-// A failed probe leaves a daemon that may be running and may start a run
-// during the download, so an immediate reset is not a safe fallback.
 func TestUpdaterRunWhenIdleWithNoActiveRunRefusesAFailedProbe(t *testing.T) {
 	u, execPath, _, _ := newActiveRunUpdater(t)
 	finishActiveRuns(t, u.paths)
@@ -157,7 +152,6 @@ func TestUpdaterRunWhenIdleWithNoActiveRunRefusesAFailedProbe(t *testing.T) {
 	}
 }
 
-// With no daemon listening there is nothing to protect: the plain path applies.
 func TestUpdaterRunWhenIdleWithNoActiveRunAndNoDaemonResetsImmediately(t *testing.T) {
 	stubDaemonAlive(t, false)
 	u, _, _, _ := newActiveRunUpdater(t)
@@ -178,9 +172,6 @@ func TestUpdaterRunWhenIdleWithNoActiveRunAndNoDaemonResetsImmediately(t *testin
 	}
 }
 
-// Greptile on #1697: the --when-idle probe asks whether the daemon is running,
-// which clears a dead daemon's stale socket and PID file. The update must
-// still restart that daemon rather than report success with it stopped.
 func TestUpdaterRunWhenIdleRestartsADeadDaemonWhoseFilesTheProbeCleared(t *testing.T) {
 	u, _, _, _ := newActiveRunUpdater(t)
 	finishActiveRuns(t, u.paths)
@@ -215,9 +206,6 @@ func TestUpdaterRunWhenIdleRestartsADeadDaemonWhoseFilesTheProbeCleared(t *testi
 	}
 }
 
-// Greptile on #1697: a refused connection alone does not prove the daemon is
-// gone. One that is running but slow to accept could start a run during the
-// download, so the update refuses instead of restarting it at once.
 func TestUpdaterRunWhenIdleRefusesAnUnreachableDaemonThatIsStillRunning(t *testing.T) {
 	stubDaemonAlive(t, true)
 	u, execPath, _, _ := newActiveRunUpdater(t)
@@ -255,10 +243,6 @@ func TestRestartStatusWrapsAnUnreachableSocket(t *testing.T) {
 	}
 }
 
-// The daemon restarts through its own executable, so a daemon started from
-// another binary would miss the update. With runs active that is refused; with
-// none, the plain takeover path (replace the daemon now) applies as without
-// --when-idle.
 func stubDaemonFromAnotherBinary(t *testing.T) {
 	t.Helper()
 	origRunning, origPath := daemonIsRunning, daemonExecutablePath
@@ -325,8 +309,6 @@ func finishActiveRuns(t *testing.T, p *paths.Paths) {
 	}
 }
 
-// newActiveRunUpdater returns an updater for a v1.2.2 -> v1.2.3 update served
-// by a local release server, with one run executing in its database.
 func newActiveRunUpdater(t *testing.T) (*updater, string, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	allowInsecureDownloads = true

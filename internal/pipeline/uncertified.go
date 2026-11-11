@@ -12,10 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// BindUncertifiedPipelineRange copies a persisted uncertified fixer range
-// onto the review step context when this run's head is that range's tip or a
-// descendant of it. Missing objects fail open: the run continues without the
-// provenance clause and a bounded warning is logged. Never blocks the run.
 func BindUncertifiedPipelineRange(sctx *StepContext) {
 	if sctx == nil || sctx.DB == nil || sctx.Repo == nil || sctx.Run == nil || sctx.Fixing {
 		return
@@ -42,8 +38,6 @@ func BindUncertifiedPipelineRange(sctx *StepContext) {
 	sctx.UncertifiedPriorRounds = loadUncertifiedPriorRounds(sctx.DB, rng.SourceRunID)
 }
 
-// PersistUncertifiedPipelineRange records the fixer commit span after a
-// review fix round commits and before its re-review completes.
 func PersistUncertifiedPipelineRange(sctx *StepContext, fromSHA, toSHA string) {
 	if sctx == nil || sctx.DB == nil || sctx.Repo == nil || sctx.Run == nil {
 		return
@@ -70,9 +64,6 @@ func PersistUncertifiedPipelineRange(sctx *StepContext, fromSHA, toSHA string) {
 	}
 }
 
-// ClearUncertifiedPipelineRangeIfCertified drops the branch marker once a
-// full review has completed. A completed review of the current head certifies
-// the previously uncertified fixer commits on this branch.
 func ClearUncertifiedPipelineRangeIfCertified(ctx context.Context, database *db.DB, repoID, branch, approvedHead, workDir string) {
 	if database == nil {
 		return
@@ -97,9 +88,6 @@ func ClearUncertifiedPipelineRangeIfCertified(ctx context.Context, database *db.
 	}
 }
 
-// RemapUncertifiedPipelineRangeAfterRebase rewrites a persisted uncertified
-// range onto the new head when rebase replaced a head that contained it.
-// Fast-forwards and missing objects leave the row unchanged and never block.
 func RemapUncertifiedPipelineRangeAfterRebase(sctx *StepContext, oldHead, newHead string) {
 	if sctx == nil || sctx.DB == nil || sctx.Repo == nil || sctx.Run == nil {
 		return

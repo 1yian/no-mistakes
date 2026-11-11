@@ -11,10 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Issue #1653: below build 26100 the manifest is ignored and Task Scheduler's
-// start gives the daemon a console of its own, which daemon run releases. A
-// console shared with a terminal (foreground `daemon run`) must stay, and
-// with no console there is nothing to release.
 func TestReleaseSoleConsoleFreesOnlyAConsoleOfItsOwn(t *testing.T) {
 	originalCount, originalFree := consoleProcessCount, freeConsole
 	t.Cleanup(func() { consoleProcessCount, freeConsole = originalCount, originalFree })
@@ -48,17 +44,12 @@ func TestReleaseSoleConsoleFreesOnlyAConsoleOfItsOwn(t *testing.T) {
 	}
 }
 
-// With the manifest, Task Scheduler starts the daemon without a console and
-// with NULL standard handles, so anything written before bootstrap capture -
-// and the log-sink's inherited stderr - would otherwise be lost.
 func TestPrepareRunStdioSendsNullStdHandlesToTheBootstrapLog(t *testing.T) {
 	root := t.TempDir()
 	runRunStdioHelper(t, root, windows.DETACHED_PROCESS, &windows.StartupInfo{Flags: windows.STARTF_USESTDHANDLES})
 	assertBootstrapLogHasRunStdioMarkers(t, root)
 }
 
-// Without the manifest the daemon's console of its own is released, and the
-// output that pointed at it must follow to the bootstrap log.
 func TestPrepareRunStdioReleasesAConsoleOfItsOwnIntoTheBootstrapLog(t *testing.T) {
 	root := t.TempDir()
 	runRunStdioHelper(t, root, windows.CREATE_NEW_CONSOLE, &windows.StartupInfo{
@@ -68,8 +59,6 @@ func TestPrepareRunStdioReleasesAConsoleOfItsOwnIntoTheBootstrapLog(t *testing.T
 	assertBootstrapLogHasRunStdioMarkers(t, root)
 }
 
-// runRunStdioHelper starts the run-stdio helper with CreateProcess directly,
-// because os/exec always hands a child valid standard handles.
 func runRunStdioHelper(t *testing.T, root string, flags uint32, si *windows.StartupInfo) {
 	t.Helper()
 	t.Setenv("NM_HOME", root)

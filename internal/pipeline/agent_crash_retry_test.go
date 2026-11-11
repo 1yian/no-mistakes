@@ -159,8 +159,6 @@ func TestExecutor_AgentCrashRetry(t *testing.T) {
 	}
 }
 
-// Exercise Claude's real subprocess and transient-retry loop, not a synthetic
-// error with the same diagnostic. The fake executable is not race-instrumented.
 func TestExecutor_AgentCrashRetryDoesNotRetryExhaustedClaude(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "claude.go")
@@ -799,9 +797,6 @@ func TestExecutor_AgentCrashRetryHang(t *testing.T) {
 	}
 }
 
-// A repository that only tightens review.agent_timeout configured a budget for
-// Review alone: a Review budget cut is a deliberate stop and is not retried,
-// while Document, Lint, and Test keep the retry their untouched budgets earn.
 func TestExecutor_AgentCrashRetryRepoReviewTimeoutScopedToReview(t *testing.T) {
 	for _, stepName := range []types.StepName{types.StepReview, types.StepDocument, types.StepLint, types.StepTest} {
 		t.Run(string(stepName), func(t *testing.T) {

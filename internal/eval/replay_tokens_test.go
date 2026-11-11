@@ -14,8 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// piReviewReply is one Pi invocation that returns review JSON and reports
-// 100 input, 20 output, and 30 cache-read tokens.
 func piReviewReply(t *testing.T, review string) string {
 	t.Helper()
 	if !json.Valid([]byte(review)) {
@@ -26,8 +24,6 @@ func piReviewReply(t *testing.T, review string) string {
 `, review, review)
 }
 
-// installFakePiSequence installs a pi that answers its nth invocation with
-// replies[n-1], so one replay can drive a review and its reruns.
 func installFakePiSequence(t *testing.T, fakeDir string, replies ...string) {
 	t.Helper()
 	for i, reply := range replies {
@@ -49,22 +45,14 @@ cat "$dir/reply-$n.jsonl"
 	}
 }
 
-// TestReplayTokensCoverEveryReviewAttempt pins a candidate's recorded cost to
-// every review turn Review spent, not just the last one: a rerun forced by a
-// schema slip costs tokens too, and an attempt whose usage is unknown makes
-// the total unknown rather than smaller.
 func TestReplayTokensCoverEveryReviewAttempt(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell fixture is Unix-only")
 	}
 	const (
-		valid = `{"findings":[],"risk_level":"low","risk_rationale":"clean","risk_scope":"source-or-external"}`
-		// Pi's adapter rejects this against the schema; usage from that
-		// failed attempt is still reported so the replay cost is honest.
+		valid            = `{"findings":[],"risk_level":"low","risk_rationale":"clean","risk_scope":"source-or-external"}`
 		missingRiskLevel = `{"findings":[],"risk_rationale":"clean","risk_scope":"source-or-external"}`
-		// This passes the schema, so Pi returns a Result, but Review's own
-		// check refuses the blank rationale and reruns.
-		blankRationale = `{"findings":[],"risk_level":"low","risk_rationale":" ","risk_scope":"source-or-external"}`
+		blankRationale   = `{"findings":[],"risk_level":"low","risk_rationale":" ","risk_scope":"source-or-external"}`
 	)
 	for _, tc := range []struct {
 		name         string
@@ -120,9 +108,6 @@ func TestReplayTokensCoverEveryReviewAttempt(t *testing.T) {
 	}
 }
 
-// retryingAgent models an adapter whose internal retry loop reports each
-// attempt through OnAttempt and hands back only the last one, as runWithRetry
-// does.
 type retryingAgent struct {
 	attempts []*agent.Result
 	err      error
@@ -157,11 +142,6 @@ func reportedUsage(input, output, cacheRead int) *agent.Result {
 	}
 }
 
-// TestObservedAgentCountsEveryAdapterAttempt proves a retry-exhausted review
-// is charged for every attempt it burned. The adapter retries below this seam
-// and returns only its last attempt, so reading the returned result alone
-// would charge four attempts as one and make the candidate read as cheaper
-// than one that passed on its first try.
 func TestObservedAgentCountsEveryAdapterAttempt(t *testing.T) {
 	observed := &observedAgent{inner: &retryingAgent{
 		attempts: []*agent.Result{
@@ -184,9 +164,6 @@ func TestObservedAgentCountsEveryAdapterAttempt(t *testing.T) {
 	}
 }
 
-// TestObservedAgentMarksUsageIncompleteWhenAnAttemptLacksIt keeps the rule the
-// captured baseline uses: one attempt with no reported usage makes the whole
-// sum unknown rather than a smaller cost.
 func TestObservedAgentMarksUsageIncompleteWhenAnAttemptLacksIt(t *testing.T) {
 	observed := &observedAgent{inner: &retryingAgent{
 		attempts: []*agent.Result{reportedUsage(50_000, 100, 5_000), nil},
@@ -200,8 +177,6 @@ func TestObservedAgentMarksUsageIncompleteWhenAnAttemptLacksIt(t *testing.T) {
 	}
 }
 
-// TestObservedAgentSumsASucceedingTurnsUsage covers the adapter that reports
-// no attempts at all, where the returned result is the whole turn.
 func TestObservedAgentSumsASucceedingTurnsUsage(t *testing.T) {
 	observed := &observedAgent{inner: &fixedResultAgent{result: reportedUsage(100, 20, 30)}}
 	if _, err := observed.Run(context.Background(), agent.RunOpts{}); err != nil {

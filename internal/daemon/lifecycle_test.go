@@ -465,17 +465,6 @@ func TestStopDetachedDaemonRejectsUnrelatedLiveProcessPIDFallback(t *testing.T) 
 	}
 }
 
-// TestValidateDaemonPIDFallback_RefusesToKillOwnProcess covers the crash
-// behind an intermittent Windows CI hang: helpers_test.go's startTestDaemon
-// runs the daemon in-process via a goroutine (daemon.RunWithResources), so
-// the pid file it writes records the test binary's own pid. If the daemon
-// doesn't confirm a graceful stop before waitForDaemonStop's deadline, the
-// PID-kill fallback must never target that pid - doing so kills the test
-// binary itself (SIGKILL on the current process), which surfaces as the
-// whole package crashing with no per-test PASS/FAIL output rather than a
-// normal test failure. The pid file record here is otherwise fully valid
-// (matching StartedAt) to prove the self-pid guard fires before, and
-// independent of, the record/staleness checks.
 func TestValidateDaemonPIDFallback_RefusesToKillOwnProcess(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "dtest")
 	if err != nil {
@@ -880,15 +869,6 @@ func TestReadPIDNoFile(t *testing.T) {
 	}
 }
 
-// TestWaitForDaemonStopNeverKillsOwnPIDWhenHealthCheckOnlyErrors reproduces
-// the full path behind the Windows CI hang end to end: a daemon that never
-// confirms a graceful stop (health check errors on every poll, as observed
-// on Windows where a closed loopback listener doesn't fail pending/racing
-// connections as immediately as a Unix domain socket unlink does) combined
-// with a pid file that records our own pid (the shape startTestDaemon in
-// internal/cli/helpers_test.go produces, since it runs the daemon in-process
-// via a goroutine). waitForDaemonStop must give up with an error instead of
-// ever calling daemonKillPID against the current process.
 func TestWaitForDaemonStopNeverKillsOwnPIDWhenHealthCheckOnlyErrors(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "dtest")
 	if err != nil {

@@ -123,13 +123,11 @@ func generateCIWorkflow(dir string, force bool) error {
 	// Extract lint command (optional; empty means combined document+lint)
 	lint := cfg.Commands.Lint
 
-	// Only set up Go when the repository has a root module.
 	var goSetup string
 	if info, err := os.Stat(filepath.Join(root, "go.mod")); err == nil && !info.IsDir() {
 		goSetup = ciWorkflowGoSetup
 	}
 
-	// Select template and generate workflow
 	var workflow string
 	if lint == "" {
 		workflow = fmt.Sprintf(ciWorkflowTemplateTestOnly, yamlSingleQuote(defaultBranch), goSetup, indentCommand(test))
@@ -166,13 +164,8 @@ func generateCIWorkflow(dir string, force bool) error {
 	return nil
 }
 
-// ciWorkflowRunIndent matches the leading whitespace before the `%s` placeholder
-// in the run: | block scalars above, so a multi-line command's continuation
-// lines stay inside the scalar instead of dedenting out of it.
 const ciWorkflowRunIndent = "          "
 
-// indentCommand indents every line of cmd after the first so a multi-line
-// command stays inside the YAML block scalar it's substituted into.
 func indentCommand(cmd string) string {
 	lines := strings.Split(cmd, "\n")
 	for i := 1; i < len(lines); i++ {
@@ -181,21 +174,10 @@ func indentCommand(cmd string) string {
 	return strings.Join(lines, "\n")
 }
 
-// yamlSingleQuote wraps s in a YAML single-quoted scalar, doubling any
-// embedded single quotes per the YAML spec. Git ref names may legally
-// contain characters (']', '"', '#', ...) that would otherwise break out of
-// the unquoted flow sequence `branches: [%s]`.
 func yamlSingleQuote(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
 }
 
-// mkdirAllNoSymlink creates target (and any missing ancestors) below root,
-// refusing at the first path component that already exists as a symlink.
-// root itself is trusted (it comes from git.FindGitRoot, which resolves
-// symlinks); os.MkdirAll on the raw target is unsafe against a repository
-// that plants a symlink in place of a directory component (e.g. `.github`
-// pointing outside the repo), because MkdirAll's existence check follows
-// symlinks and would happily create/write through it.
 func mkdirAllNoSymlink(root, target string) error {
 	rel, err := filepath.Rel(root, target)
 	if err != nil {
@@ -227,13 +209,6 @@ func mkdirAllNoSymlink(root, target string) error {
 	return nil
 }
 
-// writeFileNoSymlink writes data to path, refusing when path already exists
-// as a symlink (regardless of force, since following it - to check or to
-// overwrite - could touch a file outside the repo). When path exists as a
-// regular file, force is required, matching the previous overwrite-guard
-// behavior. The write itself goes through a temp file in the same directory
-// followed by a rename so a reader never observes a partially written file
-// and a crash mid-write cannot corrupt an existing workflow.
 func writeFileNoSymlink(path string, data []byte, force bool) error {
 	info, err := os.Lstat(path)
 	switch {

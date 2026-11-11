@@ -235,8 +235,6 @@ func TestModel_Update_RerunKeyStartsNewRunAndSwitchesModel(t *testing.T) {
 	}
 }
 
-// A legacy rerun handler would ignore the homes and discover another account.
-// Neither failed nor cancelled runs may reach it without capability support.
 func TestModel_RerunRefusesOlderDaemonTranscriptDiscovery(t *testing.T) {
 	for _, status := range []types.RunStatus{types.RunFailed, types.RunCancelled} {
 		t.Run(string(status), func(t *testing.T) {

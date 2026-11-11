@@ -177,11 +177,6 @@ func TestMissingPreservedHeadStatusShowsKeepLocalRecoveryCommand(t *testing.T) {
 	}
 }
 
-// TestRecoverableCustodyActionFlowsThroughConfirmationAndRecoverService covers
-// the TUI half of the guarded custody recovery: a terminal pre-push
-// pipeline_owned state renders the recovery offer, `u` opens an explicit
-// confirmation instead of acting, and `enter` routes through the shared
-// branchsync recovery service exactly once.
 func TestRecoverableCustodyActionFlowsThroughConfirmationAndRecoverService(t *testing.T) {
 	run := &ipc.RunInfo{ID: "run-1", Branch: "feature", Status: types.RunCancelled}
 	m := NewModel("socket", nil, run)
@@ -357,8 +352,6 @@ func TestPinnedHeadRecoveryConfirmationKeepsTheLocalHead(t *testing.T) {
 	}
 }
 
-// TestActivePipelineOwnedStateOffersNoRecoveryAction pins that the recovery
-// affordance never appears while the owning run is still active.
 func TestActivePipelineOwnedStateOffersNoRecoveryAction(t *testing.T) {
 	run := &ipc.RunInfo{ID: "run-1", Branch: "feature", Status: types.RunRunning}
 	m := NewModel("socket", nil, run)

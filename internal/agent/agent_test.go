@@ -548,9 +548,6 @@ func TestFinalizeTextResult_WithSchemaRejectsAmbiguousBareJSON(t *testing.T) {
 	}
 }
 
-// reviewOutputTestSchema mirrors the review step's structured-output contract
-// (internal/pipeline/steps/common.go reviewFindingsSchema) for the fields the
-// parse-failure regressions below exercise.
 func reviewOutputTestSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
@@ -1318,9 +1315,6 @@ func TestValidateStructuredOutput_ReportsTheFailingSchemaField(t *testing.T) {
 	}
 }
 
-// An unchanged output with several invalid properties must report the same
-// violation on every validation, or Review's retry attribution would read a
-// repeated failure as failures across distinct fields.
 func TestValidateStructuredOutput_RepeatedOutputReportsTheSameViolation(t *testing.T) {
 	schema := json.RawMessage(`{
 		"type": "object",

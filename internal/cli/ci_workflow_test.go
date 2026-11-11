@@ -12,9 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// initGitRepo makes dir a minimal git repository so generateCIWorkflow's
-// git.FindGitRoot resolution (added to root the command at the repo
-// toplevel) succeeds against it.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 	cmd := exec.Command("git", "init", "--quiet", dir)
@@ -176,7 +173,6 @@ func TestGenerateCIWorkflow(t *testing.T) {
 				return
 			}
 
-			// Parse YAML
 			var workflow map[string]interface{}
 			if err := yaml.Unmarshal(content, &workflow); err != nil {
 				t.Errorf("workflow is not valid YAML: %v", err)

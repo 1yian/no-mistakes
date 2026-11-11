@@ -9,8 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// A checkout can have no local identity and still select a different identity
-// through a conditional global include. The gate must keep that effective value.
 func TestCommitIdentityConditionalIncludeBindsDestination(t *testing.T) {
 	ctx := context.Background()
 	src, dst := initTestRepo(t), initTestRepo(t)

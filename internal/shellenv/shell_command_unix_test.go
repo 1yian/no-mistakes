@@ -83,11 +83,6 @@ func TestShellCommandGroupActiveIgnoresZombiesButKeepsLiveChildren(t *testing.T)
 	}
 }
 
-// TestShellCommandGroupActiveAcceptsMemberFinishingInsideWindow is the issue
-// #1614 regression: a member still finishing when the leader exits is seen by
-// the first probe, but it leaves the group inside the settle window, so the
-// bounded re-probe accepts the leader's exit. The same member probed with no
-// window is still refused, which is what the check did before the fix.
 func TestShellCommandGroupActiveAcceptsMemberFinishingInsideWindow(t *testing.T) {
 	// The member is a direct backgrounded process (not a subshell) with its
 	// stdio detached, so it outlives the leader by ~0.5s inside the leader's
@@ -121,10 +116,6 @@ func TestShellCommandGroupActiveAcceptsMemberFinishingInsideWindow(t *testing.T)
 	}
 }
 
-// TestShellCommandGroupActiveRefusesMemberSurvivingWindow keeps the check
-// fail-closed under the re-probe: a member that is still alive when the window
-// ends is refused, and the verdict names it so the failure identifies the
-// offending process.
 func TestShellCommandGroupActiveRefusesMemberSurvivingWindow(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "member.pid")
@@ -162,11 +153,6 @@ func TestShellCommandGroupActiveRefusesMemberSurvivingWindow(t *testing.T) {
 	}
 }
 
-// TestShellCommandGroupActivePassesImmediatelyForSessionEscapee documents the
-// scope boundary: a member that calls setsid leaves the leader's process group
-// and is invisible to the probe - the verdict passes without spending the
-// settle window. (Escaped orphans are internal/procreap's job, not this
-// check's.)
 func TestShellCommandGroupActivePassesImmediatelyForSessionEscapee(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "member.pid")
@@ -199,11 +185,6 @@ func TestShellCommandGroupActivePassesImmediatelyForSessionEscapee(t *testing.T)
 	}
 }
 
-// TestShellCommandSessionEscapeeHelper is the process tree for
-// TestShellCommandGroupActivePassesImmediatelyForSessionEscapee: the leader
-// spawns a child that calls setsid(2) to leave the leader's process group,
-// reports that through the ready file, and only then exits - so the probe runs
-// after the member is already gone from the group.
 func TestShellCommandSessionEscapeeHelper(t *testing.T) {
 	switch os.Getenv("NM_SHELLENV_SESSION_HELPER") {
 	case "leader":
@@ -238,13 +219,6 @@ func TestShellCommandSessionEscapeeHelper(t *testing.T) {
 	}
 }
 
-// TestTerminateShellCommandGroup_ReapsGrandchildAfterCleanExit pins the
-// success-path guarantee that keeps the daemon alive: when a leader configured
-// with ConfigureShellCommand exits 0 but leaves a grandchild alive in its
-// process group (a test runner's worker pool), TerminateShellCommandGroup
-// SIGKILLs the whole group. cmd.Cancel only fires on cancellation, so without
-// this the grandchild leaks and orphan pools pile up across runs until the host
-// OOMs and the OS kills the daemon.
 func TestTerminateShellCommandGroup_ReapsGrandchildAfterCleanExit(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
@@ -271,18 +245,6 @@ func TestTerminateShellCommandGroup_ReapsGrandchildAfterCleanExit(t *testing.T) 
 	}
 }
 
-// TestTerminateShellCommandGroup_AsksBeforeKilling pins that a surviving
-// group member is given the chance to shut down: it receives SIGTERM and its
-// handler runs to completion. SIGKILL would deny a test runner or worker
-// script the chance to flush output and clean up its own temporary state.
-//
-// A /bin/sh grandchild with `trap` and `sleep` is not this contract: macOS
-// /bin/sh (bash 3.2) delivers process-group SIGTERM to both the shell and its
-// sleep child, then exits without running the trap. The ready-file handshake
-// only proved trap was registered, which is why this test still failed in
-// 0.01s on CI run 31827318230 after that fix. The grandchild is a Go helper
-// that uses signal.Notify, so SIGTERM is observed by this process, not a
-// sleep(1) that dies with the default action.
 func TestTerminateShellCommandGroup_AsksBeforeKilling(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
@@ -350,9 +312,6 @@ func TestTerminateShellCommandGroupTermHelper(t *testing.T) {
 	}
 }
 
-// TestTerminateShellCommandGroup_EscalatesWhenSIGTERMIsIgnored is the other
-// half of the contract: politeness must not become a new way to leak. A group
-// member that ignores SIGTERM is SIGKILLed once the grace period is up.
 func TestTerminateShellCommandGroup_EscalatesWhenSIGTERMIsIgnored(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 
@@ -372,11 +331,6 @@ func TestTerminateShellCommandGroup_EscalatesWhenSIGTERMIsIgnored(t *testing.T) 
 	}
 }
 
-// TestConfigureShellCommand_CancelEscalatesWithoutBlockingWait pins the
-// cancellation path: cmd.Cancel runs on the goroutine that owns cmd.Wait, so
-// it must return promptly rather than sit through the grace period, and the
-// SIGKILL escalation still has to land on a group member that ignores
-// SIGTERM.
 func TestConfigureShellCommand_CancelEscalatesWithoutBlockingWait(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -400,9 +354,6 @@ func TestConfigureShellCommand_CancelEscalatesWithoutBlockingWait(t *testing.T) 
 	}
 }
 
-// TestTerminateShellCommandGroup_NoopOnNilOrUnstarted guards the cheap safety
-// contract: a nil command, or one that was never started (no Process), must be
-// a no-op rather than panic or signal an arbitrary pid.
 func TestTerminateShellCommandGroup_NoopOnNilOrUnstarted(t *testing.T) {
 	TerminateShellCommandGroup(nil)
 	cmd := exec.Command("/bin/sh", "-c", "true") // never Start()ed: cmd.Process is nil

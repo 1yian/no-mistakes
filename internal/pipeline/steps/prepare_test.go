@@ -96,9 +96,6 @@ func TestConfiguredTestAndLintSharePreparation(t *testing.T) {
 	}
 }
 
-// A run worktree is a detached linked worktree of the gate, so its committed
-// submodules start empty and a repository populates them with
-// commands.prepare. Every configured command must see that checkout.
 func TestConfiguredTestAndLintSeeSubmoduleCheckedOutByPreparation(t *testing.T) {
 	t.Parallel()
 	super, baseSHA, _ := setupGitRepo(t)
@@ -289,9 +286,6 @@ func TestEnsurePrepared_RestoresDirtyInitializedSubmodule(t *testing.T) {
 	assertPreparationRestoresDirtyInitializedSubmodule(t)
 }
 
-// User git config must not be able to make the snapshot unrestorable:
-// diff.submodule=log once rendered the dirty submodule as prose, and the
-// restore's git apply failed with "No valid patches in input".
 func TestEnsurePrepared_RestoresDirtySubmoduleUnderHostileDiffConfig(t *testing.T) {
 	globalConfig := filepath.Join(t.TempDir(), "gitconfig")
 	hostile := "[diff]\n\tsubmodule = log\n\tnoprefix = true\n\tmnemonicprefix = true\n[color]\n\tui = always\n"
@@ -417,9 +411,6 @@ func TestEnsurePrepared_KeepsSubmoduleInitializedByPreparationAtRecordedCommit(t
 	}
 }
 
-// A submodule configured with `update = rebase` would rebase the command's own
-// commit onto the recorded one instead of checking that commit out, so the
-// configured commands would validate content the head does not record.
 func TestEnsurePrepared_ResetsSubmoduleConfiguredToRebase(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, _ := setupGitRepo(t)

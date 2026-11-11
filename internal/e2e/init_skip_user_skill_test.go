@@ -20,22 +20,9 @@ var (
 	claudeSkillRel = filepath.Join(".claude", "skills", "no-mistakes", "SKILL.md")
 	agentsSkillRel = filepath.Join(".agents", "skills", "no-mistakes", "SKILL.md")
 
-	// staleSkillTime is far in the past so that any write init makes to a seeded
-	// skill file, even one that rewrites identical bytes, moves its mtime.
 	staleSkillTime = time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 )
 
-// TestInitSkipUserSkill proves `init --skip-user-skill` never touches the
-// user-level skill locations, however the home directory lays them out, while
-// still setting up and repairing the gate and saying that the skill was skipped.
-//
-// Every seeded copy is stale (its bytes differ from what an install would
-// write), carries a restrictive mode, and has an old mtime. An install that ran
-// would change the bytes, and one that rewrote identical bytes would still move
-// the mtime. These snapshots check observable preservation; the implementation
-// must bypass installation rather than install and restore a snapshot.
-// Absent targets are covered by the snapshot too: a created directory, link
-// target or file shows up as a new entry.
 func TestInitSkipUserSkill(t *testing.T) {
 	layouts := []struct {
 		name  string
@@ -115,13 +102,6 @@ func TestInitSkipUserSkill(t *testing.T) {
 	}
 }
 
-// TestInitSkipUserSkillKeepsConcurrentWrite proves a legitimate write to a
-// user-level skill file that lands while init is running survives it. A `git`
-// shim on PATH holds init at its first `git remote add`, so the write happens
-// at a known point between init's start and its end, with no sleeps or polling.
-// The default-install case is the control: the same write is overwritten when
-// the install runs, which shows the pause really sits before the point where an
-// install would act.
 func TestInitSkipUserSkillKeepsConcurrentWrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs a POSIX shell shim and named pipes")
@@ -224,19 +204,6 @@ func TestInitSkipUserSkillKeepsConcurrentWrite(t *testing.T) {
 	}
 }
 
-// gitPause is a `git` shim that stops the first `git remote add` made by any
-// process with binDir first on PATH, tells the test it arrived, and waits to be
-// released before running the real git.
-//
-// The test opens both named pipes read-write and keeps them open until its
-// cleanups have run. That is what keeps every step bounded: neither side can
-// block opening a pipe whose peer is gone, a release written to a shim that has
-// already exited just sits in the pipe, and the one goroutine that reads the
-// arrival pipe is woken by the test's own write instead of waiting on a peer.
-// Deadlines are not an option, since Go cannot poll FIFOs on Darwin.
-//
-// If the test process itself is killed, the kernel closes its ends of the pipes
-// and a shim already waiting sees end-of-file and carries on.
 type gitPause struct {
 	binDir  string
 	reached *os.File
@@ -279,8 +246,6 @@ exec %s "$@"
 	return p
 }
 
-// awaitArrival starts the single reader of the arrival pipe and returns the
-// channel its result arrives on.
 func (p *gitPause) awaitArrival() <-chan error {
 	arrived := make(chan error, 1)
 	p.readers.Add(1)
@@ -293,15 +258,11 @@ func (p *gitPause) awaitArrival() <-chan error {
 	return arrived
 }
 
-// releaseShim lets a waiting shim carry on. It never blocks: the pipe has a
-// reader (this test) whether or not the shim is still alive.
 func (p *gitPause) releaseShim() error {
 	_, err := p.release.Write([]byte("go\n"))
 	return err
 }
 
-// unblock frees everything that could still be parked on the pipes: a shim
-// waiting for its release, and the arrival reader if nothing ever arrived.
 func (p *gitPause) unblock(t *testing.T) {
 	t.Helper()
 	if err := p.releaseShim(); err != nil {
@@ -312,9 +273,6 @@ func (p *gitPause) unblock(t *testing.T) {
 	}
 }
 
-// initSkippingSkill runs `init --skip-user-skill` in the harness repo and
-// checks the output identifies the flag as the reason the skill was skipped
-// rather than installed.
 func initSkippingSkill(t *testing.T, h *Harness) string {
 	t.Helper()
 	out, err := h.RunInDir(h.WorkDir, "init", "--skip-user-skill")
@@ -339,9 +297,6 @@ func reportsSkippedSkill(out string) bool {
 	return false
 }
 
-// seedUserSkill writes a stale user-level skill copy at home/rel with the given
-// mode and the shared stale mtime, creating parent directories (through any
-// symlink already in place).
 func seedUserSkill(t *testing.T, home, rel string, perm os.FileMode, label string) {
 	t.Helper()
 	path := filepath.Join(home, rel)
@@ -372,8 +327,6 @@ func symlink(t *testing.T, target, link string) {
 	}
 }
 
-// logicalSkillFiles returns the file identity behind each logical skill path
-// that exists, following symlinks.
 func logicalSkillFiles(t *testing.T, home string) map[string]os.FileInfo {
 	t.Helper()
 	files := map[string]os.FileInfo{}
@@ -385,10 +338,6 @@ func logicalSkillFiles(t *testing.T, home string) map[string]os.FileInfo {
 	return files
 }
 
-// snapshotSkillHome describes everything under the two user-level skill roots
-// as a reader sees it: symlinks are recorded with their target and then
-// followed, regular files carry their bytes, mode and mtime, and a root that
-// does not exist is recorded as absent so that creating it is a change.
 func snapshotSkillHome(t *testing.T, home string) map[string]string {
 	t.Helper()
 	snap := map[string]string{}

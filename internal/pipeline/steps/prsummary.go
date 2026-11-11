@@ -34,46 +34,27 @@ func prBodyFlavorFor(provider scm.Provider) prBodyFlavor {
 }
 
 const (
-	maxEmbeddedArtifactBytes               = 16 * 1024
-	maxEmbeddedArtifactsTotalBytes         = 32 * 1024
-	noMistakesPRSignature                  = "Updates from [git push no-mistakes](https://github.com/kunchenguid/no-mistakes)"
-	pipelineAttestationCommentPrefix       = "<!-- no-mistakes-pipeline-attestation:v1 "
-	pipelineAttestationCommentClosingToken = " -->"
-	// escapedPipelineAttestationCommentPrefix keeps an embedded copy readable
-	// while breaking the literal prefix a consumer scans for. Only the marker
-	// is altered; the payload after it is left exactly as the agent captured
-	// it, so evidence stays faithful.
+	maxEmbeddedArtifactBytes                = 16 * 1024
+	maxEmbeddedArtifactsTotalBytes          = 32 * 1024
+	noMistakesPRSignature                   = "Updates from [git push no-mistakes](https://github.com/kunchenguid/no-mistakes)"
+	pipelineAttestationCommentPrefix        = "<!-- no-mistakes-pipeline-attestation:v1 "
+	pipelineAttestationCommentClosingToken  = " -->"
 	escapedPipelineAttestationCommentPrefix = "<!-- no-mistakes-pipeline-attestation\\:v1 "
 )
 
 type pipelineAttestation struct {
-	HeadSHA string                    `json:"head_sha"`
-	Steps   []pipelineAttestationStep `json:"steps"`
-	// LiveValidation is the machine-readable half of the Test step's
-	// live-validation contract, so a consumer asking "was this change live
-	// validated?" reads a field instead of parsing the Testing prose. It is
-	// omitted entirely for a run whose test step recorded no verdict (every
-	// run from before the contract), which is itself the answer: unknown.
-	LiveValidation *pipelineAttestationLiveValidation `json:"live_validation,omitempty"`
-	// AllowTestCommandOverride is the trusted repo-config reason that opts
-	// this repository into letting require-no-mistakes accept a Test step
-	// approved over a failing configured commands.test. Omitted when the repo
-	// has not opted in. Additive: older attestations without the field are
-	// read as not opted in.
-	AllowTestCommandOverride string `json:"allow_test_command_override,omitempty"`
+	HeadSHA                  string                             `json:"head_sha"`
+	Steps                    []pipelineAttestationStep          `json:"steps"`
+	LiveValidation           *pipelineAttestationLiveValidation `json:"live_validation,omitempty"`
+	AllowTestCommandOverride string                             `json:"allow_test_command_override,omitempty"`
 }
 
 type pipelineAttestationStep struct {
-	Step   types.StepName   `json:"step"`
-	Status types.StepStatus `json:"status"`
-	// OverrideReason is the durable marker that the Test step was approved over
-	// a failing configured commands.test. Omitted for every other step, ordinary
-	// Test completions, and attestations that predate the field.
-	OverrideReason string `json:"override_reason,omitempty"`
+	Step           types.StepName   `json:"step"`
+	Status         types.StepStatus `json:"status"`
+	OverrideReason string           `json:"override_reason,omitempty"`
 }
 
-// pipelineAttestationLiveValidation reports the run's verdict and how much of
-// its scenario list was driven against the real product.
 type pipelineAttestationLiveValidation struct {
 	Verdict string `json:"verdict"`
 	Live    int    `json:"live"`
@@ -93,33 +74,16 @@ type testingSummaryOptions struct {
 	summaryParagraph     bool
 	omitOutcome          bool
 	repoRoot             string
-	// evidenceRoot is the run's evidence directory. Together with repoRoot it
-	// is the allowlist for absolute artifact paths an agent reported: a path
-	// under neither is dropped rather than rendered into the PR body. Empty
-	// disables the evidence half of the allowlist, which fails closed.
-	evidenceRoot string
-	// evidence links artifacts published to the repository's orphan evidence
-	// branch. It is nil when nothing was published, and the artifacts then
-	// render as local paths rather than as links that would not resolve.
-	evidence *evidenceLinks
-	// attachments maps a local evidence path to a GitHub user-attachments URL
-	// uploaded at PR render time. Nil means nothing was uploaded; the renderer
-	// then keeps today's local-path or commit-pinned link.
-	attachments map[string]string
-	// evidenceLinkBase is test.evidence.link_base_url, already normalized.
-	// Empty keeps local evidence files cited as local paths; set, every such
-	// citation is a link (evidence_links.go, the one owner of that rendering).
-	evidenceLinkBase string
+	evidenceRoot         string
+	evidence             *evidenceLinks
+	attachments          map[string]string
+	evidenceLinkBase     string
 }
 
-// BuildPipelineSummary produces a deterministic markdown section from step results and rounds.
 func BuildPipelineSummary(steps []*db.StepResult, rounds map[string][]*db.StepRound, headSHA string) (string, string) {
 	return BuildPipelineSummaryFor(steps, rounds, headSHA, scm.ProviderUnknown)
 }
 
-// BuildPipelineSummaryFor is BuildPipelineSummary with a host-specific body skin.
-// Unknown, GitHub, GitLab, and Azure stay on today's HTML. Bitbucket Cloud is
-// no-HTML markdown: no attestation comment, no <details>.
 func BuildPipelineSummaryFor(steps []*db.StepResult, rounds map[string][]*db.StepRound, headSHA string, provider scm.Provider) (string, string) {
 	return buildPipelineSummaryFor(steps, rounds, headSHA, provider, pipelineAttestationPolicy{})
 }
@@ -177,9 +141,6 @@ func buildPipelineSummaryFor(steps []*db.StepResult, rounds map[string][]*db.Ste
 	return b.String(), riskLine
 }
 
-// buildPipelineAttestation records the exact step lifecycle snapshot available
-// when no-mistakes writes the PR body. Its compact JSON is deliberately data
-// only: consumers decide their own policy from the step names and statuses.
 func buildPipelineAttestation(steps []*db.StepResult, rounds map[string][]*db.StepRound, headSHA string) string {
 	return buildPipelineAttestationWithPolicy(steps, rounds, headSHA, pipelineAttestationPolicy{})
 }
@@ -236,9 +197,6 @@ func newPipelineAttestation(steps []*db.StepResult, rounds map[string][]*db.Step
 	return attestation
 }
 
-// attestedLiveValidation derives the live-validation payload from the test
-// step's recorded findings. It returns nil - and the field is then omitted -
-// whenever no verdict was recorded or the verdict belongs to another head.
 func attestedLiveValidation(steps []*db.StepResult, rounds map[string][]*db.StepRound, headSHA string) *pipelineAttestationLiveValidation {
 	for _, sr := range steps {
 		if sr == nil || sr.StepName != types.StepTest {
@@ -264,33 +222,10 @@ func attestedLiveValidation(steps []*db.StepResult, rounds map[string][]*db.Step
 	return nil
 }
 
-// rebindPipelineAttestationHead rewrites the first live v1 attestation
-// comment's head_sha to newHeadSHA using the same builder the PR step uses
-// (buildPipelineAttestation). Existing step statuses are kept; only the bound
-// head changes. It returns the original body and false when no live
-// attestation is present, so callers cannot mint one for a PR that was not
-// raised through no-mistakes.
-//
-// This is the CI-repair-without-revalidation shape: review/test/document are
-// deliberately not re-run for that repair commit (see ciRepairContinuityGap),
-// so the only honest statuses to (re)publish are the ones the last real
-// attestation already carried.
 func rebindPipelineAttestationHead(body, newHeadSHA string) (string, bool) {
 	return rebindPipelineAttestationWithSteps(body, newHeadSHA, nil, pipelineAttestationPolicy{})
 }
 
-// rebindPipelineAttestationWithSteps rewrites the first live v1 attestation
-// comment to bind newHeadSHA. When steps is nil it keeps whatever step statuses
-// the existing attestation already carried, including a Test override_reason.
-// allow_test_command_override still comes from the caller's current trusted
-// policy, not the previous attestation. When steps is non-nil, it replaces
-// the attestation's step list outright with the caller's own statuses instead
-// of reusing the old ones - for a caller (the Push step) that attests a head it
-// is about to push using this run's own current step statuses, rather than
-// borrowing whatever an older, possibly different, attestation claimed. It
-// still returns the original body and false when no live attestation is
-// present, so a caller cannot mint one for a PR that was not raised through
-// no-mistakes.
 func rebindPipelineAttestationWithSteps(body, newHeadSHA string, steps []*db.StepResult, policy pipelineAttestationPolicy) (string, bool) {
 	newHeadSHA = strings.TrimSpace(newHeadSHA)
 	if newHeadSHA == "" {
@@ -343,7 +278,6 @@ func rebindPipelineAttestationWithSteps(body, newHeadSHA string, steps []*db.Ste
 	return body[:start] + rebuilt + body[oldEnd:], true
 }
 
-// BuildTestingSummary extracts a deterministic Testing section from the test step.
 func BuildTestingSummary(steps []*db.StepResult, rounds map[string][]*db.StepRound) string {
 	return buildTestingSummary(steps, rounds, testingSummaryOptions{includeTestedDetails: true})
 }
@@ -826,10 +760,6 @@ func renderAttachmentMarkdown(artifact types.TestArtifact, url, label string) st
 	return fmt.Sprintf("![%s](%s)\n", markdownAltText(label), url)
 }
 
-// embeddedArtifactText reads a file artifact and returns its text content,
-// truncated from the middle when it exceeds maxEmbeddedArtifactBytes. ok is
-// false when the artifact has no path, points at an image/video, resolves
-// outside the allowed roots, is missing, empty, or is not UTF-8 text.
 func embeddedArtifactText(artifact types.TestArtifact, opts testingSummaryOptions, state *testingArtifactRenderState) (string, bool) {
 	if artifact.Path == "" {
 		return "", false
@@ -1086,9 +1016,6 @@ func renderLocalArtifactLine(label, localPath string, opts testingSummaryOptions
 	return renderLocalArtifactReference("- Evidence", label, localPath, opts)
 }
 
-// renderLocalArtifactReference cites an evidence file that has no published
-// or uploaded copy. With test.evidence.link_base_url set it is a link the
-// reviewer can open (evidence_links.go); otherwise it is the local path.
 func renderLocalArtifactReference(prefix, label, localPath string, opts testingSummaryOptions) string {
 	if link := renderEvidenceFileLink(opts.evidenceLinkBase, opts.evidenceRoot, localPath, label); link != "" {
 		return fmt.Sprintf("%s: %s\n", prefix, link)
@@ -1215,7 +1142,6 @@ func buildStepEntry(sr *db.StepResult, rounds []*db.StepRound, flavor prBodyFlav
 		return buildDetail(fmt.Sprintf("⏭️ **%s** - skipped", name))
 	}
 
-	// Parse the final findings on the step result (last state).
 	var finalFindings *types.Findings
 	finalFindingsParsed := sr.FindingsJSON == nil
 	if sr.FindingsJSON != nil {
@@ -1225,7 +1151,6 @@ func buildStepEntry(sr *db.StepResult, rounds []*db.StepRound, flavor prBodyFlav
 		}
 	}
 
-	// Parse initial round findings (round 1) for the full story.
 	var initialFindings *types.Findings
 	if len(rounds) > 0 && rounds[0].FindingsJSON != nil {
 		if f, err := types.ParseFindingsJSON(*rounds[0].FindingsJSON); err == nil {
@@ -1233,7 +1158,6 @@ func buildStepEntry(sr *db.StepResult, rounds []*db.StepRound, flavor prBodyFlav
 		}
 	}
 
-	// Parse latest round findings for risk fallback when final state is cleared.
 	var latestRoundFindings *types.Findings
 	if len(rounds) > 0 {
 		last := rounds[len(rounds)-1]
@@ -1393,7 +1317,6 @@ func roundsHaveParseFailure(rounds []*db.StepRound) bool {
 }
 
 func buildFixResultText(rounds []*db.StepRound) string {
-	// Count findings in round 1.
 	var initialCount int
 	if len(rounds) > 0 && rounds[0].FindingsJSON != nil {
 		if f, err := types.ParseFindingsJSON(*rounds[0].FindingsJSON); err == nil {
@@ -1441,11 +1364,6 @@ func buildFixResultText(rounds []*db.StepRound) string {
 	return strings.Join(parts, " → ")
 }
 
-// buildStepDetails renders the collapsible body for a step as an
-// issue -> fix -> outcome narrative rather than a round-by-round log. Each
-// round is shown as the review state observed at its end; a fix round is
-// prefixed with its recorded outcome so a reader can follow the result without
-// mentally replaying rounds.
 func buildStepDetails(summaryLine string, sr *db.StepResult, rounds []*db.StepRound, flavor prBodyFlavor) string {
 	var inner strings.Builder
 	// A skipped step whose rounds recorded no findings never checked
@@ -1563,7 +1481,6 @@ func fixRoundOutcome(r *db.StepRound) fixOutcome {
 	}
 }
 
-// fixRoundLine renders the one-line result of a fix round.
 func fixRoundLine(r *db.StepRound) string {
 	switch fixRoundOutcome(r) {
 	case fixOutcomeNoChange:
@@ -1575,8 +1492,6 @@ func fixRoundLine(r *db.StepRound) string {
 	}
 }
 
-// writeFindingItems renders each finding as a `file:line - description` bullet,
-// followed by any test command details for the test step.
 func writeFindingItems(b *strings.Builder, sr *db.StepResult, findings *types.Findings, flavor prBodyFlavor) {
 	for _, f := range findings.Items {
 		emoji := severityEmoji(f.Severity)
@@ -1593,14 +1508,6 @@ func writeFindingItems(b *strings.Builder, sr *db.StepResult, findings *types.Fi
 	writeTestedDetails(b, sr, findings, flavor)
 }
 
-// writeTestedDetails lists what the test step exercised: its live-validation
-// verdict, the scenario table, and the commands it ran. It is a no-op for
-// non-test steps.
-//
-// The scenario table is rendered here as well as in the Testing section
-// because the Pipeline fold is the per-round story: a reader following a
-// fix round wants to see which scenario changed result between rounds, which
-// the single collapsed Testing section cannot show.
 func writeTestedDetails(b *strings.Builder, sr *db.StepResult, findings *types.Findings, flavor prBodyFlavor) {
 	if sr.StepName != types.StepTest {
 		return
@@ -1631,22 +1538,6 @@ func escapePRText(s string, flavor prBodyFlavor) string {
 	return escapePipelineFoldMarkers(html.EscapeString(s))
 }
 
-// escapePipelineFoldMarkers neutralizes the literal byte sequences a parser
-// reading the assembled PR body treats as structure, so agent-authored text
-// embedded in a finding, fix summary, tested detail, or artifact body can never
-// be mistaken for the real thing. Two parsers matter:
-//
-//   - The PR-body truncation parser (parsePipelineUpdateGroups /
-//     nextPipelineFoldStart) treats "### " and "<details>" at the start of a
-//     line as step-fold boundaries.
-//   - The require-no-mistakes compliance check
-//     (.github/actions/require-no-mistakes/verify.py) takes the FIRST
-//     attestation comment in the body and binds its head_sha to the PR head.
-//     A step agent that captures a generated PR body as evidence embeds a
-//     second attestation comment carrying that evidence run's head_sha; left
-//     intact it precedes and therefore shadows the real one, and the check
-//     fails on a head_sha mismatch for a PR the pipeline did produce. Observed
-//     on kunchenguid/no-mistakes#831, whose test evidence embedded three.
 func escapePipelineFoldMarkers(s string) string {
 	if s == "" {
 		return s
@@ -1666,20 +1557,6 @@ func escapePipelineFoldMarkers(s string) string {
 	return out
 }
 
-// neutralizeAttestationMarkers breaks every attestation comment prefix in
-// agent-authored PR-body prose so only the pipeline-authored marker in the
-// Pipeline section stays parseable by the compliance check, which binds the
-// first marker in the body to the PR head. It also breaks copied PR-appendix
-// ownership markers (e.g. Testing evidence quoting a templated body): a raw
-// pair in an ordinary body makes every later restamp refuse it as ambiguous.
-// And it neutralizes closing references in the provider's own grammar
-// (closingGrammarFor), since every PR-body site that generates text passes
-// through here - the grammar has to travel with the text, because GitLab
-// resolves a reference inside a code block where GitHub does not.
-//
-// Control characters are cleaned first: the publication boundary strips them
-// again, and a terminal escape hidden inside a marker or closing keyword would
-// otherwise hide it from these escapes and become live once it is removed.
 func neutralizeAttestationMarkers(provider scm.Provider, s string) string {
 	s = neutralizePRControls(s)
 	escaped := escapePRAppendixMarkers(strings.ReplaceAll(s, pipelineAttestationCommentPrefix, escapedPipelineAttestationCommentPrefix))
@@ -1749,7 +1626,6 @@ func countFindingsBySeverity(findings *types.Findings) string {
 		}
 	}
 
-	// Mixed severities: "3 issues (1 error, 2 warnings)"
 	var parts []string
 	for _, sev := range []string{"error", "warning", "info"} {
 		if n, ok := counts[sev]; ok {

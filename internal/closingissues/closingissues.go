@@ -1,5 +1,3 @@
-// Package closingissues owns validation and canonicalization of explicit issue
-// references supplied through axi run --closes.
 package closingissues
 
 import (
@@ -8,11 +6,6 @@ import (
 	"strings"
 )
 
-// Normalize validates, deduplicates case-insensitively, and deterministically
-// orders issue references. Same-repository references are stored as decimal
-// numbers; cross-repository references use project#number, where project is a
-// provider project path: "owner/repository" on GitHub and, on GitLab, a path
-// that may nest under subgroups ("group/subgroup/repository").
 func Normalize(values []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(values))
 	refs := make([]string, 0, len(values))
@@ -38,8 +31,6 @@ func Normalize(values []string) ([]string, error) {
 	return refs, nil
 }
 
-// Encode returns the stable database representation of already-normalized
-// references. Newlines are safe separators because validation rejects them.
 func Encode(refs []string) (string, error) {
 	normalized, err := Normalize(refs)
 	if err != nil {
@@ -48,7 +39,6 @@ func Encode(refs []string) (string, error) {
 	return strings.Join(normalized, "\n"), nil
 }
 
-// Decode validates a stored representation instead of trusting database text.
 func Decode(value string) ([]string, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
@@ -56,7 +46,6 @@ func Decode(value string) ([]string, error) {
 	return Normalize(strings.Split(value, "\n"))
 }
 
-// Covers reports whether every normalized ref in want is present in have.
 func Covers(have, want []string) bool {
 	set := make(map[string]struct{}, len(have))
 	for _, ref := range have {
@@ -70,9 +59,6 @@ func Covers(have, want []string) bool {
 	return true
 }
 
-// Localize returns ref as a bare issue number when it is qualified with repo
-// (owner/repository, compared case-insensitively), so a PR's own repository
-// names each issue one way. Other references are returned unchanged.
 func Localize(ref, repo string) string {
 	prefix, number, qualified := strings.Cut(ref, "#")
 	if qualified && repo != "" && strings.EqualFold(prefix, repo) {
@@ -81,9 +67,6 @@ func Localize(ref, repo string) string {
 	return ref
 }
 
-// Target returns the syntax the forge's closing keywords expect after the
-// keyword. GitHub and GitLab both accept "#42" for the project's own issues and
-// "project#42" for a cross-project one, so the stored ref is already the target.
 func Target(ref string) string {
 	if strings.Contains(ref, "#") {
 		return ref
@@ -91,9 +74,6 @@ func Target(ref string) string {
 	return "#" + ref
 }
 
-// Parts returns template data for a normalized reference. A nested project
-// path (a GitLab subgroup path) leaves the subgroup segments in repository, so
-// the reference still round-trips through owner + repository.
 func Parts(ref string) (owner, repository, issue, target string) {
 	prefix, issue, qualified := strings.Cut(ref, "#")
 	if !qualified {
@@ -124,10 +104,6 @@ func normalize(value string) (string, error) {
 	return strings.ToLower(prefix) + "#" + number, nil
 }
 
-// validProjectPath reports whether prefix is a provider project path: at least
-// two "/"-separated segments, each a well-formed project path segment. Two
-// segments is the GitHub owner/repository shape; a GitLab path may nest under
-// subgroups, so the count is open above it.
 func validProjectPath(prefix string) bool {
 	segments := strings.Split(prefix, "/")
 	if len(segments) < 2 {
@@ -144,10 +120,6 @@ func validProjectPath(prefix string) bool {
 	return true
 }
 
-// validProjectSegment reports whether one "/"-separated piece of a project path
-// is well formed. The rule is the repository one because a project path
-// segment - GitLab group and project paths alike - allows ".", "_" and "-"
-// inside it; a GitHub owner is a narrower case that rides on the same rule.
 func validProjectSegment(value string) bool {
 	if value == "" || value == "." || value == ".." {
 		return false

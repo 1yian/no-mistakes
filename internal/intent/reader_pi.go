@@ -13,15 +13,12 @@ import (
 	"time"
 )
 
-// PiReaderName is the agent name used in cache keys and DB rows.
 const PiReaderName = "pi"
 
 const piScannerMaxTokenSize = 256 * 1024 * 1024
 
-// piReader reads Pi coding-agent transcripts from ~/.pi/agent/sessions/.
 type piReader struct{}
 
-// NewPiReader returns a Reader for Pi coding-agent transcripts.
 func NewPiReader() Reader { return &piReader{} }
 
 func (r *piReader) Name() string { return PiReaderName }

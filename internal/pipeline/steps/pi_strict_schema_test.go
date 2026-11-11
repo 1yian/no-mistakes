@@ -15,9 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// writeStrictPi fakes a strict-capable Pi that saves the output extension it
-// was launched with as pi-extension.ts in its working directory and submits
-// output through the output tool.
 func writeStrictPi(t *testing.T, output string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -58,8 +55,6 @@ cat "$0.events"
 	return bin
 }
 
-// strictPiDeclaration parses the tool parameters out of the extension Pi was
-// launched with, the generated declaration Pi sends to the provider.
 func strictPiDeclaration(t *testing.T, cwd string) map[string]any {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Join(cwd, "pi-extension.ts"))
@@ -78,11 +73,6 @@ func strictPiDeclaration(t *testing.T, cwd string) map[string]any {
 	return declaration
 }
 
-// strictSchemaViolations walks a strict function schema declaration the way
-// pi-ai and the provider both enforce it: every object level must carry
-// additionalProperties: false and a required list naming every property, and
-// no keyword outside the strict subset may appear. It returns each violation
-// as a JSON-path string.
 func strictSchemaViolations(value any, path string) []string {
 	schema, ok := value.(map[string]any)
 	if !ok {
@@ -134,12 +124,6 @@ func strictSchemaViolations(value any, path string) []string {
 	return violations
 }
 
-// The strict output tool's declared parameters must already satisfy the
-// provider's strict function contract: pi-ai only started normalizing schemas
-// at 0.84.4, and strict-capable releases before it send the declaration
-// verbatim, which is the v1.106.0 review failure against openai-codex
-// ("At schema path /, additionalProperties must be false"). Every schema the
-// steps hand to RunOpts.JSONSchema must therefore declare a strict-valid tool.
 func TestPiStrictDeclarationSatisfiesTheStrictFunctionContract(t *testing.T) {
 	t.Parallel()
 	schemas := map[string]json.RawMessage{

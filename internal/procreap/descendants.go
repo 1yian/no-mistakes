@@ -2,7 +2,6 @@ package procreap
 
 import "strings"
 
-// processState is one process-table entry as the descendant probe needs it.
 type processState struct {
 	PID  int
 	PPID int
@@ -10,17 +9,6 @@ type processState struct {
 	Stat string
 }
 
-// LiveDescendants returns the running descendants of pid: processes whose
-// parent chain reaches pid, and members of the process group pid leads.
-// Zombies are left out because they are finished work nobody has reaped yet.
-//
-// The invocation stall budget compares two of these sets to tell whether a
-// quiet agent is still waiting on a tool call it launched (a test suite, a
-// build) or is wedged next to helpers it keeps alive for its whole turn (an
-// ACP agent under acpx, stdio MCP servers). A PID set rather than process
-// start times is compared because ps reports ages in whole seconds, which
-// cannot order a helper started just before the agent's output against a
-// tool started just after it.
 func LiveDescendants(pid int) (map[int]bool, error) {
 	if pid <= 1 {
 		return map[int]bool{}, nil

@@ -16,7 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// unavailableProviderStep runs the real PR/CI step with no provider executable.
 type unavailableProviderStep struct {
 	pipeline.Step
 	path string

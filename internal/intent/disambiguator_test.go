@@ -284,9 +284,6 @@ func TestAgentDisambiguatorReturnsCleanupErrorAfterAgentError(t *testing.T) {
 	}
 }
 
-// The disambiguator runs with worktree CWD and can write files before its
-// snapshot/restore cleanup, so its prompt limits independently initiated
-// changes to agent memory files.
 func TestAgentDisambiguatorPromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	repo := initDisambiguatorTestRepo(t)
 	var prompt string

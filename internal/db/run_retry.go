@@ -8,9 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// RunRetry links a run that continues a failed run to that failure: which
-// step failed, in which round, with what error, and the preserved head the
-// continuation started from. The continuation run's own status is the outcome.
 type RunRetry struct {
 	RunID             string
 	SourceRunID       string
@@ -21,8 +18,6 @@ type RunRetry struct {
 	CreatedAt         int64
 }
 
-// InsertRunRetry records the audit link for a continuation run. It fails when
-// the source run was already continued.
 func (d *DB) InsertRunRetry(r RunRetry) error {
 	_, err := d.sql.Exec(
 		`INSERT INTO run_retries (run_id, source_run_id, step_name, source_round, source_error, checkpoint_head_sha, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -34,14 +29,10 @@ func (d *DB) InsertRunRetry(r RunRetry) error {
 	return nil
 }
 
-// GetRunRetry returns the audit link of a continuation run, or nil when the
-// run is not one.
 func (d *DB) GetRunRetry(runID string) (*RunRetry, error) {
 	return d.getRunRetry(`SELECT run_id, source_run_id, step_name, source_round, source_error, checkpoint_head_sha, created_at FROM run_retries WHERE run_id = ?`, runID)
 }
 
-// GetRunRetryBySource returns the audit link of the run that continued
-// sourceRunID, or nil when it was never continued.
 func (d *DB) GetRunRetryBySource(sourceRunID string) (*RunRetry, error) {
 	return d.getRunRetry(`SELECT run_id, source_run_id, step_name, source_round, source_error, checkpoint_head_sha, created_at FROM run_retries WHERE source_run_id = ?`, sourceRunID)
 }
@@ -58,9 +49,6 @@ func (d *DB) getRunRetry(query, id string) (*RunRetry, error) {
 	return r, nil
 }
 
-// DeleteRun removes a run record with every row that cascades from it. A
-// retry refused at launch uses it so the refused continuation never becomes
-// the branch's latest run.
 func (d *DB) DeleteRun(id string) error {
 	_, err := d.sql.Exec(`DELETE FROM runs WHERE id = ?`, id)
 	return err

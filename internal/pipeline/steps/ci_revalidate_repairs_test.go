@@ -17,12 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ciRepairFixture is one CI monitor run wired to a real git worktree, a real
-// bare upstream, and a fake gh reporting one failing check, so a test can
-// observe what a repair does to the local head, the remote, and the run's
-// review authority. Tests using this process-heavy fixture intentionally run
-// serially: running all of their git and fake-gh subprocesses in parallel can
-// exhaust macOS CI process capacity and stall a child indefinitely.
 type ciRepairFixture struct {
 	sctx     *pipeline.StepContext
 	dir      string
@@ -102,7 +96,6 @@ func newCIRepairFixture(t *testing.T, revalidate bool, agentAction func(workDir 
 	return &ciRepairFixture{sctx: sctx, dir: dir, upstream: upstream, headSHA: headSHA, gateDir: sctx.GateDir, logs: logs}
 }
 
-// run drives the monitor until it returns or the poll budget is spent.
 func (f *ciRepairFixture) run(t *testing.T) (*pipeline.StepOutcome, error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -131,9 +124,6 @@ func writeCIFix(workDir string) {
 	os.WriteFile(filepath.Join(workDir, "ci-fix.txt"), []byte("fixed"), 0o644)
 }
 
-// TestCIStep_RevalidateRepairsPolicySelectsRepairDelivery is the behavioral
-// core of ci.revalidate_repairs: the same failing check, the same repair, and
-// two entirely different deliveries.
 func TestCIStep_RevalidateRepairsPolicySelectsRepairDelivery(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -223,9 +213,6 @@ func TestCIStep_RevalidateRepairsPolicySelectsRepairDelivery(t *testing.T) {
 	}
 }
 
-// A repair the agent declined to make is not a repair under either policy: no
-// commit, no publication, no restart, and the attempt budget still decides
-// when to stop.
 func TestCIStep_NoChangeRepairNeitherPublishesNorRestarts(t *testing.T) {
 	t.Parallel()
 	for _, revalidate := range []bool{false, true} {
@@ -257,10 +244,6 @@ func TestCIStep_NoChangeRepairNeitherPublishesNorRestarts(t *testing.T) {
 	}
 }
 
-// The agent may commit the repair itself - the merge-conflict and
-// `git rebase --continue` shape leaves a clean worktree with an advanced HEAD.
-// Both policies must recognize that as a real repair and deliver it their own
-// way, rather than reading the clean tree as "nothing happened".
 func TestCIStep_AgentCommittedRepairFollowsThePolicy(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -296,15 +279,6 @@ func TestCIStep_AgentCommittedRepairFollowsThePolicy(t *testing.T) {
 	}
 }
 
-// Publication is all-or-nothing: the remote push, the gate mirror, the push
-// binding, and the recorded head either all land or none of them are recorded.
-// A gate-mirror failure happens after the remote already carries the head, so
-// the tempting shortcut is to record the publication anyway. Recording it would
-// leave the gate behind the remote, where `no-mistakes rerun` resolves the
-// stale gate head and silently omits the repair.
-//
-// Nothing is recorded until every part succeeds, so the failure is simply
-// something the next fix attempt re-enters and completes.
 func TestCIStep_PartialPublicationRecordsNothing(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, false, nil)
@@ -360,29 +334,11 @@ func TestCIStep_PartialPublicationRecordsNothing(t *testing.T) {
 	}
 }
 
-// A merge-conflict repair rewrites history, so its head is never a descendant
-// of the reviewed head and its continuity can never be proven. The uniform rule
-// therefore sends every conflict repair down the revalidating path - it is not
-// carved out, it just always lands in the cannot-be-proven half.
-//
-// Both directions matter, and both are load bearing:
-//   - a genuine conflict rebase must still SUCCEED, revalidating rather than
-//     being refused, so conflict repair keeps working;
-//   - a repair that reset to the base instead of replaying the branch must not
-//     reach the remote, so the reviewed commits survive.
-//
-// The second case is the reason this rule exists. Reproduced against the
-// earlier design, that repair force-pushed the reviewed commits away while
-// reporting success - and the actor was the CI repair agent itself, which is
-// why provenance cannot substitute for proof.
 func TestCIStep_ConflictRepairAlwaysRevalidates(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name string
-		// rewrite leaves the worktree on the repaired head and returns it.
-		rewrite func(t *testing.T, f *ciRepairFixture, advancedBase string) string
-		// keepsReviewedWork is whether the rewrite actually replayed the
-		// reviewed commit onto the new base.
+		name              string
+		rewrite           func(t *testing.T, f *ciRepairFixture, advancedBase string) string
 		keepsReviewedWork bool
 	}{
 		{
@@ -482,10 +438,6 @@ func TestCIStep_ConflictRepairAlwaysRevalidates(t *testing.T) {
 	}
 }
 
-// A manual repair - the one a person authorized by answering the CI gate with
-// a fix - takes exactly the same delivery decision as an automatic one. The
-// policy is about the cost of revalidating a repair, not about who asked for
-// it.
 func TestCIStep_ManualRepairFollowsTheSamePolicy(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -537,10 +489,6 @@ func TestCIStep_ManualRepairFollowsTheSamePolicy(t *testing.T) {
 	}
 }
 
-// Continuity is proven against the run's durable review authority, so a run
-// that has none cannot prove anything: the repair revalidates rather than
-// publishing. Fail closed is the whole point - a missing approval is not a
-// reason to skip the check, it is a reason the check cannot pass.
 func TestCIStep_RepairWithoutReviewAuthorityRevalidatesRatherThanPublishing(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, false, nil)
@@ -565,9 +513,6 @@ func TestCIStep_RepairWithoutReviewAuthorityRevalidatesRatherThanPublishing(t *t
 	}
 }
 
-// Durable state is written before the live head advances, so a failed write
-// cannot leave the monitor watching a head the run record does not know about
-// while its stale review approval still stands.
 func TestCIStep_FailedRevalidationWriteDoesNotAdvanceTheLiveHead(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, true, nil)
@@ -591,11 +536,6 @@ func TestCIStep_FailedRevalidationWriteDoesNotAdvanceTheLiveHead(t *testing.T) {
 	}
 }
 
-// The delivery decision itself is covered by
-// TestCIStep_RevalidateRepairsPolicySelectsRepairDelivery without paying for a
-// monitor loop. This one test pays for it once, to pin the remaining wiring:
-// the monitor turns a held repair into a restart at Review, and states the
-// policy in force before it does anything.
 func TestCIStep_MonitorRestartsAtReviewForAHeldRepair(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, true, writeCIFix)

@@ -10,20 +10,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// DefaultProviderPluginTimeout bounds one provider-plugin invocation when the
-// operator did not set provider_plugins.<name>.timeout.
 const DefaultProviderPluginTimeout = 2 * time.Minute
 
 var providerPluginNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 
-// ProviderPlugin is one resolved provider_plugins entry: an executable that
-// implements PR and CI operations for repositories on the listed hosts.
-//
-// It is global-only by construction. The command executes with the
-// operator's credentials for every repository on those hosts, so - like
-// agent_args_override - no repository file may add, change, or redirect it.
-// RepoConfig has no such field, so a provider_plugins block in a repository
-// .no-mistakes.yaml is ignored.
 type ProviderPlugin struct {
 	Command           string
 	Args              []string
@@ -32,7 +22,6 @@ type ProviderPlugin struct {
 	DraftPullRequests bool
 }
 
-// ProviderPlugins maps a plugin name to its resolved configuration.
 type ProviderPlugins map[string]ProviderPlugin
 
 type providerPluginRaw struct {
@@ -101,10 +90,6 @@ func normalizeProviderPlugins(raw map[string]providerPluginRaw) (ProviderPlugins
 	return plugins, nil
 }
 
-// normalizeProviderPluginCommand accepts a bare executable name (resolved
-// from the run's PATH) or an absolute or ~/ path. A relative path is refused:
-// provider commands run with the run worktree as their working directory, so
-// a relative path would execute a file the pushed branch controls.
 func normalizeProviderPluginCommand(raw string) (string, error) {
 	command := strings.TrimSpace(raw)
 	if command == "" {
@@ -116,10 +101,6 @@ func normalizeProviderPluginCommand(raw string) (string, error) {
 	return normalizeForgeProfilePath(command)
 }
 
-// normalizeProviderPluginHost validates one host pattern: a host name (or SSH
-// alias) exactly as it appears in a remote URL, or "*.<suffix>" for any
-// subdomain of suffix. Ports, schemes, paths, and user info are refused
-// because remote host extraction strips all of them.
 func normalizeProviderPluginHost(raw string) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(raw))
 	if host == "" {
@@ -132,13 +113,6 @@ func normalizeProviderPluginHost(raw string) (string, error) {
 	return host, nil
 }
 
-// Select returns the plugin that claims a repository remote. rawHost is the
-// literal host token in the remote (an SSH alias for alias remotes) and
-// resolvedHost its SSH HostName resolution; resolvedHost may be computed
-// lazily and is consulted only when rawHost matches nothing, so an alias the
-// operator chose deliberately always decides first. Within one host an exact
-// pattern beats a wildcard and a longer wildcard suffix beats a shorter one;
-// load-time validation forbids identical patterns, so the result is unique.
 func (p ProviderPlugins) Select(rawHost string, resolvedHost func() string) (string, bool) {
 	if len(p) == 0 {
 		return "", false
@@ -176,12 +150,6 @@ func (p ProviderPlugins) selectHost(host string) (string, bool) {
 	return best, bestLen >= 0
 }
 
-// validateProviderPluginsAgainstForgeProfiles refuses a host token that both a
-// forge profile and a provider plugin would claim. The two features route a
-// repository to different implementations, and silently letting one win would
-// hide a misconfiguration behind whichever ran first. It sees only literal
-// host tokens; forgecontext.RefuseProviderPluginOverlap catches the overlap
-// that appears only after SSH HostName resolution, when a run starts.
 func validateProviderPluginsAgainstForgeProfiles(plugins ProviderPlugins, profiles ForgeProfiles) error {
 	if len(plugins) == 0 || len(profiles) == 0 {
 		return nil

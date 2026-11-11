@@ -19,7 +19,6 @@ import (
 
 const serviceTelemetryKey = "NO_MISTAKES_TELEMETRY"
 
-// Decode the generated definitions independently of the inheritance allowlist.
 func serviceTelemetryEnvironment(t *testing.T, platform, definition string) map[string]string {
 	t.Helper()
 	env := make(map[string]string)

@@ -222,8 +222,6 @@ func TestLintStep_OverriddenPassIsDeclaredOnce(t *testing.T) {
 	}
 }
 
-// A fix round re-executes the step into the same step log, which already
-// carries the first execution's declaration.
 func TestCommandSteps_FixRoundDoesNotRedeclareOverrides(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -432,12 +432,6 @@ func TestCIStep_CIAutoFixRetriesWhenGitHubClockLagsLocalClock(t *testing.T) {
 	}
 }
 
-// TestCIStep_CIAutoFixRetriesWhenFastChecksSkipPendingObservation reproduces
-// the real-world scenario where a failing CI check completes so fast between
-// polls that the pipeline never observes it in a pending state, but the check's
-// completedAt timestamp moves past the last-fix time - proving CI re-ran. The
-// pipeline should treat the second failure as a new iteration and attempt
-// another fix rather than logging "fix already attempted" indefinitely.
 func TestCIStep_CIAutoFixRetriesWhenFastChecksSkipPendingObservation(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -521,12 +515,6 @@ func TestCIStep_CIAutoFixRetriesWhenFastChecksSkipPendingObservation(t *testing.
 	}
 }
 
-// TestCIStep_CIAutoFixRetriesWhenSomeChecksStayFailing reproduces the real-world
-// scenario where multiple checks fail, the fix push causes only some of them to
-// re-run (and thus transit through pending) while at least one check keeps
-// reporting as failing throughout. The pipeline should still recognize the
-// post-rerun same-name failure as a new attempt and progress to attempt 2,
-// rather than logging "fix already attempted" indefinitely until CI timeout.
 func TestCIStep_CIAutoFixRetriesWhenSomeChecksStayFailing(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -838,9 +826,6 @@ func TestCIStep_FixMode_ManualInterventionRunsCIFix(t *testing.T) {
 	}
 }
 
-// TestCIStep_AutoFixNoChanges_CountsAsAttempt verifies that when the agent
-// produces no changes (nothing to commit), it still counts as a consumed fix
-// attempt rather than spinning forever with "fix already attempted".
 func TestCIStep_AutoFixNoChanges_CountsAsAttempt(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -991,8 +976,6 @@ func TestCIStep_AutoFixExternalFailureStopsWithAgentConclusion(t *testing.T) {
 	}
 }
 
-// TestCIStep_FixMode_NoChanges_CountsAsAttempt verifies the same no-changes
-// behavior for manual fix mode (sctx.Fixing = true).
 func TestCIStep_FixMode_NoChanges_CountsAsAttempt(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -1087,8 +1070,6 @@ func TestCIStep_FixMode_NoChanges_CountsAsAttempt(t *testing.T) {
 	}
 }
 
-// TestCIStep_AutoFixPromptIncludesMustFixInstruction verifies the agent prompt
-// includes a strong instruction that the agent must produce changes.
 func TestCIStep_AutoFixPromptIncludesMustFixInstruction(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -1191,10 +1172,6 @@ func TestCIStep_AutoFixPromptIncludesMustFixInstruction(t *testing.T) {
 	}
 }
 
-// The emitted agent prompt is the owned contract here, not evidence of model
-// compliance. The author's no-watch requirement and the local-only publication
-// decision apply to every repair, including those without a failing check.
-// Omitting the shared rule from either prompt family must fail this test.
 func TestCIStep_FixPromptLeavesPublicationAndMonitoringToPipeline(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1278,14 +1255,6 @@ func TestCIStep_FixPromptPrefersSimplificationOverMachinery(t *testing.T) {
 	}
 }
 
-// TestCIStep_FixPromptClosesTheInvariantAcrossSiblingSites is the CI twin of
-// the review fixer's invariant-complete contract: a red check exposes an
-// invariant, and the repair closes it at every sibling site in the changed
-// area in the same round, never as machinery, then re-traces the failing
-// sequence and the ordinary path through every changed function before
-// verifying. Neither superseded scope rule may return. Merge-conflict-only
-// repair is a sibling path of the same CI fixer, so it carries the same three
-// rules rather than the old minimal conflict prompt.
 func TestCIStep_FixPromptClosesTheInvariantAcrossSiblingSites(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1680,15 +1649,6 @@ func TestCIStep_AutoFixUsesOnlySelectedFindings(t *testing.T) {
 	}
 }
 
-// TestCIStep_FixAgentBudgetExhaustionParksForADecisionInsteadOfRetrying pins the
-// bounded outcome for a CI auto-fix agent that burns its whole invocation
-// budget without finishing.
-//
-// The failure this replaces: the timeout was downgraded to a step-log warning
-// and the poll loop re-issued the identical request on the next tick, up to
-// auto_fix.ci attempts. Each retry cost another full agent budget, produced no
-// operator-visible signal outside the CI step log, and ended the run at
-// ci_timeout hours later with nothing to act on.
 func TestCIStep_FixAgentBudgetExhaustionParksForADecisionInsteadOfRetrying(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1776,10 +1736,6 @@ func TestCIStep_FixAgentBudgetExhaustionParksForADecisionInsteadOfRetrying(t *te
 	}
 }
 
-// TestCIStep_NonTimeoutFixFailureKeepsRetrying is the counter-test: only a
-// proven full-budget burn parks. An ordinary transient fix failure keeps its
-// existing warn-and-retry behaviour, because repeating it is cheap and often
-// works.
 func TestCIStep_NonTimeoutFixFailureKeepsRetrying(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1841,9 +1797,6 @@ func TestCIStep_NonTimeoutFixFailureKeepsRetrying(t *testing.T) {
 	}
 }
 
-// The CI fixer shares the review fixer's removal rule so both apply one
-// discipline: a red check caused by a code path the intent does not strictly
-// require is fixed by removing that path, not by hardening it.
 func TestCIStep_FixPromptPrefersRemovalOfUnrequiredPaths(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

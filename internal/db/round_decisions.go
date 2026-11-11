@@ -6,36 +6,14 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// MaxBranchDecisionRounds bounds how many prior-run decision rounds are loaded
-// for one branch. Every loaded round is rendered verbatim into an agent
-// prompt, so this is a prompt-budget ceiling, not a correctness limit: a
-// branch with a longer decision history simply carries its most recent
-// decisions.
 const MaxBranchDecisionRounds = 20
 
-// BranchDecisionRound is one step round that recorded a gate response,
-// paired with the run and step it belongs to so a prompt can attribute it.
 type BranchDecisionRound struct {
 	RunID    string
 	StepName types.StepName
 	Round    *StepRound
 }
 
-// GetBranchDecisionRounds returns rounds from OTHER runs on the same repo and
-// branch that recorded a gate response, most recent first, bounded by limit.
-// The truncated result reports whether older matching rounds exist beyond the
-// returned recency window.
-//
-// It deliberately returns every round whose selection came from a gate
-// response, declined or partial, and leaves the "does this round actually carry a
-// decline" question to the caller: the declined set is derived by subtracting
-// selected_finding_ids from findings_json, and that parsing belongs with the
-// finding types rather than in the storage layer.
-//
-// Nothing ever deletes these rows. A completed review clears the uncertified
-// pipeline range, which is why that channel could not carry a decision across
-// runs; a recorded decision has no such expiry and stays readable for the life
-// of the branch's run history.
 func (d *DB) GetBranchDecisionRounds(repoID, branch, excludeRunID string, limit int) ([]*BranchDecisionRound, bool, error) {
 	if limit <= 0 {
 		limit = MaxBranchDecisionRounds
@@ -91,16 +69,6 @@ func (d *DB) GetBranchDecisionRounds(repoID, branch, excludeRunID string, limit 
 	return decisions, truncated, nil
 }
 
-// SetStepRoundDeclined records that a caller resolved this round's approval
-// gate without selecting any finding to fix.
-//
-// The write records a new decline, or refreshes the origin on a round that
-// already records this same decline. It never overwrites another selection:
-// reaching an approval gate on a round that already carries an auto-fix
-// selection is not currently possible - auto-fix continues into a new round
-// instead of gating - but a decline silently erasing a real selection would be
-// a data loss, so the invariant is enforced in the statement rather than
-// assumed by the caller.
 func (d *DB) SetStepRoundDeclined(id string, origins ...types.ResponseOrigin) error {
 	origin := types.ResponseOriginUnknown
 	if len(origins) > 0 {

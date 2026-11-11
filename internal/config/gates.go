@@ -10,19 +10,10 @@ import (
 )
 
 const (
-	// MaxGates is the largest number of extra gates a repository may declare.
-	MaxGates = 16
-	// MaxGateNameLen bounds a gate name so the derived step name stays short
-	// enough for the step tables, the PR body, and the attestation payload.
-	// types owns the bound because it also owns the step-name encoding the
-	// bound exists to keep short.
+	MaxGates       = 16
 	MaxGateNameLen = types.MaxCustomGateLabelLen
 )
 
-// Gate is one repository-declared extra check that runs immediately after its
-// anchor core step. A gate can only add a verdict to a run: it cannot skip,
-// reorder, or replace a core step, and a failing gate parks for an operator
-// decision instead of weakening the core result.
 type Gate struct {
 	Name    string         `yaml:"name" json:"name"`
 	After   types.StepName `yaml:"after" json:"after"`
@@ -62,9 +53,6 @@ func (g *Gate) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// StepName is the gate's identity in the run's step sequence. The anchor is
-// encoded into the name so types.StepName.Order can resolve a gate's execution
-// order without reaching for the config that declared it.
 func (g Gate) StepName() types.StepName {
 	return types.CustomGateStepName(g.After, g.Name)
 }
@@ -84,18 +72,6 @@ func validGateName(name string) error {
 	return nil
 }
 
-// validateGates normalizes each gate in place and fails the config closed on a
-// gates list the pipeline could not honor deterministically. Like
-// validateReviewRaw this deliberately also runs on the PUSHED copy even though
-// EffectiveRepoConfig discards a pushed gates block: the trusted-copy read
-// aborts every run whose default-branch .no-mistakes.yaml fails these checks,
-// so a branch carrying an invalid block has to fail here, before it merges,
-// rather than brick the pipeline afterwards.
-//
-// Normalization is part of validation rather than a separate pass so the two
-// can never disagree: a quoted `name: " arch "` used to validate as "arch"
-// while Gate.StepName kept the raw spelling, putting a padded name into the
-// step tables, the attestation, and every command an operator has to type.
 func validateGates(gates []Gate) error {
 	if len(gates) > MaxGates {
 		return fmt.Errorf("gates has %d entries, at most %d are allowed", len(gates), MaxGates)
@@ -130,7 +106,6 @@ func validateGates(gates []Gate) error {
 	return nil
 }
 
-// GateFixLimits rejects fractional YAML numbers instead of truncating them.
 type GateFixLimits map[string]int
 
 func (g *GateFixLimits) UnmarshalYAML(node *yaml.Node) error {
@@ -175,14 +150,6 @@ func gateAnchorText() string {
 	return strings.Join(names, ", ")
 }
 
-// MarshalGates encodes a run's resolved gate list so the run can carry it for
-// its whole lifetime. Configuration decides a run's gates exactly once, at run
-// creation, exactly as it decides worktree placement once (see
-// worktrees.RecordedDir): the trusted default branch may gain or lose a gate
-// while a run is parked, and re-resolving it later would hand recovery a step
-// sequence the run never executed. An empty list encodes as the empty string,
-// so a run that pinned no gates is indistinguishable from a run written before
-// this was pinned at all - both mean the bare core pipeline.
 func MarshalGates(gates []Gate) (string, error) {
 	if len(gates) == 0 {
 		return "", nil
@@ -194,11 +161,6 @@ func MarshalGates(gates []Gate) (string, error) {
 	return string(data), nil
 }
 
-// ParseGates decodes a gate list pinned to a run. It revalidates the decoded
-// gates through the same rules the config parser applies, so a payload that no
-// longer describes a gate list this build can honor fails its reader closed
-// with a reason instead of silently degrading the run to the core pipeline -
-// the one thing an absent pin legitimately means.
 func ParseGates(payload string) ([]Gate, error) {
 	if strings.TrimSpace(payload) == "" {
 		return nil, nil

@@ -1,13 +1,3 @@
-// Package fakeplugin is a small, stateful provider plugin used by pipeline-step
-// tests and the e2e harness. It keeps PRs in a JSON state file so a sequence
-// of one-process-per-operation invocations behaves like one forge, and it is
-// deliberately written against the public CLI contract only (argv in, one
-// JSON document out), so it doubles as an executable reference for plugin
-// authors. It is also strict about how it is called: an unknown flag, a
-// missing context flag, a value flag without "=", a positional after a flag,
-// non-empty stdin, a missing trailing --json, or a body file other users can
-// read all fail the call, so an adapter regression fails the tests that drive
-// it.
 package fakeplugin
 
 import (
@@ -22,39 +12,26 @@ import (
 	"time"
 )
 
-// ExecutableName is the argv[0] basename the fake CLIs dispatch on.
 const ExecutableName = "nm-fake-provider-plugin"
 
-// Environment variables the fake reads.
 const (
 	EnvState = "FAKE_PROVIDER_PLUGIN_STATE"
 	EnvLog   = "FAKE_PROVIDER_PLUGIN_LOG"
 )
 
-// State is the fake forge. Tests seed it and read it back.
 type State struct {
-	// Unauthenticated makes the status handshake exit non-zero like a
-	// plugin with no credentials would.
-	Unauthenticated bool `json:"unauthenticated,omitempty"`
-	// ProtocolVersion overrides the handshake's reported version when
-	// nonzero.
-	ProtocolVersion int  `json:"protocol_version,omitempty"`
-	MaxPRBodyChars  int  `json:"max_pr_body_chars,omitempty"`
-	CheckHeadSHA    bool `json:"check_head_sha,omitempty"`
-	// HangOn makes the named subcommand (for example "pr view") sleep far
-	// past any test timeout, so the adapter's per-call deadline fires.
-	HangOn string `json:"hang_on,omitempty"`
-	// Checks are reported for every PR.
-	Checks []Check `json:"checks"`
-	// MergeWhenChecksPass marks a PR merged at the head the CI step asked
-	// about once a "pr checks" call sees every check passing.
-	MergeWhenChecksPass bool   `json:"merge_when_checks_pass,omitempty"`
-	FailedLogs          string `json:"failed_logs,omitempty"`
-	NextNumber          int    `json:"next_number,omitempty"`
-	PRs                 []PR   `json:"prs"`
+	Unauthenticated     bool    `json:"unauthenticated,omitempty"`
+	ProtocolVersion     int     `json:"protocol_version,omitempty"`
+	MaxPRBodyChars      int     `json:"max_pr_body_chars,omitempty"`
+	CheckHeadSHA        bool    `json:"check_head_sha,omitempty"`
+	HangOn              string  `json:"hang_on,omitempty"`
+	Checks              []Check `json:"checks"`
+	MergeWhenChecksPass bool    `json:"merge_when_checks_pass,omitempty"`
+	FailedLogs          string  `json:"failed_logs,omitempty"`
+	NextNumber          int     `json:"next_number,omitempty"`
+	PRs                 []PR    `json:"prs"`
 }
 
-// PR is one fake pull request.
 type PR struct {
 	Number     string `json:"number"`
 	URL        string `json:"url"`
@@ -67,7 +44,6 @@ type PR struct {
 	Draft      bool   `json:"draft,omitempty"`
 }
 
-// Check is one fake CI check.
 type Check struct {
 	Name    string `json:"name"`
 	HeadSHA string `json:"head_sha,omitempty"`
@@ -76,7 +52,6 @@ type Check struct {
 	Link    string `json:"link,omitempty"`
 }
 
-// Call is one parsed invocation, as recorded in the request log.
 type Call struct {
 	Command    string              `json:"command"`
 	Positional []string            `json:"positional,omitempty"`
@@ -84,7 +59,6 @@ type Call struct {
 	Switches   []string            `json:"switches,omitempty"`
 }
 
-// Flag returns the last value of a value flag.
 func (c Call) Flag(name string) string {
 	values := c.Flags[name]
 	if len(values) == 0 {
@@ -93,7 +67,6 @@ func (c Call) Flag(name string) string {
 	return values[len(values)-1]
 }
 
-// Switch reports whether a boolean flag was passed.
 func (c Call) Switch(name string) bool {
 	for _, s := range c.Switches {
 		if s == name {
@@ -127,8 +100,6 @@ var specs = map[string]spec{
 	"pr retarget":     {positional: 1, required: []string{"base"}},
 }
 
-// Main serves one invocation and returns the process exit code. args
-// excludes argv[0].
 func Main(args []string, stdin io.Reader, stdout io.Writer, statePath, logPath string) int {
 	call, err := parse(args)
 	if logPath != "" {
@@ -417,10 +388,8 @@ func load(path string) (State, error) {
 	return state, nil
 }
 
-// Load reads a state file for test assertions.
 func Load(path string) (State, error) { return load(path) }
 
-// Save writes a state file, for tests seeding the fake forge.
 func Save(path string, state State) error { return save(path, state) }
 
 func save(path string, state State) error {
@@ -444,7 +413,6 @@ func save(path string, state State) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// loggedCall is one request-log line: the parsed call plus the raw argv.
 type loggedCall struct {
 	Call
 	Argv []string `json:"argv"`
@@ -463,7 +431,6 @@ func appendLog(path string, call Call, argv []string) {
 	fmt.Fprintln(f, string(line))
 }
 
-// ReadLog returns every call recorded in a request log, oldest first.
 func ReadLog(path string) ([]Call, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -483,8 +450,6 @@ func ReadLog(path string) ([]Call, error) {
 	return calls, nil
 }
 
-// fail prints a failure document and exits non-zero, as the contract
-// requires for every failure.
 func fail(stdout io.Writer, code, message string) int {
 	_ = json.NewEncoder(stdout).Encode(map[string]any{"error": map[string]string{"code": code, "message": message}})
 	return 1

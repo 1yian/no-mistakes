@@ -16,10 +16,6 @@ var runGit = RunBare
 const gateConfigStampFile = "no-mistakes-gate-config"
 const preservedPreReceiveHook = "pre-receive.no-mistakes-user"
 
-// PreReceiveHookScript returns the fail-closed admission hook that runs before
-// Git mutates any managed gate ref. The daemon authenticates the hook process's
-// ancestry, so a validation-step descendant cannot bypass CLI guards with a
-// direct push.
 func PreReceiveHookScript() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -67,8 +63,6 @@ func isManagedPreReceiveHook(content []byte) bool {
 	return strings.Contains(text, "# no-mistakes pre-receive hook") && strings.Contains(text, "daemon admit-push")
 }
 
-// RefreshManagedPreReceiveHook installs or refreshes admission while preserving
-// an existing user hook behind the managed wrapper.
 func RefreshManagedPreReceiveHook(bareDir string) (bool, error) {
 	hooksDir := filepath.Join(bareDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -106,7 +100,6 @@ func RefreshManagedPreReceiveHook(bareDir string) (bool, error) {
 	return true, nil
 }
 
-// RefreshManagedGateHooks owns the complete receive boundary.
 func RefreshManagedGateHooks(bareDir string) error {
 	if _, err := RefreshManagedPreReceiveHook(bareDir); err != nil {
 		return err
@@ -117,11 +110,6 @@ func RefreshManagedGateHooks(bareDir string) error {
 	return nil
 }
 
-// PostReceiveHookScript returns the shell script for the post-receive hook.
-// The hook notifies the daemon via the CLI so it works across platforms.
-// It resolves the gate to an absolute bare-repo path before notifying.
-// It never blocks the push - notification failures are surfaced to stderr and
-// appended to notify-push.log inside the bare repo.
 func PostReceiveHookScript() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -217,8 +205,6 @@ func isManagedPostReceiveHook(content []byte) bool {
 	return strings.Contains(text, "# no-mistakes post-receive hook") && strings.Contains(text, "daemon notify-push")
 }
 
-// InstallPostReceiveHook writes the post-receive hook script into
-// the hooks directory of a bare repo at bareDir.
 func InstallPostReceiveHook(bareDir string) error {
 	hooksDir := filepath.Join(bareDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -228,8 +214,6 @@ func InstallPostReceiveHook(bareDir string) error {
 	return writeHookFileAtomic(hookPath, []byte(PostReceiveHookScript()))
 }
 
-// RefreshManagedPostReceiveHook updates an existing no-mistakes-owned hook.
-// Custom hooks are left untouched; missing hooks are installed for gate repos.
 func RefreshManagedPostReceiveHook(bareDir string) (bool, error) {
 	hooksDir := filepath.Join(bareDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -280,10 +264,6 @@ func writeGateFileAtomic(path string, content []byte, mode os.FileMode, pattern 
 	return os.Rename(tmpPath, path)
 }
 
-// GateConfigCurrent is a subprocess-free restart check for a gate that has
-// completed the current hook and config migration. The stamp includes the
-// rendered managed hook and a version marker for the non-hook config contract.
-// Bump the marker when receive or worktree config requirements change.
 func GateConfigCurrent(bareDir string) bool {
 	content, err := os.ReadFile(filepath.Join(bareDir, gateConfigStampFile))
 	if err != nil || string(content) != gateConfigStampContent() {
@@ -296,8 +276,6 @@ func GateConfigCurrent(bareDir string) bool {
 	return err == nil && string(preReceive) == PreReceiveHookScript()
 }
 
-// MarkGateConfigCurrent atomically records a fully completed gate migration.
-// Callers must validate the gate and finish every mutation before marking it.
 func MarkGateConfigCurrent(bareDir string) error {
 	return writeGateFileAtomic(
 		filepath.Join(bareDir, gateConfigStampFile),
@@ -312,34 +290,6 @@ func gateConfigStampContent() string {
 	return fmt.Sprintf("v2:%x\n", sum)
 }
 
-// IsolateHooksPath protects the gate's post-receive hook from being
-// disabled when a pipeline subprocess (e.g. husky during `pnpm install`)
-// runs `git config core.hookspath` from inside a linked worktree.
-//
-// Linked worktrees share the bare's local config, so an unscoped
-// `git config` write lands in <bareDir>/config and silently overrides
-// the gate's hooks lookup. To defend against this, we enable
-// extensions.worktreeConfig on the bare and pin core.hookspath in the
-// bare's per-worktree config (<bareDir>/config.worktree). Per-worktree
-// scope wins over local, so the bare's main worktree always resolves
-// hooks to its own absolute hooks dir, regardless of what tools write
-// to the shared config.
-//
-// Enabling extensions.worktreeConfig also forces us to relocate
-// core.bare: once the extension is on, Git requires core.bare and
-// core.worktree to live in per-worktree scope only. If we leave
-// core.bare=true in shared config, it leaks into linked worktrees and
-// causes commands like `git rebase` to fail with "this operation must
-// be run in a work tree". It also prevents provider CLIs such as gh from
-// resolving the repo from a CI step worktree cwd.
-//
-// Identity validation precedes the best-effort capability check, so an invalid
-// target is refused even if Git does not support `git config --worktree`.
-// For a verified target without that support, this returns nil without changing
-// config.
-//
-// Idempotent: safe to call on an already-configured bare repo to
-// migrate older installs when per-worktree config is available.
 func IsolateHooksPath(ctx context.Context, bareDir string) error {
 	_, err := EnsureHooksPathIsolation(ctx, bareDir)
 	return err
@@ -375,11 +325,6 @@ func EnsureHooksPathIsolation(ctx context.Context, bareDir string) (bool, error)
 	return true, nil
 }
 
-// relocateCoreBareToWorktreeScope moves core.bare out of shared local config
-// into the bare's per-worktree config. Required after enabling
-// extensions.worktreeConfig: Git otherwise leaks core.bare=true from shared
-// scope into linked worktrees, breaking rebase/merge/etc. and provider CLI
-// repo resolution from worktree cwd.
 func relocateCoreBareToWorktreeScope(ctx context.Context, bareDir string) error {
 	if _, err := runGit(ctx, bareDir, "config", "--worktree", "core.bare", "true"); err != nil {
 		if isWorktreeConfigUnsupported(err) {
@@ -396,8 +341,6 @@ func relocateCoreBareToWorktreeScope(ctx context.Context, bareDir string) error 
 	return nil
 }
 
-// isConfigKeyMissing reports whether a `git config --unset` failure is the
-// benign "key not set" case (exit 5), which makes the unset idempotent.
 func isConfigKeyMissing(err error) bool {
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == 5

@@ -13,10 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestClosingIssueRefsSkippedPRIsRefused drives every way a run carrying
-// --closes could finish without publishing a PR: the CLI rejects --skip pr up
-// front, a push option pairing closes with skip=pr fails at the executor's
-// pre-skip, and an empty diff after rebase fails instead of skipping the PR.
 func TestClosingIssueRefsSkippedPRIsRefused(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	statePath := setupStatefulGitHub(t, h)
@@ -24,7 +20,6 @@ func TestClosingIssueRefsSkippedPRIsRefused(t *testing.T) {
 		t.Fatalf("init: %v\n%s", err, out)
 	}
 
-	// axi run --closes with --skip pr is a usage error before any run starts.
 	const cliBranch = "feature/closes-skip-cli"
 	h.CommitChange(cliBranch, "c.txt", "c\n", "add cli skip fixture")
 	wt := h.AddWorktree(cliBranch)
@@ -38,7 +33,6 @@ func TestClosingIssueRefsSkippedPRIsRefused(t *testing.T) {
 	}
 	h.RemoveWorktree(wt)
 
-	// The push-option path reaches the executor's pre-skip branch.
 	const optBranch = "feature/closes-skip-option"
 	h.CommitChange(optBranch, "o.txt", "o\n", "add option skip fixture")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -55,7 +49,6 @@ func TestClosingIssueRefsSkippedPRIsRefused(t *testing.T) {
 		t.Fatalf("closes + skip=pr push option must fail the PR step; %s", evidence)
 	}
 
-	// Empty diff after rebase: the branch's change already landed on main.
 	const emptyBranch = "feature/closes-empty-diff"
 	h.CommitChange(emptyBranch, "e.txt", "e\n", "add empty-diff fixture")
 	h.Checkout("main")
@@ -90,8 +83,6 @@ func errString(err error) string {
 	return err.Error()
 }
 
-// readStatefulGHRaw returns every PR body the stub recorded, or "" when no PR
-// was ever created.
 func readStatefulGHRaw(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {

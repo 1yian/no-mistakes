@@ -18,26 +18,6 @@ import (
 	toon "github.com/toon-format/toon-go"
 )
 
-// newAxiAnswerCmd answers one question the run's reviewer asked while it
-// worked.
-//
-// It is deliberately a separate verb from `respond`. `respond` is a verdict on
-// a round - approve, fix, skip - and its actions are the operator's. An answer
-// is neither: it settles one question the reviewer itself raised, no code
-// changes, and the round's findings are not being accepted or declined. Folding
-// it into `respond --action answer` would let an operator release a review gate
-// while questions were still open, which is exactly what this command refuses
-// to do: the daemon releases the gate only when nothing is left open, and does
-// it by resuming the reviewer's own session.
-//
-// The run is always the caller's current branch's active run. There is no
-// --run: axi's run resolution is branch-scoped by design (see the AXI Run
-// Resolution section in AGENTS.md), and this is a MUTATING command, so a second
-// selection path is exactly what that scoping exists to prevent - it would let
-// an answer meant for one branch's reviewer land on another's. The cost is
-// accepted and known: the command must run from a clone of the repository whose
-// run it answers, since the repository itself is resolved from the working
-// directory.
 func newAxiAnswerCmd() *cobra.Command {
 	var questionID, answer, answeredBy string
 	var wait time.Duration
@@ -117,10 +97,6 @@ func runAxiAnswer(cmd *cobra.Command, aa answerArgs) error {
 			"A review question can only be answered while its run is still active; run `no-mistakes axi status` to check")
 	}
 	runID := active.Run.ID
-	// The park this answer releases is identified before the answer is sent:
-	// the reviewer can resume and park its finalize turn at the same status
-	// before any post-answer read lands, and waiting on that new park would
-	// hold the caller until --wait elapsed instead of returning it.
 	var preAnswer *gateIdentity
 	if gate, ok := reviewGate(active.Run); ok {
 		id := gate.identity()
@@ -198,30 +174,6 @@ func runAxiAnswer(cmd *cobra.Command, aa answerArgs) error {
 	return nil
 }
 
-// followAnsweredReview drives a run whose last open review question was just
-// answered to its next decision point.
-//
-// Two parks must not be mistaken for that decision point. The gate this answer
-// released may still read as parked for a moment, which waitStepLeavesGate
-// covers exactly as it does for respond - told the identity that park had
-// before the answer was sent (preAnswer), since the finalize turn can park
-// again at the same status and only its round tells the two apart; the park is
-// read now instead only when the review step was not parked then. And an answer
-// that lands between the reviewer's turn ending and the executor registering
-// its park is recorded before that park is published, so the park appears
-// afterwards still carrying the questions this answer closed until the gate's
-// own resumer releases it. Only the daemon can tell that park from a genuine
-// new question, and it says so by releasing it: a LIVE park re-checks its
-// conversation the moment it registers (waitForApprovalOrReconcile with
-// immediate=true), bounded by gate_reconcile_timeout. So each question park
-// gets grace (that same timeout, read from the owning root's global config) to
-// leave, and one still there after it asked something new and is returned.
-//
-// A park restored by daemon recovery is the accepted exception: it is waited
-// on with immediate=false, so its first resumer check is one
-// gate_reconcile_interval away and the grace can expire before that park is
-// released. An answer racing a daemon restart therefore gets the park it just
-// answered back; reattach with `axi run` rather than answering again.
 func followAnsweredReview(ctx context.Context, progress io.Writer, client *ipc.Client, socketPath, runID string, resumed bool, preAnswer *gateIdentity, grace time.Duration) (*ipc.RunInfo, bool, error) {
 	review := string(types.StepReview)
 	if resumed {
@@ -265,25 +217,10 @@ func followAnsweredReview(ctx context.Context, progress io.Writer, client *ipc.C
 	}
 }
 
-// graceExpired reports whether err ended a question park's grace on its own
-// rather than the outer --wait running out underneath it. ctx.Err() cannot
-// decide that: a run-state read reports a passed deadline before its context's
-// timer fires (deadlinePassedErr), and whenever the remaining --wait is shorter
-// than the grace, context.WithTimeout hands back a timerless cancel-child of
-// that same deadline, so an elapsed --wait arrives here as DeadlineExceeded
-// with a nil Err(). Credited to the grace, that would return the park this
-// answer just closed as the run's next gate at exit 0, instead of the elapsed
-// wait isAxiWaitElapsed classifies from the same deadline.
 func graceExpired(ctx context.Context, err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) && !deadlinePassed(ctx)
 }
 
-// reviewGate returns the review step's gate when run is parked at it, whichever
-// park status the executor picked: awaiting_approval for a review pass of its
-// own, fix_review for the rereview inside a fix round, which a question can be
-// asked by just the same. Every wait below is told the identity this saw, since
-// waitStepLeavesGate reads any other identity as a gate already left - so the
-// two comparisons can never drift apart.
 func reviewGate(run *ipc.RunInfo) (stepView, bool) {
 	if run == nil {
 		return stepView{}, false

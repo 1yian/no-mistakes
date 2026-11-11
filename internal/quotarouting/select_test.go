@@ -13,8 +13,6 @@ import (
 
 const defaultExpectedRunLength = 90 * time.Minute
 
-// fixtureSnapshot builds a quota-axi snapshot document from provider rows.
-// Each row is a raw JSON object so tests state exactly the wire shape.
 func fixtureSnapshot(t *testing.T, schemaVersion int, providers ...string) *Snapshot {
 	t.Helper()
 	doc := `{"schemaVersion":` + itoa(schemaVersion) + `,"providers":[` + strings.Join(providers, ",") + `]}`
@@ -30,8 +28,6 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// claudeProvider is a healthy, rankable provider row with one provider-wide
-// scope unless the test overrides the availability array.
 func claudeProvider(t *testing.T, availability string) string {
 	t.Helper()
 	return `{"provider":"claude","quotaSemantics":{"status":"known","effectiveAvailability":` + availability + `}}`

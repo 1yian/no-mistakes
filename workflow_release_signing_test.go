@@ -20,10 +20,6 @@ import (
 // signing contract are owned by the "macOS Release Signing" section of
 // .agents/skills/release-signing/SKILL.md.
 
-// The permanent signing identity. These MUST NEVER change once the first signed
-// release ships: the executable identifier and Team ID are the invariant part of
-// the Developer ID designated requirement that lets macOS permissions survive
-// `no-mistakes update`.
 const (
 	signingIdentifier = "com.kunchenguid.no-mistakes"
 	signingTeamID     = "9T2J7MNUP9"
@@ -33,17 +29,10 @@ const (
 	signingEnv       = "release-signing"
 )
 
-// signingDarwinArches is the set of macOS architectures every official release
-// must ship as a signed thin binary.
 var signingDarwinArches = []string{"amd64", "arm64"}
 
-// expectedLipoArch maps a Go GOARCH to the name `lipo -archs` prints, which the
-// signing job asserts per matrix leg.
 var expectedLipoArch = map[string]string{"amd64": "x86_64", "arm64": "arm64"}
 
-// wfDoc is a minimal typed view of the workflow, capturing only the fields the
-// signing contract cares about. Flexible fields (runs-on, environment, needs)
-// are decoded as any and normalized by the helpers below.
 type wfDoc struct {
 	Jobs map[string]*wfJob `yaml:"jobs"`
 }
@@ -165,8 +154,6 @@ func (wf *wfDoc) darwinBuildJobs() []*wfJob {
 	return out
 }
 
-// darwinJobForArch returns the single darwin build job covering goarch, or nil
-// if none or more than one (ambiguity is itself a failure).
 func (wf *wfDoc) darwinJobForArch(goarch string) *wfJob {
 	var found *wfJob
 	for _, job := range wf.Jobs {
@@ -262,9 +249,6 @@ func uploadStepIndex(j *wfJob) int {
 	return wfStepIndex(j.Steps, "gh release upload")
 }
 
-// TestReleaseWorkflowSignsDarwinArtifactsWithDeveloperID is the primary
-// reproduction/regression: it fails on any workflow that can publish an ad-hoc
-// or unsigned macOS artifact.
 func TestReleaseWorkflowSignsDarwinArtifactsWithDeveloperID(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -287,9 +271,6 @@ func TestReleaseWorkflowSignsDarwinArtifactsWithDeveloperID(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowSignsBothDarwinArches pins that BOTH arm64 and amd64 go
-// through the signing path (the audit stressed the two arches start in different
-// states) and that each leg asserts its expected architecture.
 func TestReleaseWorkflowSignsBothDarwinArches(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -321,10 +302,6 @@ func TestReleaseWorkflowSignsBothDarwinArches(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowScopesSigningSecretsToDarwin enforces that the cert secrets
-// are gated behind the release-signing environment and referenced only by the
-// darwin signing job, and that the CI keychain password is generated at runtime
-// rather than stored as a secret.
 func TestReleaseWorkflowScopesSigningSecretsToDarwin(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -363,10 +340,6 @@ func TestReleaseWorkflowScopesSigningSecretsToDarwin(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowSignsBeforeArchiveAndChecksum enforces the load-bearing
-// ordering: sign -> verify -> archive -> upload within the darwin job, and the
-// checksums job depending on the darwin build job so checksums cover signed
-// archives.
 func TestReleaseWorkflowSignsBeforeArchiveAndChecksum(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -411,9 +384,6 @@ func TestReleaseWorkflowSignsBeforeArchiveAndChecksum(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowFailsClosedOnBadSignature verifies the gate refuses to
-// publish when secrets, identity discovery, signing, or verification is missing
-// or ambiguous.
 func TestReleaseWorkflowFailsClosedOnBadSignature(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -472,8 +442,6 @@ func TestReleaseWorkflowFailsClosedOnBadSignature(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowCleansUpKeychainAlways requires the ephemeral keychain to be
-// torn down on both success and failure paths.
 func TestReleaseWorkflowCleansUpKeychainAlways(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -497,9 +465,6 @@ func TestReleaseWorkflowCleansUpKeychainAlways(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowPreservesArtifactContract pins the installer/updater and
-// checksum contracts: per-arch tarball names, an unchanged linux/windows path,
-// and finalize still publishing a prerelease.
 func TestReleaseWorkflowPreservesArtifactContract(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 
@@ -555,8 +520,6 @@ func TestReleaseWorkflowPreservesArtifactContract(t *testing.T) {
 	}
 }
 
-// TestReleaseWorkflowStaysPhase1NoNotarization enforces the Phase 1 scope:
-// signing only, no notarization/stapling/pkg/homebrew/universal binaries.
 func TestReleaseWorkflowStaysPhase1NoNotarization(t *testing.T) {
 	wf := loadReleaseWorkflowDoc(t)
 

@@ -1,7 +1,5 @@
 //go:build linux
 
-// Package memscopetest lets tests that run a child under a memory-limited
-// systemd user scope skip on hosts that cannot enforce that limit.
 package memscopetest
 
 import (
@@ -11,11 +9,6 @@ import (
 	"testing"
 )
 
-// RequireDelegatedMemoryLimit skips t unless a transient systemd user scope
-// created with MemoryMax=<mib>M and MemorySwapMax=0 reports exactly that limit
-// in its own memory.max. A user manager that does not delegate the memory
-// controller still creates the scope but ignores the limit, so the allocation
-// the caller expects to be OOM-killed would succeed.
 func RequireDelegatedMemoryLimit(t *testing.T, mib int) {
 	t.Helper()
 	if _, err := exec.LookPath("systemd-run"); err != nil {

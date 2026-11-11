@@ -9,60 +9,32 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Candidate is one agent considered for ordering, in the configured order.
 type Candidate struct {
-	Agent types.AgentName
-	// Model is the effective model after native raw overrides, "" when unset.
-	// Native claude/codex use its last path segment for scope matching; Pi may
-	// use its prefix for credential binding. It never infers a provider.
-	Model string
-	// Provider is the agent's DECLARED quota_provider from agent_config, ""
-	// when none. Select resolves the built-in claude/codex mapping on top of
-	// it, so a caller cannot forget the built-ins and nothing is ever inferred
-	// from a model name.
+	Agent    types.AgentName
+	Model    string
 	Provider string
 }
 
-// Evidence records what the snapshot said about one candidate. It is the
-// per-candidate payload recorded on the run and rendered by axi status.
 type Evidence struct {
-	Agent    types.AgentName `json:"agent"`
-	Provider string          `json:"provider,omitempty"`
-	// Account is the bound quota-axi account key, when published.
-	Account string `json:"account,omitempty"`
-	// Scope is the limiting applicable row; empty when nothing was applicable.
-	Scope string `json:"scope,omitempty"`
-	// Remaining is the limiting row's effectivePercentRemaining, when known.
-	Remaining *float64 `json:"remaining,omitempty"`
-	// SpendPriority is the candidate's own limiting spendPriority (the minimum
-	// across its applicable rows), present only when rankable.
-	SpendPriority *float64 `json:"spend_priority,omitempty"`
-	// Runway is the limiting row's runway status, when known.
-	Runway   string `json:"runway,omitempty"`
-	Eligible bool   `json:"eligible"`
-	// Rankable marks a candidate whose evidence produced a comparable
-	// spendPriority. Unrankable candidates stay eligible and keep the
-	// configured order below every ranked one.
-	Rankable bool   `json:"rankable"`
-	Reason   string `json:"reason"`
+	Agent         types.AgentName `json:"agent"`
+	Provider      string          `json:"provider,omitempty"`
+	Account       string          `json:"account,omitempty"`
+	Scope         string          `json:"scope,omitempty"`
+	Remaining     *float64        `json:"remaining,omitempty"`
+	SpendPriority *float64        `json:"spend_priority,omitempty"`
+	Runway        string          `json:"runway,omitempty"`
+	Eligible      bool            `json:"eligible"`
+	Rankable      bool            `json:"rankable"`
+	Reason        string          `json:"reason"`
 }
 
-// Selection is the outcome of one selection over one snapshot.
 type Selection struct {
-	// Order is the full reordered candidate list: ranked candidates by
-	// highest spendPriority first, then unrankable-but-eligible ones, then
-	// ineligible ones - each group keeping the configured order within it.
-	Order []types.AgentName
-	// Choice is the head no-mistakes runs first: the first eligible candidate
-	// in Order, falling back to Order's head when nobody measured eligible.
-	Choice types.AgentName
-	// Evidence is per candidate in the configured (input) order.
+	Order    []types.AgentName
+	Choice   types.AgentName
 	Evidence []Evidence
-	// Reason summarizes the ranking in one line for the run record.
-	Reason string
+	Reason   string
 }
 
-// EvidenceFor returns the evidence recorded for one agent, or nil.
 func (s Selection) EvidenceFor(agent types.AgentName) *Evidence {
 	for i := range s.Evidence {
 		if types.CanonicalAgentName(s.Evidence[i].Agent) == types.CanonicalAgentName(agent) {
@@ -72,11 +44,6 @@ func (s Selection) EvidenceFor(agent types.AgentName) *Evidence {
 	return nil
 }
 
-// ResolveProvider returns the quota-axi provider id for an agent: the declared
-// per-agent quota_provider when set, else the built-in claude and codex
-// mapping, else "". Nothing is inferred from a model name: an agent outside
-// the built-in mapping without a declaration has no provider, which the
-// selection reports as unknown rather than guessing.
 func ResolveProvider(agent types.AgentName, declared string) string {
 	if declared != "" {
 		return declared
@@ -91,10 +58,6 @@ func ResolveProvider(agent types.AgentName, declared string) string {
 	}
 }
 
-// Lane returns the quota-axi account key a candidate binds to, mirroring
-// firstmate's quota_lane: native codex reads the codex-home account, a Pi
-// agent can name a Codex credential or Claude profile with its model prefix;
-// other providers use the default row.
 func Lane(agent types.AgentName, model, provider string) string {
 	provider = ResolveProvider(agent, provider)
 	if agent == types.AgentCodex && provider == "codex" {
@@ -121,11 +84,6 @@ func Lane(agent types.AgentName, model, provider string) string {
 	return ""
 }
 
-// Select orders candidates by quota evidence. It never fails and never
-// removes a candidate: ineligible agents keep their configured order at the
-// back of the list so today's launch-failure fallback still has somewhere to
-// go, and a nil snapshot (quota-axi missing, slow, or unreadable is resolved
-// by the caller before this point) keeps the configured order throughout.
 func Select(snapshot *Snapshot, candidates []Candidate, expectedRunLength time.Duration) Selection {
 	selection := Selection{
 		Order: make([]types.AgentName, 0, len(candidates)),
@@ -208,11 +166,6 @@ func unknownEvidence(candidates []Candidate) []Evidence {
 	return evidence
 }
 
-// evaluate binds one candidate to its quota-axi row and applies the three
-// gates in order: concrete-exhaustion eligibility, measurement, then the
-// runway floor. Only candidates clearing every gate are rankable, and their
-// spendPriority is the minimum across their applicable scopes (the binding
-// row), mirroring firstmate's "three gates, then spendPriority".
 func evaluate(snapshot *Snapshot, candidate Candidate, expectedRunLength time.Duration) Evidence {
 	evidence := Evidence{
 		Agent:    candidate.Agent,
@@ -318,9 +271,6 @@ func evaluate(snapshot *Snapshot, candidate Candidate, expectedRunLength time.Du
 	return evidence
 }
 
-// bindRow finds the provider row covering the candidate's credential, or the
-// default account when no credential is named. It reports false when no account
-// matches.
 func bindRow(snapshot *Snapshot, candidate Candidate) (*Provider, bool) {
 	var fallback *Provider
 	lane := Lane(candidate.Agent, candidate.Model, candidate.Provider)
@@ -354,7 +304,6 @@ func bindRow(snapshot *Snapshot, candidate Candidate) (*Provider, bool) {
 	return nil, false
 }
 
-// applicableRows returns the effective quota scopes for the configured model.
 func applicableRows(row *Provider, candidate Candidate) []EffectiveAvailability {
 	model := ""
 	if candidate.Agent == types.AgentClaude || candidate.Agent == types.AgentCodex {

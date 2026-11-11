@@ -12,26 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// installWindowsTask registers the daemon as a per-user scheduled task.
-//
-// The task is registered from an XML definition rather than schtasks'
-// /SC ONLOGON flags because those flags can only express an any-user logon
-// trigger, which Task Scheduler refuses to register from a non-elevated
-// (UAC-filtered) token with Access is denied (issue #1192). The XML scopes
-// the LogonTrigger to the installing user and keeps the principal on that
-// user's limited interactive token; there is no fallback to the unscoped
-// trigger. The task's battery and execution-time settings are explicitly
-// configured for a long-running daemon rather than Task Scheduler's short-job
-// defaults.
-//
-// Unlike the launchd and systemd paths, it deliberately does not forward proxy
-// environment variables (see serviceProxyEnv). A logon-triggered task runs
-// in the user's interactive logon session and inherits that session's
-// environment, so the user's HTTP(S)_PROXY/NO_PROXY/etc. are already present
-// without baking them into the task definition. That also means no proxy URL -
-// which can embed credentials - is ever written to disk here, so the 0600
-// tightening that writeServiceFile applies to the launchd/systemd files has no
-// Windows equivalent to worry about.
 func installWindowsTask(p *paths.Paths, exe string) error {
 	current, err := serviceCurrentUser()
 	if err != nil {
@@ -66,10 +46,6 @@ func installWindowsTask(p *paths.Paths, exe string) error {
 	return nil
 }
 
-// renderWindowsTaskXML renders the Task Scheduler definition for the managed
-// daemon: a logon trigger scoped to account, run as account's limited
-// interactive token. The Arguments element keeps the "--root <root>" suffix
-// serviceDefinitionMatchesRoot keys on.
 func renderWindowsTaskXML(exe, root, account string) string {
 	arguments := "daemon run --root " + quoteWindowsTaskArg(root)
 	return `<?xml version="1.0" encoding="UTF-16"?>
@@ -109,8 +85,6 @@ func renderWindowsTaskXML(exe, root, account string) string {
 `
 }
 
-// encodeUTF16LEWithBOM encodes s the way schtasks /XML reliably accepts and
-// matches the encoding declared in renderWindowsTaskXML.
 func encodeUTF16LEWithBOM(s string) []byte {
 	units := utf16.Encode([]rune(s))
 	out := make([]byte, 2+2*len(units))

@@ -16,10 +16,6 @@ import (
 	"time"
 )
 
-// missingShellError is what os/exec returns when the login shell binary does
-// not exist: fork/exec on an absolute path fails with ENOENT. On macOS with
-// nix-darwin this is the state of /run/current-system/sw/bin/zsh between boot
-// and the activate-system daemon recreating the symlink (#143).
 func missingShellError(shell string) error {
 	return &fs.PathError{Op: "fork/exec", Path: shell, Err: syscall.ENOENT}
 }
@@ -150,14 +146,6 @@ func TestResolveWithShellRetry_DoesNotWaitForAShellThatExistsButFails(t *testing
 	}
 }
 
-// TestDefaultShellCommandOutput_InteractiveShellFromForegroundTerminal pins
-// the probe against the way a terminal user runs `daemon run`: as the
-// foreground process of a pty. An interactive zsh spawned in its own process
-// group from there stops itself with SIGTTIN and the probe only ends when the
-// timeout kills it, so the daemon degrades. The probe must complete in its
-// own session instead. `script` allocates a pty and makes the re-executed
-// test binary its session leader and foreground group; the child half of the
-// test runs the real probe there and prints a marker on success.
 func TestDefaultShellCommandOutput_InteractiveShellFromForegroundTerminal(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX sessions or controlling terminals")

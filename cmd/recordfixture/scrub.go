@@ -9,14 +9,6 @@ import (
 	"regexp"
 )
 
-// scrubFile rewrites path in place to replace PII captured during
-// recording: the user's home directory, macOS tempdir paths,
-// claude SessionStart hook outputs (which expose locally-installed
-// axi tools by name).
-//
-// The substitutions don't affect anything the no-mistakes parser
-// actually reads, but they keep personal paths and tool names out of
-// fixtures committed to a public repo.
 func scrubFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -38,10 +30,6 @@ func scrubBytes(data []byte) []byte {
 	return out
 }
 
-// scrubAgyConversationIDs replaces agy's per-run conversation UUIDs with a
-// stable placeholder. Nothing downstream reads the value - the fakeagent
-// patcher rewrites content and the no-mistakes parser only needs the field
-// present - but a recorded UUID identifies the recording session.
 var agyConversationPattern = regexp.MustCompile(`("conversation_id"\s*:\s*")[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(")`)
 
 const agyConversationPlaceholder = `${1}00000000-0000-4000-8000-000000000000${2}`
@@ -65,9 +53,6 @@ func scrubHomeDir(data []byte) []byte {
 	return out
 }
 
-// macOS allocates per-user tempdirs like /var/folders/5x/<id>/T/foo and
-// references them as /private/var/folders/<id>/T/foo. The folder ID
-// fingerprints the user account, so collapse it.
 var macTempPattern = regexp.MustCompile(`/(?:private/)?var/folders/[^"\s/]+/[^"\s/]+/T`)
 
 func scrubTempDir(data []byte) []byte {
@@ -94,12 +79,6 @@ func replacePathForms(data []byte, path, placeholder string) []byte {
 	return out
 }
 
-// scrubClaudeHookEvents drops claude's SessionStart system events, which
-// dump the user's locally-installed axi tools (terminal-axi, etc.) into
-// `output`/`stdout` fields. The no-mistakes parser ignores type=system
-// entirely, so removing these lines doesn't affect e2e wire-format
-// coverage. The init event (subtype=init) carries information about
-// available tools/skills that's also user-specific, so we drop it too.
 func scrubClaudeHookEvents(data []byte) []byte {
 	var out bytes.Buffer
 	lines := bytes.Split(data, []byte("\n"))

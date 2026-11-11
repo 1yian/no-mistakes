@@ -28,8 +28,6 @@ type gateFindingsWire struct {
 	Items *[]gateFindingWire `json:"findings"`
 }
 
-// readGateFindings distinguishes an untouched file from an explicit report.
-// A broken report never falls back to the command's exit-code verdict.
 func readGateFindings(path string) ([]Finding, bool, error) {
 	info, err := os.Lstat(path)
 	if err != nil {

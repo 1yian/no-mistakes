@@ -133,9 +133,6 @@ func newRerunCmd() *cobra.Command {
 	return cmd
 }
 
-// rerunCallerHead captures clean-head evidence at the request boundary, after
-// any daemon startup or post-push wait. Dirty callers retain the existing
-// behavior by omitting that evidence.
 func rerunCallerHead(ctx context.Context) (string, error) {
 	// Read both facts from one status observation: a subsequent HEAD lookup
 	// could name a different commit whose index or worktree was never clean.

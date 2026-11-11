@@ -343,10 +343,6 @@ type cliRecoverFixture struct {
 	local, gate, remote, base, submitted, preserved, runID, archiveRef, repoID string
 }
 
-// newCLIRecoverFixture reproduces the stranded custody state end to end for
-// the CLI surface: a cancelled pre-push run whose pipeline fix commit exists
-// only in the repo's local gate at <NM_HOME>/repos/<id>.git, while the
-// operator worktree sits at the submitted head with no push binding.
 func newCLIRecoverFixture(t *testing.T) cliRecoverFixture {
 	t.Helper()
 	nmHome := filepath.Join(t.TempDir(), "nm-home")
@@ -427,10 +423,6 @@ func newCLIRecoverFixture(t *testing.T) cliRecoverFixture {
 	}
 }
 
-// newCLIDivergentArchiveFixture models a terminal validation whose exact
-// required head remains checked out while a later, genuinely divergent head is
-// durable under both the gate recovery ref and an imported archive ref. The
-// setup uses no reset, force update, or deleted ref.
 func newCLIDivergentArchiveFixture(t *testing.T) cliRecoverFixture {
 	t.Helper()
 	nmHome := filepath.Join(t.TempDir(), "nm-home")
@@ -529,10 +521,6 @@ func cliRecoveryGitSnapshot(t *testing.T, f cliRecoverFixture) string {
 	}, "\n---\n")
 }
 
-// newCLIMissingPreservedHeadFixture reproduces the wedged custody state from
-// a cancelled pre-push run whose recorded pipeline heads were then rebuilt
-// out of the operator worktree: the run still holds the branch, but the
-// preserved SHA is not a valid local or gate object.
 func newCLIMissingPreservedHeadFixture(t *testing.T, extraStranded int) cliRecoverFixture {
 	t.Helper()
 	f := newCLIRecoverFixture(t)
@@ -603,10 +591,6 @@ func cliRecoverRunCustodyStamps(t *testing.T, runID string) (stamped, total int)
 	return stamped, total
 }
 
-// newCLIUnmovedAbortFixture reproduces the pre-push abort taken when delivery
-// switches away from the pipeline: the gate holds the submitted branch, the
-// run is terminal with head_sha still equal to submitted_head_sha, and no push
-// provenance or custody stamp exists.
 func newCLIUnmovedAbortFixture(t *testing.T) cliRecoverFixture {
 	t.Helper()
 	nmHome := filepath.Join(t.TempDir(), "nm-home")
@@ -672,13 +656,6 @@ func newCLIUnmovedAbortFixture(t *testing.T) cliRecoverFixture {
 	}
 }
 
-// TestAxiSurfacesReportUserOwnedReleaseAfterUnmovedPrePushAbort walks the
-// public CLI surfaces through the pre-push-abort-with-unmoved-head shape:
-// cancellation releases ownership, so status must identify the terminal run
-// and report the exact branch and head as user-owned and immediately usable
-// with no sync action, the check must be a non-blocking no-op instead of
-// wrong-branch ambiguity, and a recovery request must be an idempotent no-op
-// that mutates nothing.
 func TestAxiSurfacesReportUserOwnedReleaseAfterUnmovedPrePushAbort(t *testing.T) {
 	f := newCLIUnmovedAbortFixture(t)
 
@@ -804,10 +781,6 @@ const (
 	olderTargetMissing
 )
 
-// newCLIStaleUnpublishedFixture builds the exact same-branch provenance race:
-// an older terminal run owns U, while a newer run has an exact pushed
-// descendant P. The gate and remote are both at P, and the clean worktree is
-// still at L, the ancestor before U.
 func newCLIStaleUnpublishedFixture(t *testing.T) cliStaleUnpublishedFixture {
 	t.Helper()
 	return newCLIStaleUnpublishedFixtureWithOptions(t, true, olderTargetMatching)
@@ -1045,9 +1018,6 @@ func TestAxiSyncOlderUnpublishedTargetProvenanceRefusesTakeover(t *testing.T) {
 	}
 }
 
-// This ordinary descendant fixture is the smallest counterfactual to the
-// archive regression: when only the later head's parent changes so it descends
-// from the required head, the established default recovery remains correct.
 func TestAxiSyncCheckSurfacesRecoveryForTerminalPrePushRun(t *testing.T) {
 	f := newCLIRecoverFixture(t)
 	out, err := executeCmd("axi", "sync", "--check")
@@ -1077,11 +1047,6 @@ func TestAxiSyncCheckSurfacesRecoveryForTerminalPrePushRun(t *testing.T) {
 	}
 }
 
-// TestAxiSyncRecoversRemoteRewrittenBindingEndToEnd reproduces issue #652:
-// after an operator synchronized to the pipeline head, the push target was
-// force-rewritten outside the pipeline. The check must name the explicit
-// recovery, and that recovery must anchor the superseded pipeline head and
-// rebind the push binding without touching the worktree or the remote.
 func TestAxiSyncRecoversRemoteRewrittenBindingEndToEnd(t *testing.T) {
 	f := newCLISyncFixture(t)
 	if out, err := executeCmd("axi", "sync"); err != nil {
@@ -1167,8 +1132,6 @@ func TestAxiSyncRecoversRemoteRewrittenBindingEndToEnd(t *testing.T) {
 	t.Logf("operator check after recovery:\n%s", out)
 }
 
-// toonHasValue reports whether TOON output renders key with value, which the
-// encoder quotes when a SHA could otherwise read as a number.
 func toonHasValue(out, key, value string) bool {
 	return strings.Contains(out, key+": "+value+"\n") || strings.Contains(out, key+": \""+value+"\"\n")
 }
@@ -1197,10 +1160,6 @@ func TestAxiSyncRecoverReturnsCustodyEndToEnd(t *testing.T) {
 	}
 }
 
-// rebaseReturnedCustodyBranch recreates the reported lane-staleness shape: a
-// recovered branch is published, rebased onto a newer main, given a follow-up
-// commit, then force-with-lease pushed to originURL. The gate still holds the
-// pre-rebase head because no pipeline run has yet seen the rewrite.
 func rebaseReturnedCustodyBranch(t *testing.T, f cliRecoverFixture, originURL string, publishRebase bool) string {
 	t.Helper()
 	if out, err := executeCmd("axi", "sync", "--recover"); err != nil {
@@ -1232,10 +1191,6 @@ func rebaseReturnedCustodyBranch(t *testing.T, f cliRecoverFixture, originURL st
 	return rebased
 }
 
-// TestAxiSyncAdoptPublishedRebasedLane reproduces the observed ordinary Git
-// failure before it tests the supported recovery. `axi run` uses the same
-// unforced HEAD-to-gate push, so this non-fast-forward is the failure that
-// previously stopped it before a run could be created.
 func TestAxiSyncAdoptPublishedRebasedLane(t *testing.T) {
 	f := newCLIRecoverFixture(t)
 	rebased := rebaseReturnedCustodyBranch(t, f, f.remote, true)
@@ -1308,11 +1263,6 @@ func TestAxiSyncAdoptPublishedRefusesUnpublishedRebase(t *testing.T) {
 	}
 }
 
-// TestAxiSyncAdoptPublishedIgnoresForeignWorktreeOrigin proves the published
-// head is verified against the registered push target and not against whatever
-// the invoking worktree calls origin. Here the rebase is published only to an
-// unrelated remote that origin points at, so adoption must refuse: the target
-// the pipeline publishes to has never seen this head.
 func TestAxiSyncAdoptPublishedIgnoresForeignWorktreeOrigin(t *testing.T) {
 	f := newCLIRecoverFixture(t)
 	foreign := filepath.Join(t.TempDir(), "foreign.git")

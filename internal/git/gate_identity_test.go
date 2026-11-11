@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// These entry points may change only the intended bare gate. In particular,
-// neither a working repository's .git nor a stale directory inside it is a gate.
 func TestGateIdentityRefusesNonGateWithoutMutation(t *testing.T) {
 	operations := []struct {
 		name string

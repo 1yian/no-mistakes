@@ -8,25 +8,17 @@ import (
 	"strings"
 )
 
-// Interval is a finite-sample recall range over cases. Repeats are averaged
-// inside each case so a noisy provider does not inflate apparent sample size.
 type Interval struct {
 	Lower float64
 	Upper float64
 	Cases int
 }
 
-// CandidateReport is one locally observed candidate slice.
 type CandidateReport struct {
-	Cohort      string
-	Summary     EvaluationSummary
-	RepeatCount int
-	Confidence  *Interval
-	// AverageTokens is the honest per-replay total: fresh-input + output plus
-	// cache-read and cache-write where the adapter reported them. Cache reads
-	// dominate review cost by orders of magnitude, so ranking the
-	// recall-vs-cost frontier on fresh input alone would crown whichever
-	// provider cached hardest as cheapest.
+	Cohort                  string
+	Summary                 EvaluationSummary
+	RepeatCount             int
+	Confidence              *Interval
 	AverageTokens           *float64
 	AverageCacheReadTokens  *float64
 	AverageCacheWriteTokens *float64
@@ -34,8 +26,6 @@ type CandidateReport struct {
 	OnFrontier              bool
 }
 
-// Report loads every local evaluation result grouped by candidate. It never
-// contacts a forge, agent provider, telemetry endpoint, or remote case store.
 func Report(store *Store) ([]CandidateReport, error) {
 	evaluations, err := store.evaluations()
 	if err != nil {
@@ -215,10 +205,6 @@ func markFrontier(reports []CandidateReport) {
 	}
 }
 
-// SetSummary lets users inspect corpus coverage before an eval consumes tokens.
-// SelfScore is the recorded source reviews of the set scored against their own
-// gold (see SelfScoreRecordedReviews); it is computed from already-captured
-// local files, never from a fresh replay.
 type SetSummary struct {
 	Name           string
 	Cases          int
@@ -235,11 +221,7 @@ type SetSummary struct {
 	SelfScore      EvaluationSummary
 }
 
-// CompositionRow is one stratum bucket of a case set: the same axes the
-// diversified holdout stratifies on.
 type CompositionRow struct {
-	// Repo is the repository's display identity: its resolved name when the
-	// store was given one (see Store.SetRepoNames), else the short fingerprint.
 	Repo        string
 	Language    string
 	Size        string
@@ -248,9 +230,6 @@ type CompositionRow struct {
 	Cases       int
 }
 
-// InspectSets summarizes all logical sets and their diversified mix. It reads
-// only local registry rows and captured case files, so it stays instant no
-// matter how expensive a replay of the same sets would be.
 func InspectSets(store *Store) ([]SetSummary, error) {
 	sets := []string{"all", "labeled", "diversified", "tune"}
 	all, err := store.ListCases("all")
@@ -359,12 +338,6 @@ func sortedCompositionRows(rows []CompositionRow) []CompositionRow {
 	return rows
 }
 
-// SelfScoreRecordedReviews scores each case's recorded source-review findings
-// against that case's own gold, exactly as a replayed candidate would be
-// scored. Everything it reads was captured when the case was frozen, so the
-// result is available instantly without invoking an agent, touching a gate, or
-// re-running anything. It answers "what would eval report for the reviews that
-// produced this set" - the baseline a candidate has to beat.
 func SelfScoreRecordedReviews(cases []Case) EvaluationSummary {
 	evaluations := make([]Evaluation, 0, len(cases))
 	for _, c := range cases {
@@ -401,9 +374,6 @@ func shortFingerprint(value string) string {
 	return value[:12]
 }
 
-// RenderReport is a stable human-readable local comparison. Scores are
-// finding-level. Unmatched candidate findings stay pending and are never
-// called false positives. A replay with no gold is unlabeled, not a pass.
 func RenderReport(reports []CandidateReport) string {
 	if len(reports) == 0 {
 		return "LOCAL-ONLY EVAL REPORT\nno candidate replays recorded yet\n"

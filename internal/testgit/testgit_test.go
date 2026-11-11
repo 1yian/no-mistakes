@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestRealGit_IgnoresWrapperOnPATH is a resolution-only assertion: it never
-// runs the resolved binary, let alone through the fake CLI forwarding chain.
-// Doing so live would recurse the test runner itself - the exact failure
-// this package exists to prevent (issue #5).
 func TestRealGit_IgnoresWrapperOnPATH(t *testing.T) {
 	if _, err := os.Stat("/usr/bin/git"); err != nil {
 		t.Skip("/usr/bin/git not present on this host")

@@ -9,12 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The daemon entry point the IPC respond handler calls must accept an
-// ignore-only fix response, and the decision must be durable: a response that
-// declines every finding and selects none records the declined marker with the
-// explicit empty selection the derivation reads. The executor-level regression
-// proves the recording logic; this proves the command's own path does not
-// refuse it earlier and that the record lands on a REAL parked gate.
 func TestHandleRespondWithOverrides_IgnoreOnlyFixResponseIsRecorded(t *testing.T) {
 	m, _, runID, exec := liveParkedGateFixture(t)
 

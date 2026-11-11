@@ -8,9 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// CommitIdentity is the submitting checkout's effective identity, resolved by
-// Git before the daemon can substitute its own environment or configuration.
-// Dates are deliberately not captured: each new commit gets its creation time.
 type CommitIdentity struct {
 	AuthorName     string `json:"author_name"`
 	AuthorEmail    string `json:"author_email"`
@@ -27,8 +24,6 @@ func (i CommitIdentity) Validate() error {
 	return nil
 }
 
-// CaptureCommitIdentity honors config includes, worktree config, and explicit
-// author/committer environment overrides, but refuses Git's guessed identity.
 func CaptureCommitIdentity(ctx context.Context, dir string) (CommitIdentity, error) {
 	var identity CommitIdentity
 	for _, role := range []struct {
@@ -60,7 +55,6 @@ func (i CommitIdentity) Environment() runenv.Overlay {
 
 type commitIdentityContextKey struct{}
 
-// WithCommitIdentity freezes a value, never a pointer owned by an IPC caller.
 func WithCommitIdentity(ctx context.Context, identity CommitIdentity) context.Context {
 	return context.WithValue(ctx, commitIdentityContextKey{}, identity)
 }

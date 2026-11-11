@@ -21,27 +21,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestUserJourney is the consolidated end-to-end test. It walks through
-// the full pipeline once per agent, exercising:
-//
-//   - `no-mistakes init` (gate setup, daemon bootstrap, post-receive
-//     hook installation)
-//   - `git push no-mistakes <branch>` (real git transport, hook fires,
-//     daemon receives push notification)
-//   - the eight pipeline steps in sequence (rebase, review, test,
-//     document, lint, push, pr, ci)
-//   - real subprocess invocations of the agent binary, parsed by
-//     no-mistakes' real agent package
-//   - SQLite persistence and IPC retrieval of run state
-//
-// PR and CI steps gracefully skip because the upstream is a local file://
-// path with no SCM provider. Test/Lint steps don't run real commands
-// because no commands are configured; they delegate to the agent which
-// returns the canned "no findings" response.
-//
-// Adding more journeys: append subtests here rather than spawning new
-// test files. The harness setup is the expensive part; reusing it across
-// scenarios keeps the suite tight.
 func TestUserJourney(t *testing.T) {
 	// Subtests run sequentially: each one calls t.Setenv to point env
 	// vars at its own temp dirs, and t.Setenv is incompatible with
@@ -2098,10 +2077,6 @@ func assertCancelRunStopsActivePipeline(t *testing.T, h *Harness) {
 	}
 }
 
-// assertAbortByRunIDReapsRunFromOutsideWorktree verifies `axi abort --run <id>`
-// cancels a specific run from outside its worktree (the orphaned-monitor reap
-// path), and that aborting an unknown id is an idempotent no-op rather than an
-// error.
 func assertAbortByRunIDReapsRunFromOutsideWorktree(t *testing.T, h *Harness) {
 	t.Helper()
 	slowCommand := filepath.Join(h.BinDir, "nm-abort-byid-test-e2e")

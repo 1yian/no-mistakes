@@ -490,16 +490,6 @@ func TestCIStep_PublishRepairFailsWhenAttestationCannotSettle(t *testing.T) {
 	}
 }
 
-// This fixture has no available GitLab host, so publication skips attestation
-// interaction. GitLab with an available host supports raw reads and restamping;
-// provider identity alone no longer causes the skip.
-// TestCIStep_PublishRepairSkipsAttestationWhenProviderCLIIsUnavailable: a
-// provider whose CLI cannot run gets no attestation write, and the repair
-// still publishes. The fixture's PATH keeps the machine's real PATH behind
-// the fake gh, so this test used to reach a developer's real glab, which
-// refused the fixture's local remote and parked the repair as unsettled; CI
-// passed it only because no glab is installed there. The fake CLI shadows
-// glab and fails its auth check instead, which is the case the test is about.
 func TestCIStep_PublishRepairSkipsAttestationWhenProviderCLIIsUnavailable(t *testing.T) {
 	t.Parallel()
 	f := newCIRepairFixture(t, false, writeCIFix)
@@ -566,14 +556,6 @@ func TestCIStep_PublishRepairDoesNotMintAttestation(t *testing.T) {
 	}
 }
 
-// TestPushStep_AttestsHeadBeforePush pins design C, the simplest sufficient
-// fix for the push-then-attest race: write the attestation for the head
-// about to be pushed BEFORE pushing it, so every consumer of the shared
-// require-no-mistakes action - including one pinned to an immutable
-// revision whose verifier reads the PR body from the frozen `synchronize`
-// event payload - already sees the correct attestation the moment the
-// pushed head becomes current. A post-push write, however fast, cannot beat
-// that: the payload is captured at push time, before any write could land.
 func TestPushStep_AttestsHeadBeforePush(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -709,11 +691,6 @@ func TestPushStep_UnavailableSCMLeavesStaleAttestationFailingClosed(t *testing.T
 	}
 }
 
-// TestPushStep_AttestationWriteFailureAbortsBeforePush is the ordering proof
-// from the write side: when the attestation write itself cannot settle,
-// Push fails before ever touching the remote. Silently continuing here would
-// let code ship with no matching attestation at all - exactly the race this
-// design exists to close.
 func TestPushStep_AttestationWriteFailureAbortsBeforePush(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -763,13 +740,6 @@ func TestPushStep_AttestationWriteFailureAbortsBeforePush(t *testing.T) {
 	}
 }
 
-// TestPushStep_PushFailureAfterAttestationLeavesBodyAhead is the ordering
-// proof from the other side, and the documented accepted failure mode: the
-// attestation write succeeds, then the actual push is rejected by a genuine
-// concurrent remote advance (a real git force-with-lease rejection, not a
-// simulated error). The PR body is left attesting a head that never actually
-// shipped until the run retries and republishes it - the mirror image of the
-// old post-push design's failure (code shipped, attestation stuck).
 func TestPushStep_PushFailureAfterAttestationLeavesBodyAhead(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -860,9 +830,6 @@ func TestPushStep_PushFailureAfterAttestationLeavesBodyAhead(t *testing.T) {
 	}
 }
 
-// TestPushStep_DoesNotMintAttestation confirms attestHeadBeforePush is
-// strictly a rebind of an EXISTING attestation and never mints one for a PR
-// that was not raised through no-mistakes.
 func TestPushStep_DoesNotMintAttestation(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -926,9 +893,6 @@ func TestPushStep_DoesNotMintAttestation(t *testing.T) {
 	}
 }
 
-// TestPushStep_NoPullRequestLogsTheSkippedAttestation pins the log line for
-// the skip where the PR lookup finds nothing and the run holds no PR URL: the
-// push still happens and no PR is written.
 func TestPushStep_NoPullRequestLogsTheSkippedAttestation(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -973,11 +937,6 @@ func TestPushStep_NoPullRequestLogsTheSkippedAttestation(t *testing.T) {
 	}
 }
 
-// TestPushStep_SkipsGhOnBaseBranch confirms attestHeadBeforePush skips a
-// direct push to the configured PR base branch entirely, without building an
-// SCM host or making any gh call at all - the PR step never manages a PR
-// there either (see effectivePRBaseBranch), so a base-branch push must not
-// gain a new dependency on an authenticated gh CLI.
 func TestPushStep_SkipsGhOnBaseBranch(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")

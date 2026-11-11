@@ -33,17 +33,6 @@ func reviewQuestionGate(t *testing.T) stepView {
 	}
 }
 
-// TestReviewQuestionGate_LeadsWithAnswering covers the `axi` half of
-// waiting-on-answers: an agent reading the gate must be able to tell "this
-// review wants an answer" from "this review wants a verdict", and must not
-// reach for approve or fix, which would discard the paused pass instead of
-// answering it.
-//
-// The question is surfaced as an ordinary finding row carrying its
-// `question-<id>` id and the reviewer's own description, not as a second
-// structured rendering: reconstructing question and options by splitting that
-// prose was a lossy round trip that rendered a wrong row for any question
-// whose text contained its own "Options: " line.
 func TestReviewQuestionGate_LeadsWithAnswering(t *testing.T) {
 	got := axiDoc(gateFields(reviewQuestionGate(t))...)
 
@@ -67,8 +56,6 @@ func TestReviewQuestionGate_LeadsWithAnswering(t *testing.T) {
 	}
 }
 
-// The help is keyed on the review-question CATEGORY through the shared
-// predicate, so a finding that merely looks like one by ID does not summon it.
 func TestReviewQuestionGateHelpKeysOnTheCategory(t *testing.T) {
 	gate := reviewQuestionGate(t)
 	gate.FindingsJSON = findingsJSON(t, []types.Finding{
@@ -81,8 +68,6 @@ func TestReviewQuestionGateHelpKeysOnTheCategory(t *testing.T) {
 	}
 }
 
-// A review gate with no open question keeps exactly today's shape: no
-// answering guidance, approve/fix leading as before.
 func TestReviewGateWithoutQuestionsIsUnchanged(t *testing.T) {
 	gate := reviewQuestionGate(t)
 	gate.FindingsJSON = findingsJSON(t, []types.Finding{
@@ -100,11 +85,6 @@ func TestReviewGateWithoutQuestionsIsUnchanged(t *testing.T) {
 	}
 }
 
-// TestAxiAnswerHasNoRunFlag pins the removal. `axi`'s run resolution is
-// branch-scoped by design, and answer MUTATES: a --run would be a second
-// selection path that could land an answer meant for one branch's reviewer on
-// another's. Reintroducing the flag is a deliberate scope decision, so it
-// should have to change this test to happen.
 func TestAxiAnswerHasNoRunFlag(t *testing.T) {
 	cmd := newAxiAnswerCmd()
 	if f := cmd.Flags().Lookup("run"); f != nil {

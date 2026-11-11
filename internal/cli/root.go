@@ -14,11 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// exitError carries an explicit process exit code. Commands that render their
-// own structured output (the axi surface) return one of these so they can map
-// outcomes onto AXI exit-code conventions (0 success/no-op, 1 error, 2 usage)
-// without cobra printing the Go error to the user. A nil inner err prints
-// nothing to stderr; a non-nil err is surfaced as a diagnostic.
 type exitError struct {
 	code int
 	err  error
@@ -33,7 +28,6 @@ func (e *exitError) Error() string {
 
 func (e *exitError) Unwrap() error { return e.err }
 
-// Execute runs the root CLI command.
 func Execute() int {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
@@ -107,10 +101,6 @@ func setColorProfileForOutput(w io.Writer) {
 	lipgloss.SetColorProfile(termenv.NewOutput(w).EnvColorProfile())
 }
 
-// findRepo looks up the repo for the current directory. If the working
-// directory is inside a git worktree, it falls back to the main repository
-// root so that worktrees work out of the box when the main repo is
-// already initialized.
 func findRepo(d *db.DB) (*db.Repo, error) {
 	gitRoot, err := git.FindGitRoot(".")
 	if err != nil {
@@ -138,8 +128,6 @@ func findRepo(d *db.DB) (*db.Repo, error) {
 	return repo, nil
 }
 
-// openResources initializes paths, ensures directories exist, and opens the DB.
-// Caller must close the returned DB.
 func openResources() (*paths.Paths, *db.DB, error) {
 	p, err := paths.New()
 	if err != nil {

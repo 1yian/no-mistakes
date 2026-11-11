@@ -764,15 +764,6 @@ sleep 30
 	}
 }
 
-// TestPiAgent_ToolOnlyStreamStillReportsSubprocessLiveness pins the proof of
-// life that separates a working native agent from a wedged one.
-//
-// Verified against pi 0.84.3: a turn that uses tools emits tool_execution_start
-// / tool_execution_update / tool_execution_end and toolcall_* assistant events,
-// and no text_delta at all until the very end. Every adapter forwards only
-// assistant prose to OnChunk, so for the whole tool-using stretch - which is
-// most of a fix round - the pipeline saw nothing and could not tell the agent
-// was alive. Subprocess byte liveness is that missing signal.
 func TestPiAgent_ToolOnlyStreamStillReportsSubprocessLiveness(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakePi(t, dir, `#!/bin/sh
@@ -823,9 +814,6 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
 	}
 }
 
-// TestPiAgent_SilentSubprocessReportsNoLiveness is the counter-test: an agent
-// that produces no bytes must produce no liveness, or the signal would say
-// every agent is fine and the wedge would stay invisible.
 func TestPiAgent_SilentSubprocessReportsNoLiveness(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakePi(t, dir, `#!/bin/sh
@@ -857,12 +845,6 @@ exit 0
 	}
 }
 
-// TestPiAgent_FailedTurnReportsTheSessionPiServed covers the case where the
-// served session is the only fact the turn produced: Pi announces a session
-// that is not the one we asked to resume and the process then dies before any
-// usage arrives. That mismatch is proof the resume was silently replaced, so
-// the Result must exist to carry it - resultFromUsage alone returns nil here,
-// and invocationSessionMode would then record the turn as a clean resume.
 func TestPiAgent_FailedTurnReportsTheSessionPiServed(t *testing.T) {
 	const (
 		requested = "019ff2f3-5f31-744b-90b8-679074ff7687"

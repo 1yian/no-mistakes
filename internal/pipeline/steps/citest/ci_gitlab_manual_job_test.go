@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A blocking manual job (`when: manual` with `allow_failure: false`) stops the
-// pipeline at its stage until a person runs it, so GitLab itself
-// treats the pipeline as unfinished. The monitor must wait on that hold - never
-// report checks passed, and never call it a skip.
 func TestCIStep_GitLabBlockingManualJobNeverReportsChecksPassed(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -67,8 +63,6 @@ func TestCIStep_GitLabBlockingManualJobNeverReportsChecksPassed(t *testing.T) {
 	}
 }
 
-// An optional manual job (`allow_failure: true`) is one GitLab does not wait
-// for: the pipeline can succeed without it, so it stays green.
 func TestCIStep_GitLabOptionalManualJobStaysGreen(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -113,10 +107,6 @@ func TestCIStep_GitLabOptionalManualJobStaysGreen(t *testing.T) {
 	}
 }
 
-// A genuine failure observed in the same stage as a blocking manual job reaches
-// the approval gate on the first poll: the hold cannot finish on its own, so it
-// must not defer the failure, and the manual job itself is not a finding anyone
-// is asked to act on.
 func TestCIStep_GitLabFailureBesideBlockingManualJobEscalates(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)

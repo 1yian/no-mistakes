@@ -21,26 +21,12 @@ var lookupEnv = os.LookupEnv
 var currentUser = user.Current
 var shellCommandOutput = defaultShellCommandOutput
 
-// DefaultShellProbeTimeout bounds each login-shell probe. It is deliberately
-// forgiving: a 2s budget was too tight for an interactive login shell under
-// cold-start/system load, and exceeding it silently dropped the daemon onto a
-// degraded fallback PATH that omitted version-manager dirs (nvm/fnm/volta),
-// the intermittent trigger behind #143.
 const DefaultShellProbeTimeout = 30 * time.Second
 
 var shellCommandTimeout = DefaultShellProbeTimeout
 
-// DefaultShellRetryWindow is how long a daemon startup keeps re-probing while
-// the login shell binary itself is missing. The window only needs to cover a
-// boot-time race: on macOS with nix-darwin the login shell lives under
-// /run/current-system, a symlink that the org.nixos.activate-system daemon
-// recreates only after the Nix store volume is mounted, and a RunAtLoad launch
-// agent can start before that. The probe then fails with fork/exec ENOENT in
-// about a millisecond, so waiting is the only way to see the real shell.
 const DefaultShellRetryWindow = 60 * time.Second
 
-// shellRetrySleep is the retry sleeper, swapped by tests so retry behavior is
-// asserted without wall-clock waits.
 var shellRetrySleep = time.Sleep
 
 const (
@@ -73,17 +59,10 @@ func SupportsInteractive(shell string) bool {
 	return base == "bash" || base == "zsh"
 }
 
-// Resolve returns the login shell environment, probing the shell at most once
-// and falling back to the augmented process environment when the probe fails.
 func Resolve() ([]string, error) {
 	return ResolveWithShellRetry(0)
 }
 
-// ResolveWithShellRetry is Resolve for callers that can afford to wait for a
-// login shell binary that does not exist yet (see DefaultShellRetryWindow).
-// Only that failure is retried: a shell that exists but fails or prints no
-// environment is not going to heal by waiting, and blocking on it would only
-// delay startup. The retry sleeps add up to at most window.
 func ResolveWithShellRetry(window time.Duration) ([]string, error) {
 	cacheMu.Lock()
 	if cachedEnv != nil {
@@ -140,14 +119,8 @@ func ApplyToProcessWithShellRetryExcept(window time.Duration, excluded ...string
 	return nil
 }
 
-// errNoEntries marks a probe whose shell ran but printed no parseable
-// environment entries.
 var errNoEntries = errors.New("login shell printed no environment entries")
 
-// resolveUncached probes the login shell for its environment, waiting up to
-// window for a missing shell binary to appear. The bool return reports whether
-// the result came from a successful shell probe (true) or a degraded fallback
-// (false); callers use it to decide whether the result is safe to cache.
 func resolveUncached(window time.Duration) ([]string, bool) {
 	if runtimeGOOS == "windows" {
 		return append([]string(nil), os.Environ()...), true
@@ -181,9 +154,6 @@ func resolveUncached(window time.Duration) ([]string, bool) {
 	return augmentPath(ensureShellEntry(resolved, shell)), true
 }
 
-// probeLoginShell runs the login shell once and returns its environment.
-// Interactive mode is deliberate for bash and zsh: version managers such as
-// nvm, fnm, and volta are sourced from .zshrc/.bashrc, not the profile.
 func probeLoginShell(shell string) ([]string, error) {
 	args := []string{"-l", "-c", "env -0"}
 	if SupportsInteractive(shell) {
@@ -200,19 +170,10 @@ func probeLoginShell(shell string) ([]string, error) {
 	return resolved, nil
 }
 
-// shellBinaryMissing reports whether the probe failed because the shell
-// executable itself is absent (fork/exec ENOENT for an absolute path, or an
-// unresolvable bare name), the only failure that waiting can fix.
 func shellBinaryMissing(err error) bool {
 	return err != nil && (errors.Is(err, fs.ErrNotExist) || errors.Is(err, exec.ErrNotFound))
 }
 
-// WellKnownBinDirs returns common binary install locations that should be on
-// PATH for tools like Homebrew, user-local installs, and language package
-// managers (Go, Rust). Non-existent directories are included unchanged
-// because Go's exec.LookPath ignores missing PATH entries - filtering here
-// would require filesystem access in resolution, which complicates testing
-// without adding value for daemon launch.
 func WellKnownBinDirs() []string {
 	return WellKnownBinDirsForHome(homeDir())
 }
@@ -251,10 +212,6 @@ func homeDir() string {
 	return strings.TrimSpace(u.HomeDir)
 }
 
-// augmentPath merges WellKnownBinDirs into the PATH entry of env, preserving
-// existing entries in order (so user-configured PATH continues to win) and
-// appending any well-known dirs that are not already present. If env lacks a
-// PATH entry entirely, one is synthesized from WellKnownBinDirs.
 func augmentPath(env []string) []string {
 	sep := string(os.PathListSeparator)
 	pathIdx := -1

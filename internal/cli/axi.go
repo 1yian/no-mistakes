@@ -19,14 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// recentRunsHomeLimit caps the recent-runs table on the home view. High enough
-// to cover normal history in one call, per the AXI minimal-call convention.
 const recentRunsHomeLimit = 10
 
-// newAxiCmd builds the agent-facing command tree. Everything under `axi`
-// follows AXI conventions: TOON on stdout, progress on stderr, structured
-// errors, and explicit exit codes. It is the surface an agent (or the
-// /no-mistakes skill) drives; humans use the bare `no-mistakes` TUI instead.
 func newAxiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "axi",
@@ -56,8 +50,6 @@ func newAxiCmd() *cobra.Command {
 	return cmd
 }
 
-// axiEnv bundles the resources an axi subcommand needs. Most are DB-backed and
-// do not require the daemon; commands that mutate run state ensure it.
 type axiEnv struct {
 	p               *paths.Paths
 	d               *db.DB
@@ -83,10 +75,6 @@ func (e *axiEnv) close() {
 	}
 }
 
-// openAxiEnv resolves paths, opens the DB, and finds the repo for the current
-// directory. When ensureDaemon is true it also starts (if needed) and dials
-// the daemon, populating client. Errors are returned for the caller to render
-// as structured TOON.
 func openAxiEnv(ensureDaemonConn bool) (*axiEnv, error) {
 	return openAxiEnvWithOptions(axiEnvOptions{ensureDaemonConn: ensureDaemonConn})
 }
@@ -170,9 +158,6 @@ func openAxiQueryEnv(explicitRunID string) (*axiEnv, error) {
 	return openAxiEnvWithOptions(axiEnvOptions{explicitRunID: strings.TrimSpace(explicitRunID), readOnlyDB: true})
 }
 
-// runAxiHome renders the content-first home view: tool identity, repo, daemon
-// state, the active run (if any) with its gate, and recent runs - all from the
-// local database so it works whether or not the daemon is running.
 func runAxiHome(cmd *cobra.Command) error {
 	env, err := openAxiEnv(false)
 	if err != nil {
@@ -282,8 +267,6 @@ func runAxiHome(cmd *cobra.Command) error {
 	return nil
 }
 
-// runsFields renders a recent-runs table with an aggregate count, showing at
-// most limit rows newest-first.
 func runsFields(runs []*db.Run, limit int) []toon.Field {
 	if len(runs) == 0 {
 		return []toon.Field{{Key: "runs", Value: "0 runs yet in this repository"}}
@@ -306,8 +289,6 @@ func runsFields(runs []*db.Run, limit int) []toon.Field {
 	}
 }
 
-// repoInitHelp returns an actionable hint when the failure is an uninitialized
-// repo, and nothing otherwise.
 func repoInitHelp(err error) []string {
 	if err != nil && strings.Contains(err.Error(), "not initialized") {
 		return []string{"Run `no-mistakes init` to set up the gate in this repository"}
@@ -315,8 +296,6 @@ func repoInitHelp(err error) []string {
 	return nil
 }
 
-// executablePath returns the absolute path of the running binary, falling back
-// to the invoked name if it cannot be resolved.
 func executablePath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -328,7 +307,6 @@ func executablePath() string {
 	return exe
 }
 
-// collapseHome rewrites a leading home directory to ~ for compact display.
 func collapseHome(path string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {

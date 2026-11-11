@@ -121,12 +121,6 @@ func TestProtectedPathRefusalRetainsWorktreeButReapsProcessesAndEvidence(t *test
 	}
 }
 
-// TestSweepOrphanRunProcessesReapsFinishedRunAndSparesActiveOne is the daemon
-// wiring for the leaked-process class: a predecessor daemon that died mid-run
-// never got to tear anything down, so its children are still standing in
-// worktrees that no run owns. Startup must reap those, and must leave alone
-// anything standing in a worktree whose run is still pending or running -
-// killing there would take down a live pipeline.
 func TestSweepOrphanRunProcessesReapsFinishedRunAndSparesActiveOne(t *testing.T) {
 	// The startup sweep normally refuses to touch anything young, so a run
 	// starting concurrently with daemon startup is never mistaken for a leak.
@@ -178,12 +172,6 @@ func TestSweepOrphanRunProcessesReapsFinishedRunAndSparesActiveOne(t *testing.T)
 	}
 }
 
-// TestSweepOrphanRunProcessesSparesWorktreesRetentionIsKeeping is the
-// Greptile P1 on #1188: the startup sweep runs before reapWorktrees decides
-// what the retention policy will remove, so a terminal run alone must not be
-// treated as orphaned - a process still standing in a worktree the policy
-// is keeping (inside the retention window) must survive, while one in a
-// worktree the policy has already decided to remove is still reaped.
 func TestSweepOrphanRunProcessesSparesWorktreesRetentionIsKeeping(t *testing.T) {
 	orig := orphanProcessMinAge
 	orphanProcessMinAge = 0
@@ -245,13 +233,6 @@ func TestSweepOrphanRunProcessesSparesWorktreesRetentionIsKeeping(t *testing.T) 
 	}
 }
 
-// TestSweepOrphanRunProcessesReachesRecordedWorktreeAndSparesUnclaimedOnes is
-// the startup sweep in an operator's own directory (worktree_roots). Two
-// properties hold there, and both come from the run records rather than the
-// configuration: a leaked process in a recorded worktree is reaped even after
-// the operator edited that root out of the config - nothing else would ever
-// name that directory again - while a process standing in a directory no run
-// recorded is out of reach, exactly as cleanup refuses to remove one.
 func TestSweepOrphanRunProcessesReachesRecordedWorktreeAndSparesUnclaimedOnes(t *testing.T) {
 	orig := orphanProcessMinAge
 	orphanProcessMinAge = 0
@@ -320,10 +301,6 @@ func TestSweepOrphanRunProcessesReachesRecordedWorktreeAndSparesUnclaimedOnes(t 
 	}
 }
 
-// TestSweepRunWorktreeProcessesReapsLeakedChildAtRunCleanup covers the other
-// call site: when a run's goroutine finishes, anything still standing in that
-// run's worktree is terminated before the directory is removed, and another
-// run's worktree is never touched.
 func TestSweepRunWorktreeProcessesReapsLeakedChildAtRunCleanup(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -346,12 +323,6 @@ func TestSweepRunWorktreeProcessesReapsLeakedChildAtRunCleanup(t *testing.T) {
 	}
 }
 
-// TestSweepRunWorktreeProcessesReapsLeakedChildInTheRunsRecordedRoot covers a
-// run the operator placed in a directory of their own (worktree_roots): the
-// reaper's reach is the directory that run was actually created in, not
-// anything the configuration says - it may have been edited, or removed, while
-// the run was executing. Everything else in that directory is out of reach,
-// including a directory that looks just like another run's worktree.
 func TestSweepRunWorktreeProcessesReapsLeakedChildInTheRunsRecordedRoot(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -381,12 +352,6 @@ func TestSweepRunWorktreeProcessesReapsLeakedChildInTheRunsRecordedRoot(t *testi
 	}
 }
 
-// TestResumeRecoveredRunSweepsWorktreeProcessesBeforeRemoval covers the run that
-// this daemon did not start: a crash-recovered one. Its cleanup removes the
-// worktree just as a normal run's does, so it must sweep first for the same
-// reason - a descendant that called setsid(2) survives with the removed
-// directory as its cwd, and outside the default worktrees tree nothing can name
-// that directory again once it is gone and the run is terminal.
 func TestResumeRecoveredRunSweepsWorktreeProcessesBeforeRemoval(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -444,11 +409,6 @@ func TestResumeRecoveredRunSweepsWorktreeProcessesBeforeRemoval(t *testing.T) {
 	}
 }
 
-// TestRemoveRunWorktreeSweepsBeforeRemoving pins the ordering every removal path
-// depends on. It is one helper precisely because the ordering is invisible when
-// forgotten: the process outlives the directory, and outside the default tree
-// nothing can name that directory again once the run is terminal and the
-// directory is gone.
 func TestRemoveRunWorktreeSweepsBeforeRemoving(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -481,11 +441,6 @@ func TestRemoveRunWorktreeSweepsBeforeRemoving(t *testing.T) {
 	}
 }
 
-// TestRunSetupFailureSweepsTheWorktreeItRemoves is the reachable path that
-// motivated the shared helper: setup fails after the worktree exists, and a
-// process the setup itself left standing in it (a git hook that backgrounds a
-// child, an SSH control master, a credential helper) must not be stranded by the
-// removal that follows.
 func TestRunSetupFailureSweepsTheWorktreeItRemoves(t *testing.T) {
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
 		return []pipeline.Step{&mockPassStep{name: types.StepReview}}
@@ -536,8 +491,6 @@ func TestRunSetupFailureSweepsTheWorktreeItRemoves(t *testing.T) {
 	}
 }
 
-// commitInvalidRepoConfig pushes a commit whose .no-mistakes.yaml cannot be
-// parsed, which fails run setup after the worktree has been created.
 func commitInvalidRepoConfig(t *testing.T, workDir string) string {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(workDir, ".no-mistakes.yaml"), []byte("auto_fix: [not, a, mapping\n"), 0o644); err != nil {
@@ -549,8 +502,6 @@ func commitInvalidRepoConfig(t *testing.T, workDir string) string {
 	return gitOutput(t, workDir, "rev-parse", "HEAD")
 }
 
-// readOrphanPID waits briefly for the hook to record its background child, and
-// reports 0 when the hook never ran.
 func readOrphanPID(t *testing.T, pidFile string) int {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -566,9 +517,6 @@ func readOrphanPID(t *testing.T, pidFile string) int {
 	return 0
 }
 
-// startOrphanInWorktree leaves a real long-lived process standing in dir whose
-// parent has already exited, which is exactly the shape a leaked pipeline
-// child has by the time anyone notices it.
 func startOrphanInWorktree(t *testing.T, dir string) int {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

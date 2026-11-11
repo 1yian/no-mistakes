@@ -11,21 +11,12 @@ import (
 )
 
 const (
-	// driveHeartbeatInterval is deliberately slow. Normal wakeups come from
-	// run events; this full-state read exists only to recover a lost event.
 	driveHeartbeatInterval = 30 * time.Second
-	// Reconnects are bounded so a dead daemon becomes an actionable AXI error
-	// rather than an infinite silent wait.
 	driveReconnectInterval = 500 * time.Millisecond
 	driveReconnectTimeout  = 30 * time.Second
 	defaultGetRunTimeout   = 30 * time.Second
 )
 
-// driveGetRunTimeoutNS is the shared per-attempt deadline for run-state IPC
-// reads, including get_run reconciliation and pre-drive get_active_run lookup.
-// A live daemon that takes longer to answer is slow, not dead: callers classify
-// that timeout, probe health, and retry. Tests shorten it so a fake slow daemon
-// can be proven without waiting 30s.
 var driveGetRunTimeoutNS atomic.Int64
 
 func init() {
@@ -79,11 +70,6 @@ func (s *ipcRunStateSource) callWithSlowReplyRetry(ctx context.Context, method s
 	}
 }
 
-// deadlinePassedErr reports a context whose deadline has already passed. Its
-// timer may not have fired yet, so ctx.Err() can still be nil; returning that
-// would read as a successful call with an empty result, which Reconcile turns
-// into a nil run and the drive loop into "run not found" instead of an elapsed
-// --wait.
 func deadlinePassedErr(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -91,11 +77,6 @@ func deadlinePassedErr(ctx context.Context) error {
 	return context.DeadlineExceeded
 }
 
-// deadlinePassed reports whether ctx has reached its own deadline, including
-// that same window, where the timer has not fired and ctx.Err() is still nil.
-// Every caller that has to tell its own bound's expiry from an outer one asks
-// this, so there is one answer to "has this deadline passed" rather than a
-// per-caller ctx.Err() test that is wrong inside the window.
 func deadlinePassed(ctx context.Context) bool {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return true
@@ -154,14 +135,6 @@ func (s *ipcRunStateSource) probeHealth(ctx context.Context) error {
 	return nil
 }
 
-// runReconciler is the sole owner of event-driven run-state refresh policy.
-// It always subscribes before its first full read, refreshes only for
-// state-bearing events, reconnects a dropped stream before reconciling, and
-// uses one slow heartbeat as a lost-event backstop. Event payloads are wakeup
-// hints only: authoritative state always comes from get_run, which makes
-// duplicate and delayed events harmless. A get_run that misses its read
-// deadline is classified as a slow reply: a passing health probe retries
-// instead of treating a live daemon as I/O failure.
 type runReconciler struct {
 	runID             string
 	source            runStateSource
@@ -186,8 +159,6 @@ func newRunReconciler(source runStateSource, runID string) *runReconciler {
 	}
 }
 
-// Next blocks until a state reconciliation is warranted and returns the
-// authoritative run snapshot.
 func (r *runReconciler) Next(ctx context.Context) (*ipc.RunInfo, error) {
 	if !r.started {
 		if err := r.connect(ctx); err != nil {

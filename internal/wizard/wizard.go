@@ -1,7 +1,3 @@
-// Package wizard provides the pre-pipeline onboarding flow: it detects repo
-// state, optionally creates a branch, commits uncommitted changes, and pushes
-// to the no-mistakes gate, then hands off to the main TUI. It supports both
-// the interactive wizard UI and the non-interactive auto-accept path.
 package wizard
 
 import (
@@ -17,29 +13,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Config describes the repo state and dependencies the wizard needs.
-// Callers pre-detect git state so the wizard can decide up-front which
-// steps to skip.
 type Config struct {
 	Context       context.Context
 	RepoDir       string
 	CurrentBranch string
 	DefaultBranch string
-	// AutoAdvance automatically presses Enter on each active wizard step,
-	// preserving the interactive TUI while accepting the default path.
-	AutoAdvance bool
-	// DisableInput disables Bubble Tea input, which is useful for headless runs
-	// and tests that drive cancellation through the caller context.
-	DisableInput bool
-	// NeedsBranch is true when the user has no usable feature branch yet -
-	// either they're on the default branch, or HEAD is detached. The branch
-	// step is only active when this is true.
-	NeedsBranch bool
-	IsDirty     bool
-	GateRemote  string
-	// Output overrides the Bubble Tea output writer and is also used for the
-	// terminal-title reset sequence emitted when the wizard shuts down.
-	Output io.Writer
+	AutoAdvance   bool
+	DisableInput  bool
+	NeedsBranch   bool
+	IsDirty       bool
+	GateRemote    string
+	Output        io.Writer
 
 	CreateBranch  func(ctx context.Context, name string) error
 	CommitAll     func(ctx context.Context, msg string) error
@@ -47,14 +31,9 @@ type Config struct {
 	SuggestBranch func(ctx context.Context) (string, error)
 	SuggestCommit func(ctx context.Context) (string, error)
 	Track         func(action string, fields map[string]any)
-	// WaitForRun, if set, runs after push succeeds and blocks while the
-	// daemon-created run is still catching up. Keeps the alt screen up so the
-	// handoff to the attach TUI has no visible gap. Only used by the
-	// interactive Run path; headless RunAuto ignores it.
-	WaitForRun func(ctx context.Context, branch string) error
+	WaitForRun    func(ctx context.Context, branch string) error
 }
 
-// stepID identifies one of the three wizard steps.
 type stepID int
 
 const (
@@ -63,7 +42,6 @@ const (
 	stepPush
 )
 
-// stepStatus is the visual + logical state of a single step.
 type stepStatus int
 
 const (
@@ -86,7 +64,6 @@ type step struct {
 	source     string
 }
 
-// Model is the bubbletea model for the wizard.
 type Model struct {
 	cfg    Config
 	ctx    context.Context
@@ -99,7 +76,6 @@ type Model struct {
 
 	targetBranch string // the branch we intend to end up on / push
 
-	// Tracks side-effects for abort-copy and for the final Result.
 	branchCreated bool
 	commitMade    bool
 	pushed        bool
@@ -116,16 +92,10 @@ type Model struct {
 	success  bool // all needed steps completed; pipeline pushed
 	aborted  bool // user explicitly aborted
 
-	// waiting is true while the WaitForRun hook is in flight. waitStarted
-	// latches so the hook only runs once even if setupActive is re-entered.
 	waiting     bool
 	waitStarted bool
 }
 
-// Result reports what the wizard did. Success means the wizard completed all
-// required steps: the push to the gate succeeded, and when WaitForRun is set,
-// the daemon handoff completed so the caller can re-attach to pick up the new
-// run.
 type Result struct {
 	Success       bool
 	Aborted       bool
@@ -136,10 +106,6 @@ type Result struct {
 	Err           error
 }
 
-// NewModel constructs a wizard Model. Which steps end up active depends on
-// the supplied Config: if the current branch already differs from the default,
-// the branch step is skipped; if the working tree is clean, the commit step
-// is skipped; the push step always runs.
 func NewModel(cfg Config) Model {
 	ti := textinput.New()
 	ti.Prompt = "› "
@@ -176,13 +142,10 @@ func NewModel(cfg Config) Model {
 	return m
 }
 
-// Init returns the initial Cmd for the active step. State was already
-// prepared in NewModel.
 func (m Model) Init() tea.Cmd {
 	return m.afterEnterCmd()
 }
 
-// Update handles bubbletea events and drives the state machine.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -216,8 +179,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Result returns the terminal state of the wizard. Only meaningful once the
-// program has exited.
 func (m Model) Result() Result {
 	return Result{
 		Success:       m.success,
@@ -230,8 +191,6 @@ func (m Model) Result() Result {
 	}
 }
 
-// firstPending returns the index of the first step that still needs work.
-// Returns len(steps) if none are pending.
 func (m Model) firstPending() int {
 	for i, s := range m.steps {
 		if s.status == statPending {
@@ -241,8 +200,6 @@ func (m Model) firstPending() int {
 	return len(m.steps)
 }
 
-// activeStep returns the step currently being worked on, or nil if the
-// wizard has finished.
 func (m *Model) activeStep() *step {
 	if m.active < 0 || m.active >= len(m.steps) {
 		return nil
@@ -250,9 +207,6 @@ func (m *Model) activeStep() *step {
 	return m.steps[m.active]
 }
 
-// setupActive transitions the active step into its initial interactive
-// state (input for branch/commit, confirm for push). When no step is
-// pending, it marks the wizard as finished.
 func (m Model) setupActive() Model {
 	s := m.activeStep()
 	if s == nil {
@@ -290,7 +244,6 @@ func (m Model) setupActive() Model {
 	return m
 }
 
-// afterEnterCmd returns the Cmd to kick off after transitioning to a new step.
 func (m Model) afterEnterCmd() tea.Cmd {
 	if m.waiting {
 		return tea.Batch(m.runWaitForRun(), m.scheduleSpinner())
@@ -421,8 +374,6 @@ func (m Model) handleFailedKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// executeStep runs the git action for the step. For branch/commit, value is
-// the user-supplied or agent-generated string. For push, value is ignored.
 func (m *Model) executeStep(s *step, value string) (tea.Model, tea.Cmd) {
 	s.status = statRunning
 	s.result = value
@@ -512,8 +463,6 @@ func (m Model) hasSideEffects() bool {
 	return m.branchCreated || m.commitMade
 }
 
-// terminalTitle returns the terminal title string reflecting wizard state.
-// Format mirrors internal/tui: "<icon> Setup <step> - <branch>".
 func (m Model) terminalTitle() string {
 	branch := m.targetBranch
 	if branch == "" {
@@ -549,9 +498,6 @@ func (m Model) terminalTitle() string {
 	return icon + " Setup " + stepLabel(s.id) + suffix
 }
 
-// stepTitleIcon returns a plain-text icon suitable for use in the terminal
-// title bar. It mirrors the visual icons in stepIconAndStyle but without
-// lipgloss styling, since terminal titles can't render ANSI.
 func stepTitleIcon(status stepStatus, spinnerFrame int) string {
 	switch status {
 	case statDone:
@@ -571,12 +517,10 @@ func stepTitleIcon(status stepStatus, spinnerFrame int) string {
 	return "○"
 }
 
-// setTerminalTitle returns the OSC escape sequence to set the terminal title.
 func setTerminalTitle(title string) string {
 	return "\x1b]2;" + title + "\x07"
 }
 
-// quitWithTitleReset clears the terminal title via bubbletea, then quits.
 func quitWithTitleReset() tea.Cmd {
 	return tea.Sequence(tea.SetWindowTitle(""), tea.Quit)
 }
@@ -705,8 +649,6 @@ func (m Model) runWaitForRun() tea.Cmd {
 	}
 }
 
-// Run invokes the wizard as an interactive bubbletea program. Returns the
-// terminal Result describing what happened.
 func Run(cfg Config) (Result, error) {
 	baseCtx := cfg.Context
 	if baseCtx == nil {
@@ -736,9 +678,6 @@ func Run(cfg Config) (Result, error) {
 	return fm.Result(), nil
 }
 
-// RunAuto executes the wizard steps non-interactively. It accepts the default
-// automated path for each step: use agent suggestions for branch and commit,
-// then push to the gate. Suggestion failures are returned immediately.
 func RunAuto(cfg Config) (Result, error) {
 	res := Result{TargetBranch: cfg.CurrentBranch}
 	baseCtx := cfg.Context

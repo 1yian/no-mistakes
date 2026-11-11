@@ -17,11 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// newAbortQuiescenceFixture drives the public abort surfaces against a fake
-// daemon that scripts the exact run-state reads: cancellation is always
-// accepted, but what the post-cancel terminal wait observes is controlled per
-// test. The registered repo, worktree, socket, and NM_HOME are all real, so
-// `axi abort` runs end to end through the CLI.
 func newAbortQuiescenceFixture(t *testing.T, getRun func(context.Context, int) (*ipc.RunInfo, error), cancelAfterRequest ...func()) {
 	t.Helper()
 	newAbortQuiescenceFixtureWithCancel(t, getRun, nil, cancelAfterRequest...)
@@ -139,12 +134,6 @@ func assertUnconfirmedAbortOutput(t *testing.T, surface, out string) {
 	}
 }
 
-// TestAxiAbortRefusesSuccessWhileTerminalQuiescenceUnconfirmed pins the
-// accepted abort contract on the ordinary surface: when terminalization is
-// delayed past the bounded wait, or the status read fails, abort must exit
-// nonzero, state the unconfirmed condition explicitly, include the last
-// structured run state when one is available, and never present a completed
-// abort or authoritative ownership guidance.
 func TestAxiAbortRefusesSuccessWhileTerminalQuiescenceUnconfirmed(t *testing.T) {
 	t.Run("terminalization delayed past bounded wait", func(t *testing.T) {
 		newAbortQuiescenceFixture(t, runningRunForever)
@@ -171,10 +160,6 @@ func TestAxiAbortRefusesSuccessWhileTerminalQuiescenceUnconfirmed(t *testing.T) 
 	})
 }
 
-// TestAxiAbortByRunIDRefusesSuccessWhileTerminalQuiescenceUnconfirmed pins the
-// same contract on explicit --run cancellation, which previously reported
-// success without any terminal wait at all, and proves the confirmed path
-// still reports the completed abort with the observed terminal state.
 func TestAxiAbortByRunIDRefusesSuccessWhileTerminalQuiescenceUnconfirmed(t *testing.T) {
 	t.Run("terminalization delayed past bounded wait", func(t *testing.T) {
 		newAbortQuiescenceFixture(t, runningRunForever)
@@ -270,21 +255,10 @@ func TestAxiAbortCancelledWaitRefusesSuccess(t *testing.T) {
 	}
 }
 
-// noActiveRunErr mirrors the daemon's cancel_run refusal for an id that is not
-// currently active, which is the ambiguous signal the terminal-truth contract
-// must resolve through the durable run record instead of trusting blindly.
 func noActiveRunErr(id string) error {
 	return errors.New("no active run " + id)
 }
 
-// TestAxiAbortByRunIDResolvesDurableTerminalTruth pins the accepted
-// explicit-run terminal-truth contract: a bare `no active run` result from
-// cancel_run is never sufficient by itself. The exact run's durable state
-// decides the outcome - an already-terminal run returns idempotent success
-// with its terminal run_status and no fabricated new cancellation, a
-// still-nonterminal run is a nonzero unconfirmed result, an unreadable run is
-// unconfirmed, and only a positively proven unknown id keeps the documented
-// no-op.
 func TestAxiAbortByRunIDResolvesDurableTerminalTruth(t *testing.T) {
 	t.Run("known terminal run returns idempotent terminal truth", func(t *testing.T) {
 		newAbortQuiescenceFixtureWithCancel(t, func(context.Context, int) (*ipc.RunInfo, error) {
@@ -374,9 +348,6 @@ func TestAxiAbortByRunIDResolvesDurableTerminalTruth(t *testing.T) {
 	})
 }
 
-// newDaemonDownAbortFixture prepares NM_HOME with a durable run record and no
-// daemon at all, so the daemon-unavailable abort treatment is decided by the
-// durable database truth alone.
 func newDaemonDownAbortFixture(t *testing.T, status *types.RunStatus) string {
 	t.Helper()
 	nmHome := makeSocketSafeTempDir(t)
@@ -410,12 +381,6 @@ func newDaemonDownAbortFixture(t *testing.T, status *types.RunStatus) string {
 	return run.ID
 }
 
-// TestAxiAbortByRunIDDaemonUnavailableUsesDurableTruth pins the consistent
-// daemon-unavailable treatment: without a daemon nothing can be cancelled, so
-// the durable run record alone decides - a recorded terminal run resolves
-// idempotently with its terminal status, a recorded nonterminal run is a
-// nonzero unconfirmed result (no cancellation was even requested), and an id
-// with no durable record keeps the documented no-op without fabricated state.
 func TestAxiAbortByRunIDDaemonUnavailableUsesDurableTruth(t *testing.T) {
 	t.Run("recorded terminal run resolves idempotently", func(t *testing.T) {
 		cancelled := types.RunCancelled

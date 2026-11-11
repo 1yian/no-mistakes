@@ -9,9 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Greptile on #1697: a parked gate that reconciles on its own must not resume
-// once the daemon has marked a restart due; it stays parked so the restart
-// keeps it, and claims the gate once the guard allows again.
 func TestExecutor_GateClaimGuardKeepsAReconciledGateParked(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	step := &reconcilingApprovalStep{name: types.StepCI}

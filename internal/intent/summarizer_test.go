@@ -73,11 +73,6 @@ func TestAgentSummarizer_PromptRequiresPlainTextSummary(t *testing.T) {
 	}
 }
 
-// CWD must reach the underlying agent. Backends like opencode spawn a
-// long-lived server on first Run() and lock its cwd; if the summarizer's
-// CWD is empty, the server starts in the daemon's cwd and every later
-// pipeline step inherits the wrong server-process root, even when those
-// steps pass the correct CWD themselves.
 func TestAgentSummarizer_PropagatesCWD(t *testing.T) {
 	fa := &fakeAgent{output: `{"summary": "x"}`}
 	s := NewAgentSummarizer(fa, "/work/dir")
@@ -91,8 +86,6 @@ func TestAgentSummarizer_PropagatesCWD(t *testing.T) {
 	}
 }
 
-// The summarizer runs with worktree CWD and can write files, so its prompt
-// limits independently initiated changes to agent memory files.
 func TestAgentSummarizer_PromptKeepsMemoryFilesHandsOff(t *testing.T) {
 	fa := &fakeAgent{output: `{"summary": "x"}`}
 	s := NewAgentSummarizer(fa, "/work/dir")
@@ -124,9 +117,6 @@ func TestAgentSummarizer_EmptyTranscript(t *testing.T) {
 	}
 }
 
-// Synthetic messages (gap markers from clampMessages) must NOT receive a
-// role prefix - the LLM should see them as author-controlled context, not
-// as another user/assistant turn.
 func TestBuildTranscriptBlock_SyntheticHasNoRolePrefix(t *testing.T) {
 	got := buildTranscriptBlock(&Session{
 		Messages: []Message{

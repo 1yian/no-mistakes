@@ -18,9 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm/gitlab"
 )
 
-// TestLiveGitLabEvidenceSectionOnThrowawayMR uploads a real image into the
-// project named by NM_LIVE_GITLAB_PROJECT and checks a throwaway merge request.
-// CI does not set the variable.
 func TestLiveGitLabEvidenceSectionOnThrowawayMR(t *testing.T) {
 	project := strings.TrimSpace(os.Getenv("NM_LIVE_GITLAB_PROJECT"))
 	if project == "" {

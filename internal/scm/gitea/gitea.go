@@ -1,46 +1,3 @@
-// Package gitea implements scm.Host backed by the tea CLI (Gitea's official
-// CLI).
-//
-// Unlike gh/glab, tea has no notion of "the current instance": it infers
-// context from the working directory's git remote, which the daemon's
-// detached bare-gate repo does not have. Every invocation here therefore
-// selects the account and --repo explicitly (see the New doc comment).
-//
-// Two incompatible tea generations exist, and both are supported. tea 0.x
-// (urfave/cli, up to v0.16.0) selects an account with --login <name>, asks for
-// JSON with --output json (plus --fields on lists), and names its commands
-// `pulls`, `pulls <n>`, and `actions runs`. tea 1.0 (the Cobra rewrite,
-// gitea/tea#1126) removed all of those with no compatibility aliases: the
-// account is --host <instance url>, JSON is --json=<fields> (the `=` form is
-// required because the flag has an optional value, and unknown field names
-// are rejected), and the commands are `pr list|view|create|edit` and `run
-// list|logs`. The generation is detected once per Host by a feature probe
-// (Host.generation), never by `tea --version`: builds from main report a
-// `git describe` string such as 0.16.0+30-g..., and source builds report
-// "development", so a version check would misread exactly the binaries most
-// likely to be 1.0 today. Further 1.0 traps handled below: `tea api -F/--field`
-// is TYPED (a branch named `123` or `true` would be sent as a number or a
-// bool), so retargeting uses -f/--raw-field; `tea run logs` prints its "Job N"
-// banner to stderr, so stdout is the raw log and must not be cut at a `---`
-// line the way tea 0.x's banner is; and an empty --host silently falls back to
-// TEA_HOST, the default host, or the sole configured instance, so Available
-// refuses a missing instance before any call is made.
-//
-// `tea actions runs view --jobs --output json` was empirically verified
-// (against a real tea 0.15.1 CLI and a real Gitea 1.27.2 + Actions instance)
-// to NOT emit clean structured per-job JSON: --output json only formats the
-// run-level header block as JSON-ish text mixed with a genuine JSON jobs
-// array, and that jobs array carries no `conclusion` field (only `status`),
-// so pass/fail cannot be read from it. The REST job endpoint
-// (GET /repos/{owner}/{repo}/actions/runs/{run}/jobs) does carry a `status` +
-// `conclusion` pair (mirroring GitHub Actions' schema) and is reachable
-// through `tea api`, which reuses tea's own stored login/token - no separate
-// HTTP client or token configuration is needed. GetChecks,
-// FetchFailedCheckLogs, and SetPRBaseBranch therefore go through `tea api`
-// (the last because tea 0.x's `tea pulls edit` has no `--base` flag; tea 1.0's
-// `pr edit` has one, but one retarget path for both generations is simpler to
-// keep correct) while every other operation (PR lifecycle, auth, run
-// discovery) uses tea's own porcelain subcommands.
 package gitea
 
 import (
@@ -59,10 +16,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// CmdFactory builds an exec.Cmd in the caller's workdir with the caller's env.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Host talks to Gitea through the tea CLI.
 type Host struct {
 	cmd          CmdFactory
 	cliAvailable func() bool
@@ -75,7 +30,6 @@ type Host struct {
 	gen teaGeneration // cached once a probe succeeds
 }
 
-// teaGeneration is the tea CLI generation Host.generation detected.
 type teaGeneration int
 
 const (
@@ -84,17 +38,6 @@ const (
 	tea1                      // tea 1.0: --host, --json=<fields>, `pr`, `run`
 )
 
-// New builds a Host. cliAvailable reports whether the tea binary is
-// resolvable on the caller's PATH. host is the repo's Gitea hostname, used
-// only to produce an actionable error message. account is the tea account
-// configured for that host in each generation's own config (see
-// scm.ResolveTeaAccount): tea requires an explicit account on every command
-// run outside a directory whose git remote it recognizes, which the daemon's
-// detached bare-gate repo never is. repoSlug is the "owner/repo" path tea's
-// --repo flag expects (no host prefix; the account already disambiguates the
-// instance). All are optional; an account missing for the installed tea
-// generation makes Available fail closed with a setup hint instead of
-// silently falling back to tea's own default-account guessing.
 func New(cmd CmdFactory, cliAvailable func() bool, host string, account scm.TeaAccount, repoSlug string) *Host {
 	return &Host{
 		cmd:          cmd,
@@ -106,16 +49,6 @@ func New(cmd CmdFactory, cliAvailable func() bool, host string, account scm.TeaA
 	}
 }
 
-// generation detects the installed tea generation with two feature probes,
-// tea 1.0's first: `tea pr list --json=number --help` exits 0 only on tea 1.0
-// (tea 0.x has no `pr list --json` and exits 1), and `tea pulls list --output
-// json --help` exits 0 only on tea 0.x (tea 1.0 has no `pulls` and exits 2).
-// --help makes both side-effect free: neither generation reads its config,
-// touches the network, or prompts for a help request, so the probe gives the
-// same answer with or without a configured account. A binary that passes
-// neither probe is refused with an error rather than guessed at, and only a
-// successful probe is cached, so a cancelled or failed probe is retried on
-// the next call instead of pinning a wrong answer.
 func (h *Host) generation(ctx context.Context) (teaGeneration, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -139,9 +72,6 @@ func (h *Host) generation(ctx context.Context) (teaGeneration, error) {
 	return teaUnprobed, errors.New("unrecognized tea CLI: it accepts neither tea 1.0's `tea pr list --json` nor tea 0.x's `tea pulls list --output json`; install a released tea or a tea 1.0 build")
 }
 
-// account returns the flag pair that selects this host's account for gen.
-// Available has already refused an empty one, so a caller never passes tea an
-// empty --login or --host (tea 1.0 would silently pick another instance).
 func (h *Host) account(gen teaGeneration) []string {
 	if gen == tea1 {
 		return []string{"--host", h.instance}
@@ -149,7 +79,6 @@ func (h *Host) account(gen teaGeneration) []string {
 	return []string{"--login", h.login}
 }
 
-// begin resolves the generation and its account flags for one operation.
 func (h *Host) begin(ctx context.Context) (teaGeneration, []string, error) {
 	gen, err := h.generation(ctx)
 	if err != nil {
@@ -209,12 +138,6 @@ func (h *Host) Available(ctx context.Context) error {
 	return nil
 }
 
-// giteaPRListItem is one element of tea 0.x's `tea pulls list --output json`,
-// which renders every field (index included) as a JSON string. tea 0.x's
-// single-PR view renders the same fields with native JSON types
-// (giteaPRView), so the two shapes are deliberately separate structs; do not
-// unify them. tea 1.0 shares one shape (teaPR) between list and view, which
-// is converted into these two.
 type giteaPRListItem struct {
 	Index string `json:"index"`
 	State string `json:"state"`
@@ -223,8 +146,6 @@ type giteaPRListItem struct {
 	Base  string `json:"base"`
 }
 
-// teaPR is tea 1.0's pull request JSON, the same object for `pr list` and
-// `pr view`, with native types (number is an integer).
 type teaPR struct {
 	Number  int64  `json:"number"`
 	State   string `json:"state"`
@@ -364,14 +285,6 @@ func (h *Host) UpdatePR(ctx context.Context, pr *scm.PR, content scm.PRContent) 
 	return pr, nil
 }
 
-// SetPRBaseBranch retargets an existing PR. `tea pulls edit` (tea 0.15.1) has
-// no `--base` flag even though `tea pulls create` does; inventing one would
-// fail closed at the CLI. The Gitea REST edit-pull endpoint accepts `base`,
-// and `tea api --method PATCH` reuses the stored account the same way job
-// lookups do. `--method PATCH` is required: a body without an explicit
-// method defaults tea api to POST. tea 0.x's `--field` sends a string; tea
-// 1.0's `--field` is typed, so tea 1.0 gets `--raw-field` to keep a branch
-// named `123` or `true` a string.
 func (h *Host) SetPRBaseBranch(ctx context.Context, pr *scm.PR, baseBranch string) error {
 	id, err := giteaPRNumber(pr)
 	if err != nil {
@@ -469,7 +382,6 @@ func (h *Host) GetPRState(ctx context.Context, pr *scm.PR) (scm.PRState, error) 
 	return normalizeGiteaPRState(view.State), nil
 }
 
-// GetMergeableState is unsupported: see the Capabilities doc comment.
 func (h *Host) GetMergeableState(ctx context.Context, pr *scm.PR) (scm.MergeableState, error) {
 	return "", scm.ErrUnsupported
 }
@@ -486,11 +398,6 @@ type giteaRunSummary struct {
 	PullRequests []giteaRunPullRequest `json:"pull_requests"`
 }
 
-// giteaRunID unmarshals a workflow run's id from either a bare JSON number
-// (the raw REST `/actions/runs` endpoint's own type, confirmed against a
-// live Gitea 1.27.3 instance) or a JSON string, storing it as a decimal
-// string: every call site here uses a run id as a tea/REST path segment,
-// never for arithmetic.
 type giteaRunID string
 
 func (id *giteaRunID) UnmarshalJSON(data []byte) error {
@@ -507,24 +414,6 @@ func (id *giteaRunID) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// listRuns lists the repository's most recent workflow runs for the caller
-// to match against a PR (see runJobsMatchingHeadSHA). It calls the raw
-// `/actions/runs` REST endpoint directly through `tea api` - the same
-// generation-agnostic passthrough runJobs already uses for job details -
-// instead of tea's own dedicated `actions runs list`/`run list` commands,
-// because those commands' own JSON output drops two fields this code needs:
-// a pull_request-triggered run's real branch name (Gitea's REST response
-// names it in `head_branch` as the literal "#<PR number>", which tea's
-// dedicated commands either blank out or never request at all) and the
-// run's own `pull_requests` array, which names the exact PR number Gitea
-// itself associated with that run. Confirmed directly against a live Gitea
-// 1.27.3 instance. Matching on pull_requests[].number (see
-// runJobsMatchingHeadSHA) makes a cross-PR or cross-branch collision
-// structurally impossible rather than merely unlikely, which a branch-name
-// or bare head-SHA match alone cannot guarantee. `limit=50` raises the
-// single page fetched above the default page size to reduce, though on a
-// sufficiently busy repository not eliminate, the chance that the matching
-// run falls off the first page.
 func (h *Host) listRuns(ctx context.Context) ([]giteaRunSummary, error) {
 	owner, repo, ok := splitOwnerRepo(h.repoSlug)
 	if !ok {
@@ -563,8 +452,6 @@ type giteaJob struct {
 	CompletedAt string `json:"completed_at"`
 }
 
-// completedAt parses the job's completed_at timestamp (RFC3339, GitHub-Actions-
-// schema style), returning the zero time when absent or unparseable.
 func (j giteaJob) completedAt() time.Time {
 	if strings.TrimSpace(j.CompletedAt) == "" {
 		return time.Time{}
@@ -628,10 +515,6 @@ func (h *Host) GetChecks(ctx context.Context, pr *scm.PR) ([]scm.Check, error) {
 	return jobsToChecks(jobs), nil
 }
 
-// runsByIDDesc orders runs by highest numeric ID first rather than trusting
-// `tea actions runs list`'s array order, which is not documented as
-// newest-first. A run whose ID does not parse as an integer sorts last so it
-// can never mask a numerically comparable run.
 func runsByIDDesc(runs []giteaRunSummary) []giteaRunSummary {
 	ordered := make([]giteaRunSummary, len(runs))
 	copy(ordered, runs)
@@ -646,23 +529,6 @@ func runsByIDDesc(runs []giteaRunSummary) []giteaRunSummary {
 	return ordered
 }
 
-// runJobsMatchingHeadSHA finds the run (and its jobs) whose jobs belong to
-// headSHA, searching candidate runs from highest ID to lowest. A PR can have
-// more than one matching run - e.g. a manual re-run of an older commit can
-// land a higher run ID than a newer commit's own run - so trusting the
-// highest-ID run alone (or list order) could silently attribute a stale
-// commit's checks/logs to the PR's current head, or miss a matching
-// lower-ID run entirely.
-//
-// prNumber and sourceBranch scope the candidate list to runs that can
-// actually belong to this PR before any SHA matching starts (see
-// filterRunsForPR): a pull_request-triggered run is kept only when its own
-// pull_requests array names this exact PR number, and a push-triggered run
-// (e.g. from a plain push to the PR's own branch before or after the PR
-// opened) is kept only when its head branch equals sourceBranch. Because
-// that scoping is exact rather than best-effort, it is safe for the
-// empty-headSHA case to fall back to the newest (highest-ID) run in the
-// already-scoped list: no run outside this PR can ever reach that fallback.
 func (h *Host) runJobsMatchingHeadSHA(ctx context.Context, runs []giteaRunSummary, headSHA, sourceBranch string, prNumber int) (giteaRunSummary, []giteaJob, error) {
 	ordered := runsByIDDesc(filterRunsForPR(runs, sourceBranch, prNumber))
 	if len(ordered) == 0 {
@@ -688,16 +554,6 @@ func (h *Host) runJobsMatchingHeadSHA(ctx context.Context, runs []giteaRunSummar
 	return giteaRunSummary{}, nil, nil
 }
 
-// filterRunsForPR keeps only runs that can plausibly belong to this PR. A
-// pull_request-triggered run is kept only when its own pull_requests array
-// names prNumber - the one signal Gitea's API provides for that case, since
-// such a run's head branch is either absent or the literal "#<PR number>"
-// rather than a real branch name (see listRuns). Any other run (in
-// practice, a push-triggered run) is kept only when its HeadBranch equals
-// sourceBranch. A run whose event is "pull_request" but whose pull_requests
-// array does not name prNumber is dropped outright rather than falling
-// through to the branch check, since such a run's HeadBranch is never a
-// usable branch name either.
 func filterRunsForPR(runs []giteaRunSummary, sourceBranch string, prNumber int) []giteaRunSummary {
 	sourceBranch = strings.TrimSpace(sourceBranch)
 	filtered := make([]giteaRunSummary, 0, len(runs))
@@ -715,7 +571,6 @@ func filterRunsForPR(runs []giteaRunSummary, sourceBranch string, prNumber int) 
 	return filtered
 }
 
-// runNamesPR reports whether run's own pull_requests array names prNumber.
 func runNamesPR(run giteaRunSummary, prNumber int) bool {
 	if prNumber <= 0 {
 		return false
@@ -872,8 +727,6 @@ func findFailedGiteaJobTargetIDs(jobs []giteaJob, checkTargets []scm.CheckTarget
 	return matched
 }
 
-// stripGiteaLogsHeader removes the "Logs for job N:\n---\n" banner that tea
-// 0.x's `tea actions runs logs` prints before the actual log body.
 func stripGiteaLogsHeader(s string) string {
 	if idx := strings.Index(s, "---\n"); idx >= 0 {
 		return strings.TrimSpace(s[idx+len("---\n"):])
@@ -881,8 +734,6 @@ func stripGiteaLogsHeader(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// splitOwnerRepo splits a "owner/repo" slug (Gitea has no nested subgroups,
-// unlike GitLab) into its two path segments.
 func splitOwnerRepo(slug string) (owner, repo string, ok bool) {
 	slug = strings.Trim(strings.TrimSpace(slug), "/")
 	if slug == "" {
@@ -895,9 +746,6 @@ func splitOwnerRepo(slug string) (owner, repo string, ok bool) {
 	return parts[0], parts[1], true
 }
 
-// bytesTrimToJSON skips any banner text before the first '{' or '[', mirroring
-// the same defensive scan the gitlab CLI-shelled Host uses: a version-check
-// notice or similar stray line before the JSON payload must not break parsing.
 func bytesTrimToJSON(out []byte) []byte {
 	idx := -1
 	for i, b := range out {
@@ -912,10 +760,6 @@ func bytesTrimToJSON(out []byte) []byte {
 	return out[idx:]
 }
 
-// extractGiteaPRURL scans out (tea pulls create's human-readable stdout) from
-// the end for the last line that is a bare http(s) URL - the trailing summary
-// line `tea` always prints after creating a PR. It is a fallback for
-// CreatePR only; the primary path re-lists the PR for a structured result.
 func extractGiteaPRURL(out []byte) string {
 	lines := strings.Split(string(out), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {

@@ -28,8 +28,6 @@ func requireQuotaShell(t *testing.T) {
 	}
 }
 
-// writeQuotaAXI installs a fake quota-axi executable that emits the given
-// stdout. It returns the path to put in quota_routing.quota_axi_path.
 func writeQuotaAXI(t *testing.T, stdout string) string {
 	t.Helper()
 	requireQuotaShell(t)
@@ -41,8 +39,6 @@ func writeQuotaAXI(t *testing.T, stdout string) string {
 	return path
 }
 
-// writeQuotaAXIFail installs a fake quota-axi that exits non-zero with the
-// given stderr, the stand-in for a missing or logged-out CLI.
 func writeQuotaAXIFail(t *testing.T) string {
 	t.Helper()
 	requireQuotaShell(t)
@@ -54,8 +50,6 @@ func writeQuotaAXIFail(t *testing.T) string {
 	return path
 }
 
-// claudeThenCodexSnapshot is a schema-5 snapshot where codex has more
-// spendPriority headroom than claude, so the selector must put codex first.
 const claudeThenCodexSnapshot = `{"schemaVersion":5,"providers":[
  {"provider":"claude","quotaSemantics":{"status":"known","effectiveAvailability":[
    {"scope":"all_models","status":"known","effectivePercentRemaining":40,
@@ -258,9 +252,6 @@ func TestApplyQuotaRoutingRecord(t *testing.T) {
 	}
 }
 
-// TestNewConfiguredAgent_QuotaRoutingReordersTheChain is the run-setup seam
-// test: with the feature on, the built fallback chain starts on the
-// quota-selected agent, and the returned record is the enabled choice.
 func TestNewConfiguredAgent_QuotaRoutingReordersTheChain(t *testing.T) {
 	cfg := quotaRoutingConfig(writeQuotaAXI(t, claudeThenCodexSnapshot))
 	ag, record, err := newConfiguredAgent(context.Background(), cfg, t.TempDir(), fakeLookPath, runenv.Overlay{}, nil)
@@ -309,10 +300,6 @@ func TestNewConfiguredAgent_QuotaRoutingBrokenQuotaAXIKeepsConfiguredHead(t *tes
 	}
 }
 
-// TestNewConfiguredAgent_StoredRecordRecoveryReorders proves the recovery
-// path: a supplied record reorders the chain WITHOUT executing quota-axi, so
-// a resumed run keeps its original choice rather than re-selecting against a
-// newer snapshot.
 func TestNewConfiguredAgent_StoredRecordRecoveryReorders(t *testing.T) {
 	cfg := quotaRoutingConfig(writeQuotaAXIFail(t)) // must never be executed
 	record := quotarouting.NewRecord(true,

@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// newRemoteRewrittenFixture models issue #652: a terminal run successfully
-// pushed its pipeline head, the local gate still carries that head, and then
-// someone outside the pipeline force-pushed an unrelated history over the
-// configured push target. It returns the rewritten live head.
 func newRemoteRewrittenFixture(t *testing.T) (*syncFixture, string) {
 	t.Helper()
 	f := newSyncFixture(t)
@@ -367,10 +363,6 @@ func TestRecoverRewrittenRemoteRefusesWhenNewerRunTakesBranchBeforeRebind(t *tes
 	assertRewrittenBindingUntouched(t, f)
 }
 
-// TestRecoverOnPushedRunSucceedsOnlyForCommittedRebindOrVerifiedBinding walks
-// the fresh states a terminal run with a push binding can reach and pins the
-// success allowlist: Recovered is true only when the rewrite rebind committed
-// or a fresh live check proved the binding already equals the live head.
 func TestRecoverOnPushedRunSucceedsOnlyForCommittedRebindOrVerifiedBinding(t *testing.T) {
 	t.Parallel()
 

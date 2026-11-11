@@ -8,19 +8,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// pathInstructionBlock is one trusted rule that matched the change, together
-// with the files it matched. The reviewer reads the scope and the rule as one
-// unit, so no block can be mistaken for a repository-wide instruction.
 type pathInstructionBlock struct {
 	Path         string
 	Instructions string
 	Files        []string
 }
 
-// pathInstructionMatches is the outcome of selecting trusted rules for a run.
-// The non-matching and dropped sets exist so the step can say which rules it
-// applied and which it did not; a rule that matched nothing and a rule that was
-// discarded must not look the same in the log.
 type pathInstructionMatches struct {
 	Blocks       []pathInstructionBlock
 	UnmatchedIDs []string
@@ -28,9 +21,6 @@ type pathInstructionMatches struct {
 	UnusableIDs  []string
 }
 
-// reviewPathsAndInstructions settles coverage and guidance together. Matching
-// uses the complete diff; only the trusted default branch can exclude a path
-// claimed by a rule. The rendered blocks name exactly their reviewable files.
 func reviewPathsAndInstructions(changed []string, cfg *config.Config, log func(string)) ([]string, string) {
 	sources := cfg.Review.PathInstructionSources()
 	matches := make([]pathInstructionMatches, len(sources))
@@ -80,20 +70,6 @@ func reviewPathsAndInstructions(changed []string, cfg *config.Config, log func(s
 	return reviewable, instructions
 }
 
-// matchPathInstructions selects the trusted rules whose glob matches at least
-// one changed path, in config order.
-//
-// changed is the COMPLETE changed-file set, never the ignore-filtered subset:
-// ignore_patterns comes from the pushed branch, so filtering here would let a
-// contributor delete a maintainer's rule from the review of their own branch by
-// adding that rule's glob to their ignore list. Which files the reviewer is
-// asked to look at is settled by reviewPathsAndInstructions.
-//
-// Globs follow the same rules as ignore_patterns (matchIgnorePattern), so a
-// maintainer has one path-matching model to learn. Two entries with the same
-// path and the same instructions collapse to one block; the same instruction
-// text under two different globs stays two blocks, because each block states
-// the scope it was selected for.
 func matchPathInstructions(changed []string, rules []config.PathInstruction) pathInstructionMatches {
 	var out pathInstructionMatches
 	if len(rules) == 0 {
@@ -127,7 +103,6 @@ func matchPathInstructions(changed []string, rules []config.PathInstruction) pat
 	return out
 }
 
-// pathInstructionID names an entry in a log line when its path is unusable.
 func pathInstructionID(path string) string {
 	if trimmed := strings.TrimSpace(path); trimmed != "" {
 		return trimmed
@@ -145,10 +120,6 @@ func matchingChangedPaths(changed []string, pattern string) []string {
 	return files
 }
 
-// matchedFilesSummary renders one block's file list, bounded by
-// config.ReviewPathInstructionsMaxFilesBytes so a broad glob cannot push the
-// section past the size the config was validated against. Truncation keeps
-// git's order and states how many files it left out.
 func matchedFilesSummary(files []string) string {
 	const sep = ", "
 	var rendered []string
@@ -190,12 +161,6 @@ func promptPath(path string) string {
 	return path
 }
 
-// reviewPathInstructionsSection renders one source's matched blocks for the
-// review prompt under that source's heading. No configured rules, or none whose
-// glob matches, returns the empty string, which leaves the prompt byte for byte
-// what it is without this setting. The heading and labels come from
-// internal/config so the size the config was validated against measures this
-// exact output.
 func reviewPathInstructionsSection(heading string, matches pathInstructionMatches) string {
 	if len(matches.Blocks) == 0 {
 		return ""
@@ -211,9 +176,6 @@ func reviewPathInstructionsSection(heading string, matches pathInstructionMatche
 	return "\n\n" + heading + "\n" + strings.Join(rendered, "\n\n")
 }
 
-// logPathInstructions reports which rules of one source steered this review
-// and which did not, so a rule that never fires is visible in the step log
-// instead of looking identical to a rule that has no effect.
 func logPathInstructions(log func(string), source string, matches pathInstructionMatches) {
 	if log == nil {
 		return

@@ -19,7 +19,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// logTailLines is how many trailing log lines `axi logs` shows without --full.
 const logTailLines = 40
 
 func newAxiStatusCmd() *cobra.Command {
@@ -43,8 +42,6 @@ func newAxiStatusCmd() *cobra.Command {
 	return cmd
 }
 
-// runAxiStatus renders the run status for the current branch or an explicit
-// --run selection. It is a read-only query: it does not emit telemetry.
 func runAxiStatus(cmd *cobra.Command, runID string) error {
 	env, err := openAxiQueryEnv(runID)
 	if err != nil {
@@ -122,11 +119,6 @@ func runAxiStatus(cmd *cobra.Command, runID string) error {
 	return nil
 }
 
-// emitNoRunForCaller answers `axi status` when the caller has no run of its
-// own: the current branch has never had one, or the caller has a detached HEAD.
-// It never substitutes some other branch's run. It names the branch it looked
-// for, lists the repository's recent runs so a deliberate
-// `--run <id>` inspection is one step away, and provides next-step help.
 func emitNoRunForCaller(cmd *cobra.Command, env *axiEnv, branch string, runs []*db.Run) error {
 	branchDisplay := branch
 	if branchDisplay == "" {
@@ -215,15 +207,9 @@ func newAxiLogsCmd() *cobra.Command {
 	return cmd
 }
 
-// validLogStepsHelp names every step whose log this command can read. A
-// repository gate keeps its own step log, and the truncation marker a failing
-// command gate emits tells the operator to read it with exactly this command,
-// so the gate names have to be accepted here.
 const validLogStepsHelp = "Valid steps: intent, rebase, review, test, document, lint, push, pr, ci, " +
 	"or a repository gate step name as shown in `no-mistakes axi status` (for example gate.test.mutation-budget)"
 
-// runAxiLogs renders a step log. It is a read-only query: it does not emit
-// telemetry.
 func runAxiLogs(cmd *cobra.Command, step, runID string, full bool) error {
 	step = strings.TrimSpace(step)
 	if step == "" {
@@ -316,8 +302,6 @@ func runAxiLogs(cmd *cobra.Command, step, runID string, full bool) error {
 	return nil
 }
 
-// logRows wraps log lines as single-column rows so the encoder renders them as
-// a block array (one line per row) rather than a single inline row.
 func logRows(lines []string) []logRow {
 	rows := make([]logRow, len(lines))
 	for i, l := range lines {
@@ -326,18 +310,6 @@ func logRows(lines []string) []logRow {
 	return rows
 }
 
-// resolveRun picks the run to inspect: an explicit ID, else the caller's
-// current-branch active run, else that branch's most recent run. It returns a
-// nil run when the caller's branch has no run of its own, and when the caller
-// has a detached HEAD - a detached HEAD owns no branch, so no run can be
-// attributed to it.
-//
-// It deliberately does NOT fall back to the repository's active or most recent
-// run on some other branch. One clone commonly has several worktrees sitting on
-// different branches, and that fallback handed every branch without a run of
-// its own another branch's run under exactly the key a run of the caller's own
-// gets - so a terminal run read as though the caller's own work had failed.
-// Inspecting a run that is not this branch's is what `--run <id>` is for.
 func resolveRun(env *axiEnv, runID, branch string) (*db.Run, []*db.Run, error) {
 	if runID != "" {
 		run, err := env.d.GetRun(runID)
@@ -390,7 +362,6 @@ func splitLogLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
-// parseAddFinding decodes a user-authored finding from a JSON object string.
 func parseAddFinding(raw string) (types.Finding, error) {
 	var f types.Finding
 	if err := json.Unmarshal([]byte(raw), &f); err != nil {
@@ -408,8 +379,6 @@ func parseAddFinding(raw string) (types.Finding, error) {
 	return f, nil
 }
 
-// progressPrinter emits step and run status transitions to stderr so a human
-// or agent watching the command sees liveness without parsing stdout.
 type progressPrinter struct {
 	w         io.Writer
 	seen      map[string]string

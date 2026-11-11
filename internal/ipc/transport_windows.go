@@ -92,9 +92,6 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// tokenListener wraps a net.Listener to verify auth tokens on accepted connections.
-// Auth is performed in per-connection goroutines so that slow or invalid
-// connections do not block acceptance of other clients.
 type tokenListener struct {
 	net.Listener
 	token     string
@@ -178,8 +175,6 @@ func (tl *tokenListener) Close() error {
 	return tl.Listener.Close()
 }
 
-// bufferedConn wraps a net.Conn so that bytes already buffered by a
-// bufio.Reader are available for subsequent reads.
 type bufferedConn struct {
 	net.Conn
 	r *bufio.Reader
@@ -235,5 +230,4 @@ func processAlive(pid int) bool {
 	return true
 }
 
-// CheckEndpointPath always succeeds: the Windows endpoint is a regular file.
 func CheckEndpointPath(endpoint string) error { return nil }

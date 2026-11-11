@@ -9,8 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// optOutAgent builds an adapter with the trusted opt-out ON, mirroring how the
-// daemon constructs gate agents when disable_project_settings=true.
 func optOutAgent(t *testing.T, name types.AgentName, extraArgs []string) Agent {
 	t.Helper()
 	a, err := NewWithOptions(name, string(name), extraArgs, Options{DisableProjectSettings: true})
@@ -20,11 +18,6 @@ func optOutAgent(t *testing.T, name types.AgentName, extraArgs []string) Agent {
 	return a
 }
 
-// TestNeutralizesGateInstructions_OnlyVerifiedHarnessesUnderOptOut is the core
-// fail-closed contract: under the opt-out, only codex, claude, and pi (whose
-// suppression knobs are empirically verified) neutralize the target repo's
-// project agent settings/instructions; every other harness reports false and is
-// refused rather than launched with project instructions loaded.
 func TestNeutralizesGateInstructions_OnlyVerifiedHarnessesUnderOptOut(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCodex, types.AgentClaude, types.AgentPi} {
 		if !NeutralizesGateInstructions(optOutAgent(t, name, nil)) {
@@ -52,9 +45,6 @@ func TestNeutralizesGateInstructions_OnlyVerifiedHarnessesUnderOptOut(t *testing
 	}
 }
 
-// TestNeutralizesGateInstructions_FalseWithoutOptOut proves codex, claude, and pi
-// do NOT claim neutralization when the repo did not opt out - the gate only consults
-// this under the opt-out, but the value must be honest.
 func TestNeutralizesGateInstructions_FalseWithoutOptOut(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCodex, types.AgentClaude, types.AgentPi, types.AgentGrok} {
 		a, err := NewWithOptions(name, string(name), nil, Options{}) // no opt-out
@@ -67,8 +57,6 @@ func TestNeutralizesGateInstructions_FalseWithoutOptOut(t *testing.T) {
 	}
 }
 
-// TestEnsureGateNeutralized_RefusesUnsupportedUnderOptOut proves the gate fails
-// closed for an unsupported harness and admits codex, claude, and pi.
 func TestEnsureGateNeutralized_RefusesUnsupportedUnderOptOut(t *testing.T) {
 	if err := EnsureGateNeutralized(optOutAgent(t, types.AgentCodex, nil)); err != nil {
 		t.Errorf("codex must pass the gate under opt-out: %v", err)
@@ -108,10 +96,6 @@ func TestEnsureGateNeutralized_RefusesUnsupportedUnderOptOut(t *testing.T) {
 	}
 }
 
-// TestNeutralizesGateInstructions_ThroughProductionWrapping mirrors how the
-// daemon builds the run agent (WithSteering per adapter, then NewFallback) and
-// proves the capability propagates through both wrappers and fails closed if ANY
-// fallback member is unverified.
 func TestNeutralizesGateInstructions_ThroughProductionWrapping(t *testing.T) {
 	if !NeutralizesGateInstructions(WithSteering(optOutAgent(t, types.AgentCodex, nil), "/evidence")) {
 		t.Error("WithSteering(codex) must remain neutralized under opt-out")
@@ -135,9 +119,6 @@ func TestNeutralizesGateInstructions_ThroughProductionWrapping(t *testing.T) {
 	}
 }
 
-// TestNeutralizesGateInstructions_HonestOnEffectiveOverride proves the capability
-// is honest about the EFFECTIVE knob value: preserving operator overrides are
-// admitted, while available defeating overrides fail closed.
 func TestNeutralizesGateInstructions_HonestOnEffectiveOverride(t *testing.T) {
 	// codex: project_doc_max_bytes=0 preserves suppression -> admitted.
 	if !NeutralizesGateInstructions(optOutAgent(t, types.AgentCodex, []string{"-c", "project_doc_max_bytes=0"})) {
@@ -170,9 +151,6 @@ func TestNeutralizesGateInstructions_HonestOnEffectiveOverride(t *testing.T) {
 	}
 }
 
-// acpOptOutAgent builds an acpx adapter with the trusted opt-out ON. It passes
-// "acpx" as the binary (the real acpx shim name) rather than the agent name so
-// the target and raw-command resolution match production.
 func acpOptOutAgent(t *testing.T, name types.AgentName, overrides map[string]string) *acpxAgent {
 	t.Helper()
 	a, err := NewWithOptions(name, "acpx", nil, Options{
@@ -189,12 +167,6 @@ func acpOptOutAgent(t *testing.T, name types.AgentName, overrides map[string]str
 	return acpx
 }
 
-// TestNeutralizesGateInstructions_OMPTargetUnderOptOut is the omp gate-agent
-// admission contract: acp:omp neutralizes (and the gate admits it) only under
-// the opt-out and only on its default launch. A non-omp acp target, the same
-// target without the opt-out, and an operator raw-command override all fail
-// closed - a custom command is opaque, so we cannot prove it applies the
-// suppression overlay and flags.
 func TestNeutralizesGateInstructions_OMPTargetUnderOptOut(t *testing.T) {
 	omp := acpOptOutAgent(t, types.AgentName("acp:omp"), nil)
 	if !NeutralizesGateInstructions(omp) {
@@ -232,12 +204,6 @@ func TestNeutralizesGateInstructions_OMPTargetUnderOptOut(t *testing.T) {
 	}
 }
 
-// TestOMPGateNeutralization_AppliesSuppressionOverlayAndFlags proves the wiring,
-// not just the capability bool: a neutralized acp:omp launch replaces the
-// built-in omp target with an `omp acp` command that carries the context-file
-// suppression overlay (via --config) and the rule/skill/extension flags, and the
-// overlay it writes disables every omp context-file discovery provider. Close
-// removes the overlay file.
 func TestOMPGateNeutralization_AppliesSuppressionOverlayAndFlags(t *testing.T) {
 	omp := acpOptOutAgent(t, types.AgentName("acp:omp"), nil)
 
@@ -305,11 +271,6 @@ func TestOMPGateNeutralization_AppliesSuppressionOverlayAndFlags(t *testing.T) {
 	}
 }
 
-// TestOverlayPathShellSafe pins the cross-platform path rule that keeps
-// windows-core green: a Windows temp path (backslashes, drive colon) composes
-// safely into acpx's --agent command, while whitespace and quotes are unsafe on
-// every OS and a backslash is anomalous - and refused - off Windows. goos is a
-// parameter so both branches are proven from any host.
 func TestOverlayPathShellSafe(t *testing.T) {
 	cases := []struct {
 		name string

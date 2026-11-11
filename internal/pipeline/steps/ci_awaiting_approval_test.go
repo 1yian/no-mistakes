@@ -7,9 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// A workflow held for maintainer approval has run nothing and will run nothing
-// until a human acts, so the monitor must name the hold instead of reporting
-// checks that are running.
 func TestCIWaitingMessage_NamesTheMaintainerApprovalHold(t *testing.T) {
 	t.Parallel()
 
@@ -49,8 +46,6 @@ func TestCIWaitingMessage_NamesTheMaintainerApprovalHold(t *testing.T) {
 	}
 }
 
-// The hold is a wait, not a failure: it never reaches the failing set that the
-// CI step escalates to a fix round.
 func TestHeldCheckIsNeitherFailingNorTerminal(t *testing.T) {
 	t.Parallel()
 

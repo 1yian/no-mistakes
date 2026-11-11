@@ -11,11 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestTerminalPRRunDisappearsFromActiveListing reproduces the operator-visible
-// defect with a real CLI and an isolated daemon/home. A terminal PR observation
-// is the initiating trigger. The normal executor's immediate follow-up status
-// write usually masks the defect, so this fixture stops at the durable
-// observation boundary where an interruption used to leave status=running.
 func TestTerminalPRRunDisappearsFromActiveListing(t *testing.T) {
 	for _, state := range []string{"merged", "closed"} {
 		t.Run(state, func(t *testing.T) {

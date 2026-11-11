@@ -10,33 +10,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/reviewqa"
 )
 
-// Bounds on the published review conversation. The PR body competes for a
-// host-specific budget (Azure DevOps caps a whole description at 4000
-// characters), and the conversation is a RECORD, not a gate: losing its tail
-// to a tight budget is acceptable, losing the Pipeline attestation is not. So
-// it is rendered inside the Pipeline section as an ordinary `### ` group, which
-// the existing budget logic can drop whole, and it is bounded here as well so
-// a long conversation cannot be the reason a body needs truncating.
 const (
 	maxPublishedConversationEntries = 12
 	maxPublishedConversationChars   = 240
 )
 
-// buildReviewConversationSection renders the questions this run's reviewer
-// asked, the answers it received, and who gave them.
-//
-// The answered half comes from the durable per-branch store rather than the
-// run's evidence files, because that is the record that survives: the evidence
-// directory is reaped, and a question answered in an earlier run of the same
-// branch is still part of this change's conversation. Withdrawn questions come
-// from the run's own conversation files, since a withdrawal is never persisted
-// (it settles nothing and needs no answer) - they are listed so a reader can
-// tell "the reviewer asked and then answered it itself" from "nobody asked".
-//
-// An unanswered question can still appear, and must: the review step never
-// completes on its own while one is open, but a human may approve the gate over
-// it, and that is exactly the case a reader of the PR needs to see. It is
-// listed as unanswered rather than quietly omitted.
 func buildReviewConversationSection(sctx *pipeline.StepContext) string {
 	// Keyed on the setting, not on this run's evidence directory: a repository
 	// that turned the conversation off must publish the body it published
@@ -123,10 +101,6 @@ func publishedRunAnswers(sctx *pipeline.StepContext) []db.ReviewAnswer {
 	return ordered
 }
 
-// publishedRunConversation reads this run's own conversation files, which is
-// where a withdrawal and an unanswered question live. Neither is persisted in
-// the branch store: a withdrawal settles nothing and needs no answer, and an
-// unanswered question has no answer to record.
 func publishedRunConversation(sctx *pipeline.StepContext) reviewqa.Conversation {
 	dir := reviewConversationDir(sctx)
 	if dir == "" {
@@ -139,13 +113,6 @@ func publishedRunConversation(sctx *pipeline.StepContext) reviewqa.Conversation 
 	return conv
 }
 
-// publishedConversationText flattens and bounds one quoted line so a long
-// question or answer cannot dominate the body, and so a newline cannot break
-// out of the list item it belongs to.
-// It counts RUNES, not bytes, and so does its disclosure: a question or answer
-// is ordinary prose, so a byte cut falls inside a multi-byte rune on nothing
-// more exotic than a typographic quote or an em dash and publishes invalid
-// UTF-8. This is the same shape as internal/cli's truncate.
 func publishedConversationText(s string) string {
 	s = sanitizePromptText(s)
 	runes := []rune(s)

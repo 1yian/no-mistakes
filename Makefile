@@ -13,9 +13,10 @@ LDFLAGS := -X github.com/kunchenguid/no-mistakes/internal/buildinfo.Version=$(VE
            -X github.com/kunchenguid/no-mistakes/internal/buildinfo.TelemetryHost=$(UMAMI_HOST) \
            -X github.com/kunchenguid/no-mistakes/internal/buildinfo.TelemetryWebsiteID=$(UMAMI_WEBSITE_ID)
 
-.PHONY: build dist install test e2e e2e-record lint fmt clean docs docs-build docs-preview demo skill skill-check winres winres-check
+.PHONY: build dist install test e2e e2e-record lint fmt clean docs docs-build docs-preview demo skill skill-check winres winres-check nodocs nodocs-check
 
 DIST_DIR ?= dist
+PYTHON ?= python3
 INSTALL_BIN := $(shell go env GOPATH)/bin/no-mistakes
 
 build:
@@ -96,7 +97,14 @@ winres:
 winres-check:
 	go run ./cmd/genwinres --check
 
-lint: skill-check winres-check
+nodocs:
+	go run ./cmd/nodocs -w
+
+nodocs-check:
+	go run ./cmd/nodocs
+	$(PYTHON) scripts/check-no-docstrings.py
+
+lint: skill-check winres-check nodocs-check
 	go vet ./...
 
 fmt:

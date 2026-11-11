@@ -7,38 +7,14 @@ import (
 )
 
 const (
-	// LifecyclePhaseStart marks native subprocess startup.
-	LifecyclePhaseStart = "start"
-	// LifecyclePhaseExit marks native subprocess exit.
-	LifecyclePhaseExit = "exit"
-	// LifecyclePhaseRetry marks a transient retry before the next subprocess attempt.
-	LifecyclePhaseRetry = "retry"
-	// LifecyclePhaseFallback marks any fallback before a fresh agent attempt,
-	// including provider, session-resume, and structured-output fallbacks.
-	LifecyclePhaseFallback = "fallback"
-	// LifecyclePhaseQuotaSwitch marks the quota-aware mid-run switch: the
-	// active agent failed on a recognised quota exhaustion and the run moves
-	// to the next agent in the chosen order with a fresh session. The
-	// executor records it on the run's quota-routing record; it is not a
-	// plain fallback because it does not prove the next agent can start, only
-	// that this one spent its quota.
+	LifecyclePhaseStart       = "start"
+	LifecyclePhaseExit        = "exit"
+	LifecyclePhaseRetry       = "retry"
+	LifecyclePhaseFallback    = "fallback"
 	LifecyclePhaseQuotaSwitch = "quota_switch"
-	// LifecyclePhaseActivity marks observed liveness of a running native
-	// subprocess: bytes arrived on its stdout or stderr.
-	//
-	// Start and exit alone cannot tell a wedged agent from a working one. Every
-	// adapter forwards only assistant prose to OnChunk, and an agent spends most
-	// of a long turn emitting tool events instead, so a healthy multi-minute fix
-	// round is indistinguishable from a process that is blocked before its first
-	// byte. Together with streamed assistant text, this phase supplies the
-	// measured output evidence used by invocation-timeout diagnostics.
-	LifecyclePhaseActivity = "activity"
+	LifecyclePhaseActivity    = "activity"
 )
 
-// nativeAgentActivityInterval throttles LifecyclePhaseActivity so a chatty
-// subprocess cannot flood the observer. It is a liveness signal, not a log: the
-// first byte of a quiet period is reported immediately and further bytes are
-// coalesced until the interval elapses.
 const nativeAgentActivityInterval = 5 * time.Second
 
 func emitAgentStarted(opts RunOpts, name string, pid int) {
@@ -63,10 +39,6 @@ func emitAgentExited(opts RunOpts, name string, pid int, err error) {
 	})
 }
 
-// nativeAgentActivityObserver returns the throttled liveness callback handed to
-// startNativeAgentCommand, or nil when nobody is observing this invocation.
-// Returning nil keeps the read path allocation-free for callers that do not
-// care (tests, eval replay).
 func nativeAgentActivityObserver(opts RunOpts, name string) func() {
 	if opts.OnLifecycle == nil {
 		return nil

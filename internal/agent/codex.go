@@ -17,37 +17,19 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// codexAgent spawns the codex CLI for each invocation.
 type codexAgent struct {
 	bin       string
 	extraArgs []string
 	subprocessContext
-	// disableProjectSettings is the resolved, trusted-only opt-out. When true,
-	// buildArgs suppresses codex's project-level settings/instructions surface.
 	disableProjectSettings bool
 }
 
 func (a *codexAgent) Name() string { return "codex" }
 
-// SupportsSessionResume reports codex's native durable-session capability:
-// `codex exec --json` emits thread.started with a thread_id, and
-// `codex exec resume <id> -` continues that thread with the prompt on stdin.
 func (a *codexAgent) SupportsSessionResume() bool { return true }
 
 func (a *codexAgent) ReportsAgentAttempts() bool { return true }
 
-// NeutralizesGateInstructions reports whether codex is currently launched with
-// the target repo's project-level settings/instructions suppressed. It is
-// meaningful only under the opt-out (disableProjectSettings): the gate only
-// consults it when the repo opted out. It is honest about the EFFECTIVE knob
-// value, not merely its presence - codex neutralizes iff the effective codex
-// `project_doc_max_bytes` is 0 (buildArgs appends `=0`, or the operator pinned
-// `=0` themselves). An operator override that re-enables the project doc
-// (`project_doc_max_bytes` > 0) defeats neutralization, so this returns false
-// and the gate fails closed rather than running with the captain-identity hazard
-// re-enabled. Verified empirically: with the project doc loaded codex adopts the
-// AGENTS.md identity; with project_doc_max_bytes=0 (plus --ignore-rules) it does
-// not.
 func (a *codexAgent) NeutralizesGateInstructions() bool {
 	return a.disableProjectSettings && codexEffectiveProjectDocSuppressed(a.extraArgs)
 }
@@ -197,14 +179,6 @@ func (a *codexAgent) runOnce(ctx context.Context, opts RunOpts) (*Result, error)
 
 func (a *codexAgent) Close() error { return nil }
 
-// buildArgs constructs the codex CLI arguments. User-supplied extraArgs are
-// inserted between "exec" and the stdin prompt marker so user flags (e.g. -m, --sandbox)
-// take effect. If the user declared their own execution-mode flag, the
-// default --dangerously-bypass-approvals-and-sandbox is not added.
-// A non-empty resumeID routes through `codex exec resume <id> -`,
-// which exposes a narrower flag surface than `codex exec` (no --color, no
-// -s/--sandbox as of codex 0.144): unsupported user extraArgs make the
-// invocation fail fast and the caller's cold fallback preserves correctness.
 func (a *codexAgent) buildArgs(schemaPath, resumeID string) []string {
 	args := make([]string, 0, len(a.extraArgs)+11)
 	args = append(args, "exec")
@@ -255,11 +229,6 @@ func (a *codexAgent) buildArgs(schemaPath, resumeID string) []string {
 	return args
 }
 
-// codexEffectiveProjectDocSuppressed reports whether the EFFECTIVE codex
-// project_doc_max_bytes is 0 (AGENTS.md fully suppressed): true when the
-// operator did not pin the value (buildArgs appends `=0`) or pinned it to 0
-// themselves, and false when the operator pinned a non-zero (or unparseable)
-// value that would re-enable the project doc.
 func codexEffectiveProjectDocSuppressed(extraArgs []string) bool {
 	value, pinned := codexUserProjectDocMaxBytes(extraArgs)
 	if !pinned {
@@ -269,17 +238,11 @@ func codexEffectiveProjectDocSuppressed(extraArgs []string) bool {
 	return err == nil && n == 0
 }
 
-// codexUserSetProjectDocMaxBytes reports whether extraArgs pin
-// project_doc_max_bytes at all (so buildArgs does not double-set it).
 func codexUserSetProjectDocMaxBytes(extraArgs []string) bool {
 	_, pinned := codexUserProjectDocMaxBytes(extraArgs)
 	return pinned
 }
 
-// codexUserProjectDocMaxBytes returns the operator-pinned project_doc_max_bytes
-// value (the last occurrence wins) and whether it was pinned at all. It handles
-// both the inline `-c project_doc_max_bytes=<v>` token and the split
-// `-c <key=value>` form.
 func codexUserProjectDocMaxBytes(extraArgs []string) (string, bool) {
 	const key = "project_doc_max_bytes"
 	value := ""
@@ -303,7 +266,6 @@ func codexUserProjectDocMaxBytes(extraArgs []string) (string, bool) {
 	return value, pinned
 }
 
-// codexArgsContain reports whether extraArgs already include the exact flag.
 func codexArgsContain(extraArgs []string, flag string) bool {
 	for _, arg := range extraArgs {
 		if arg == flag {
@@ -313,8 +275,6 @@ func codexArgsContain(extraArgs []string, flag string) bool {
 	return false
 }
 
-// codexUserSetExecutionMode reports whether extraArgs already declare an
-// execution/sandbox flag that conflicts with the default bypass.
 func codexUserSetExecutionMode(extraArgs []string) bool {
 	for _, arg := range extraArgs {
 		switch {
@@ -330,7 +290,6 @@ func codexUserSetExecutionMode(extraArgs []string) bool {
 	return false
 }
 
-// codexEvent is the top-level JSONL event from codex CLI.
 type codexEvent struct {
 	Type     string      `json:"type"`
 	Item     *codexItem  `json:"item,omitempty"`
@@ -356,13 +315,6 @@ type codexUsage struct {
 	ReasoningOutputToks int `json:"reasoning_output_tokens"`
 }
 
-// parseCodexEvents reads JSONL from the reader and dispatches events.
-// It captures the last agent_message text, the durable thread identity, and
-// accumulates token usage.
-// metrics, when non-nil, accumulates the bounded per-invocation activity
-// evidence (round-trips, tool calls + categories, subprocess wait time). It is
-// clocked by time.Now as events arrive, so a tool item's started->completed gap
-// is its real subprocess wall time.
 func parseCodexEvents(ctx context.Context, r io.Reader, onChunk func(string), usage *TokenUsage, lastMessage *string, resultReceived *bool, codexErr *string, threadID *string, metrics *codexMetricsAccumulator) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024*1024)
@@ -438,12 +390,6 @@ func codexOutputSchema(schema json.RawMessage) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-// codexFillNullableRequiredFields turns properties that were optional in the
-// caller's schema but became required by addAdditionalPropertiesFalse into
-// explicit nulls when Codex omitted them. It deliberately leaves genuinely
-// required properties absent: the normal structured-output validator must still
-// reject those responses. Invalid or non-JSON text is returned unchanged so
-// the shared parser remains responsible for reporting its ordinary error.
 func codexFillNullableRequiredFields(text string, schema json.RawMessage) string {
 	if len(schema) == 0 || strings.TrimSpace(text) == "" {
 		return text
@@ -507,12 +453,6 @@ func codexFillNullableFields(value, schema any) bool {
 	return changed
 }
 
-// addAdditionalPropertiesFalse rewrites a parsed JSON schema in place into the
-// shape a strict function schema requires: every object level carries
-// additionalProperties: false and a required list naming every property, and a
-// property the caller left optional becomes nullable instead of omittable.
-// This normalizes Codex's output schema file; Pi uses piStrictToolSchema to
-// keep concrete property types for compatibility with legacy tool validation.
 func addAdditionalPropertiesFalse(value any) {
 	schema, ok := value.(map[string]any)
 	if !ok {

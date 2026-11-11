@@ -41,14 +41,6 @@ func TestResolveWorktreeRoot(t *testing.T) {
 	}
 }
 
-// The placements the config would accept but that defeat the flag: inside the
-// directory no-mistakes already owns, inside the repository being initialized,
-// or a path that is not a directory at all.
-//
-// Every NM_HOME placement has to be refused here, not just the worktrees
-// subdirectory: the daemon refuses to start on any of them, and every command
-// starts the daemon, so printing such an entry would hand the operator a paste
-// that takes their whole CLI down.
 func TestResolveWorktreeRootRejectsUnusablePlacements(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	repoDir := setupTestRepo(t)
@@ -75,11 +67,6 @@ func TestResolveWorktreeRootRejectsUnusablePlacements(t *testing.T) {
 	}
 }
 
-// A root inside another checkout the config already names is refused here too:
-// every run placed there would leave that checkout with an untracked worktree
-// and block its branch synchronization, and the daemon refuses to start on it -
-// so printing the entry would hand the operator a paste that takes their CLI
-// down.
 func TestResolveWorktreeRootRefusesRootInsideAnotherConfiguredCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -107,10 +94,6 @@ func TestResolveWorktreeRootRefusesRootInsideAnotherConfiguredCheckout(t *testin
 	}
 }
 
-// A registered repository is a checkout even when it has no worktree_roots entry
-// of its own, and the daemon refuses to start on a root inside one. init must
-// judge against the same set, or the entry it prints takes the whole CLI down the
-// moment it is pasted.
 func TestResolveWorktreeRootRefusesRootInsideAnotherRegisteredCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -143,10 +126,6 @@ func TestResolveWorktreeRootRefusesRootInsideAnotherRegisteredCheckout(t *testin
 	}
 }
 
-// A root another checkout already claims is refused while the operator can
-// still pick another one: the loader rejects two checkouts sharing a root, and
-// the daemon refuses to start on a config it cannot load, so printing the entry
-// would hand them a paste that stops the daemon instead of placing anything.
 func TestResolveWorktreeRootRefusesRootClaimedByAnotherCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -179,12 +158,6 @@ func TestResolveWorktreeRootRefusesRootClaimedByAnotherCheckout(t *testing.T) {
 	}
 }
 
-// A checkout can be registered AROUND an existing worktree root, which reaches
-// the placement `init --worktree-root` refuses from the other direction: the root
-// is unchanged, but it is now inside a registered checkout. The daemon refuses to
-// start on that, and every command starts the daemon, so a plain `no-mistakes
-// init` would otherwise take the operator's whole CLI down at its next start,
-// naming a config entry they never touched.
 func TestInitRefusesToRegisterACheckoutHoldingAConfiguredWorktreeRoot(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -238,13 +211,6 @@ func TestInitRefusesToRegisterACheckoutHoldingAConfiguredWorktreeRoot(t *testing
 	}
 }
 
-// A config that does not load cannot be judged - the entries to judge against are
-// the ones that did not load - so skipping the cross-check registers the very
-// placement it exists to refuse. The sequence: an entry places another checkout's
-// runs inside this one AND a second entry has a relative root, so LoadGlobal
-// fails while a daemon started before the edit is still alive. Registering here
-// and repairing the relative value later is a daemon that refuses to start,
-// naming an entry the operator never touched.
 func TestInitRefusesToRegisterWhileTheGlobalConfigDoesNotLoad(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -335,13 +301,6 @@ func TestPrintWorktreeRootGuidanceReportsExistingEntry(t *testing.T) {
 	}
 }
 
-// TestPrintWorktreeRootGuidanceMergesIntoAnExistingBlock is the second
-// repository an operator places somewhere: the config already has a
-// worktree_roots block, so an instruction to add another one produces a config
-// that no longer loads at all - a duplicate top-level YAML key - and a daemon
-// that refuses to start until it is repaired by hand. The guidance must describe
-// a merge, and this asserts the merge it describes actually loads while the
-// duplicate it must not describe does not.
 func TestPrintWorktreeRootGuidanceMergesIntoAnExistingBlock(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -389,12 +348,6 @@ func TestPrintWorktreeRootGuidanceMergesIntoAnExistingBlock(t *testing.T) {
 	}
 }
 
-// TestPrintWorktreeRootGuidanceReplacesThisCheckoutsEntry is re-pointing: the
-// operator placed this checkout's runs somewhere, then runs init again with a
-// different directory. Its key is already in the block, so the edit is a
-// replacement - adding a second entry for the same key is the duplicate-key
-// failure one level down from a second worktree_roots:, and it stops the daemon
-// just as thoroughly.
 func TestPrintWorktreeRootGuidanceReplacesThisCheckoutsEntry(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -439,7 +392,6 @@ func TestPrintWorktreeRootGuidanceReplacesThisCheckoutsEntry(t *testing.T) {
 		t.Error("a second entry for the same checkout loaded; the guidance's replace shape would then be a matter of taste")
 	}
 
-	// Re-pointing to the directory already configured stays a no-op report.
 	var same bytes.Buffer
 	printWorktreeRootGuidance(&same, p, checkout, oldRoot)
 	if !strings.Contains(same.String(), "already configured") {
@@ -447,9 +399,6 @@ func TestPrintWorktreeRootGuidanceReplacesThisCheckoutsEntry(t *testing.T) {
 	}
 }
 
-// A key spelled differently from the checkout path still names the same checkout,
-// and the line the operator is told to replace has to be the line their file
-// contains - not a normalized rewrite of it.
 func TestPrintWorktreeRootGuidanceNamesTheEntryAsTheConfigSpellsIt(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -477,13 +426,6 @@ func TestPrintWorktreeRootGuidanceNamesTheEntryAsTheConfigSpellsIt(t *testing.T)
 	}
 }
 
-// TestPrintWorktreeRootGuidanceMatchesTheBlocksIndentation covers a config.yaml
-// indented with four spaces, which is a hand-maintained file's prerogative. The
-// entries of a block mapping all sit at one column, so an entry line added at
-// another one leaves a document YAML rejects outright - the daemon then refuses to
-// start and every command goes with it. The line named for replacement has the
-// same requirement in a milder form: at the wrong indentation it is not a line the
-// operator's file contains.
 func TestPrintWorktreeRootGuidanceMatchesTheBlocksIndentation(t *testing.T) {
 	dir := t.TempDir()
 	existingCheckout := filepath.Join(dir, "src", "repo1")
@@ -500,7 +442,6 @@ func TestPrintWorktreeRootGuidanceMatchesTheBlocksIndentation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A second repository placed somewhere: the entry is added under the block.
 	var out bytes.Buffer
 	printWorktreeRootGuidance(&out, p, checkout, root)
 	entry := indentedYAMLLine(t, out.String(), checkout+": "+root)
@@ -522,8 +463,6 @@ func TestPrintWorktreeRootGuidanceMatchesTheBlocksIndentation(t *testing.T) {
 		t.Error("an entry indented differently from its siblings loaded; matching the block would then be cosmetic")
 	}
 
-	// Re-pointing the checkout the block already has: the line named for
-	// replacement is the one the file contains.
 	var repoint bytes.Buffer
 	printWorktreeRootGuidance(&repoint, p, existingCheckout, root)
 	if named := indentedYAMLLine(t, repoint.String(), existingCheckout+": "+existingRoot); named != "    "+existingCheckout+": "+existingRoot {
@@ -539,8 +478,6 @@ func TestPrintWorktreeRootGuidanceMatchesTheBlocksIndentation(t *testing.T) {
 	}
 }
 
-// indentedYAMLLine returns the printed line whose content is want, with its
-// indentation intact and the terminal styling and display margin removed.
 func indentedYAMLLine(t *testing.T, rendered, want string) string {
 	t.Helper()
 	for _, raw := range strings.Split(ansiEscape.ReplaceAllString(rendered, ""), "\n") {
@@ -553,15 +490,6 @@ func indentedYAMLLine(t *testing.T, rendered, want string) string {
 	return ""
 }
 
-// TestPrintWorktreeRootGuidanceReplacesAKeyWithNoBlockToAddTo covers the shapes
-// that have the key but no block mapping to add an entry to: `worktree_roots: {}`,
-// an inline `worktree_roots: {<checkout>: <root>}`, and `worktree_roots:` with
-// nothing after it. An indented entry line after a flow mapping is not part of it,
-// and YAML rejects the whole document - the daemon then refuses to start and every
-// command goes with it, which is the same outcome as the duplicate key one shape
-// over. So the edit is to replace that line with the block form, and this asserts
-// that following the guidance literally produces a config that loads and places
-// every repository the old one did.
 func TestPrintWorktreeRootGuidanceReplacesAKeyWithNoBlockToAddTo(t *testing.T) {
 	dir := t.TempDir()
 	checkout := filepath.Join(dir, "src", "repo1")
@@ -626,10 +554,6 @@ func TestPrintWorktreeRootGuidanceReplacesAKeyWithNoBlockToAddTo(t *testing.T) {
 	}
 }
 
-// TestPrintWorktreeRootGuidanceRepointsAnInlineEntry is re-pointing a checkout
-// whose entry lives in a flow mapping: naming its ` <checkout>: <root>` line
-// would name a line the file does not contain, so the whole key is replaced with
-// the block form carrying the new value.
 func TestPrintWorktreeRootGuidanceRepointsAnInlineEntry(t *testing.T) {
 	dir := t.TempDir()
 	checkout := filepath.Join(dir, "src", "repo1")
@@ -665,9 +589,6 @@ func TestPrintWorktreeRootGuidanceRepointsAnInlineEntry(t *testing.T) {
 	}
 }
 
-// pastedWorktreeRootsBlock is the YAML an operator would paste from the guidance:
-// the block it prints, from its `worktree_roots:` line to the end of the output,
-// with the terminal styling and the display margin removed.
 func pastedWorktreeRootsBlock(t *testing.T, rendered string) string {
 	t.Helper()
 	var block []string
@@ -686,9 +607,6 @@ func pastedWorktreeRootsBlock(t *testing.T, rendered string) string {
 	return strings.Join(block, "\n") + "\n"
 }
 
-// containsYAMLLine reports whether the rendered guidance carries want as a line
-// of its own, which is what the operator would paste. Prose that merely mentions
-// a key does not count, and the terminal styling around a line is stripped.
 func containsYAMLLine(rendered, want string) bool {
 	for _, line := range strings.Split(ansiEscape.ReplaceAllString(rendered, ""), "\n") {
 		if strings.TrimSpace(line) == want {
@@ -700,8 +618,6 @@ func containsYAMLLine(rendered, want string) bool {
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-// writeConfig writes a global config into its own directory and returns its
-// path, so one test can load several shapes without disturbing p.
 func writeConfig(t *testing.T, p *paths.Paths, contents string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -711,22 +627,10 @@ func writeConfig(t *testing.T, p *paths.Paths, contents string) string {
 	return path
 }
 
-// yamlPath quotes a path for YAML so a Windows drive letter is not read as a
-// mapping and its separators survive as literal backslashes.
 func yamlPath(path string) string {
 	return `"` + strings.ReplaceAll(path, `\`, `\\`) + `"`
 }
 
-// namesPath reports whether a refusal identifies path to the operator who has
-// to repair it. Two spellings of one directory both count, and so does the
-// quoted rendering:
-//
-// A refusal writes paths with %q, which escapes the separator, so a Windows
-// path appears as "C:\\src\\repo" and never contains its own raw spelling.
-// And a refusal names either the spelling the configuration carries or its
-// canonical form, which differ wherever the filesystem has a second name for a
-// directory - the macOS /var -> /private/var symlink, and the 8.3 short names
-// Windows keeps for the temporary directories these tests run in.
 func namesPath(err error, path string) bool {
 	msg := err.Error()
 	for _, spelling := range []string{path, worktrees.Canonical(path)} {

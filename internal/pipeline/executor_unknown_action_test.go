@@ -9,11 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestExecutor_RespondRefusesUnrecognizedActionAndKeepsGateParked pins the
-// P2 that an ApprovalAction outside the approve/fix/skip/abort vocabulary
-// used to be delivered to the gate loop, match no case, and re-park forever.
-// Respond now refuses it up front with an error while the gate stays parked,
-// so the same gate still accepts a valid response afterwards.
 func TestExecutor_RespondRefusesUnrecognizedActionAndKeepsGateParked(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -63,9 +58,6 @@ func TestExecutor_RespondRefusesUnrecognizedActionAndKeepsGateParked(t *testing.
 	}
 }
 
-// TestExecutor_GateLoopFailsStepOnUnrecognizedAction covers the switch's own
-// default branch for a producer that bypasses Respond: the step fails with an
-// error naming the action rather than looping back into the park.
 func TestExecutor_GateLoopFailsStepOnUnrecognizedAction(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

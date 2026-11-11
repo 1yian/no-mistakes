@@ -7,10 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The sets inspection carries an instant self-score: the recorded source
-// reviews scored against their own gold with the same matcher a replayed
-// candidate faces. No agent or replay is involved, so it must be computable
-// from the frozen case files alone.
 func TestInspectSetsSelfScoresRecordedReviewsAgainstTheirGold(t *testing.T) {
 	store := openEvalStore(t)
 	// The recorded review raised "hit" (fixed by the user: TP gold) and
@@ -63,8 +59,6 @@ func TestSelfScoreRecordedReviewsLeavesUnlabeledCasesPending(t *testing.T) {
 	}
 }
 
-// Replay surfaces its plan and per-result progress synchronously so an
-// interactive caller can stream the session as it happens.
 func TestReplayReportsPlanAndPerResultProgress(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, _ := setupCapturedRun(t, ctx)

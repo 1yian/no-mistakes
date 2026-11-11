@@ -1,69 +1,19 @@
-// Package cimonitor is the single source of truth for the CI monitor's
-// human-facing log vocabulary and agent-facing monitoring state.
-//
-// The CI step (internal/pipeline/steps) emits these exact log lines while it
-// watches an open PR. Two very different consumers read them back: the TUI
-// renders a live CI panel, and the agent-facing `axi` commands decide when to
-// hand control back to the agent. Keeping the strings and the parser here means
-// both consumers interpret a run identically and cannot drift apart.
-//
-// Readiness ownership is split deliberately: the pipeline/config owner decides
-// whether a trusted default-branch `no_ci: true` declaration applies, and this
-// package combines that authoritative state with the activity log for consumers.
 package cimonitor
 
 import "strings"
 
-// Log messages the CI monitor emits. These are matched exactly (not by
-// substring) when deriving the "checks passed" state, so the producer and the
-// consumers must reference these constants rather than spelling out literals.
 const (
-	// ChecksPassedMsg is logged when every CI check has passed but the PR is
-	// not yet merged or closed, so the monitor keeps watching subject to its
-	// configured timeout unless an operator explicitly hands it off. This is
-	// the default behaviour.
-	ChecksPassedMsg = "all CI checks passed - still monitoring until merged or closed"
-	// ChecksPassedCompleteMsg is the green verdict under the opt-in
-	// ci.release_after_checks_pass: every CI check has passed, so the step
-	// records readiness and finishes, releasing the run instead of waiting for
-	// a human merge decision. It names the release explicitly because the
-	// identical observation means the opposite by default.
-	ChecksPassedCompleteMsg = "all CI checks passed - validation complete, releasing without waiting for the merge"
-	// NoChecksPassedMsg is logged only when the trusted default-branch config
-	// declares `no_ci: true` and the forge reports zero checks. The message
-	// names the positive declaration so agents and operators can inspect the
-	// evidence rather than treating every empty forge response as green. An
-	// empty check list WITHOUT that declaration must never produce this line;
-	// the resulting monitor can still be explicitly handed off.
-	NoChecksPassedMsg = "repository declares no CI (no_ci: true) - treating as all checks passed - still monitoring until merged or closed"
-	// NoChecksPassedCompleteMsg is the release form of NoChecksPassedMsg: the
-	// declaration is the positive evidence the empty check list is green, and
-	// the run then finishes like any other green run.
-	NoChecksPassedCompleteMsg = "repository declares no CI (no_ci: true) - treating as all checks passed - validation complete, releasing without waiting for the merge"
-	// ChecksRunningMsg is logged when checks are (re-)running with no failures
-	// yet, which clears any previous passed-checks state.
-	ChecksRunningMsg = "CI checks running, waiting for results..."
-	// ChecksHeadWaitingPrefix precedes the reason checks could not be bound to the delivered commit.
-	ChecksHeadWaitingPrefix = "waiting for the delivered commit's own checks: "
-	// ChecksAwaitingApprovalMsg is logged when the provider is holding a
-	// workflow until a maintainer approves it - GitHub does this to a
-	// first-time contributor's workflows - so nothing is running and nothing
-	// will until a human acts. It names the hold rather than reporting
-	// running checks, because the only thing that clears it happens outside
-	// the pipeline.
-	ChecksAwaitingApprovalMsg = "CI workflows are held awaiting maintainer approval - no jobs have run, waiting..."
-	// ChecksAwaitingManualJobMsg is logged when the provider is holding the
-	// pipeline on a blocking manual job - GitLab stops at the job's stage
-	// until a person runs it. Nothing the repository does clears it,
-	// so like the maintainer-approval hold it is named instead of being
-	// reported as checks that are running.
+	ChecksPassedMsg            = "all CI checks passed - still monitoring until merged or closed"
+	ChecksPassedCompleteMsg    = "all CI checks passed - validation complete, releasing without waiting for the merge"
+	NoChecksPassedMsg          = "repository declares no CI (no_ci: true) - treating as all checks passed - still monitoring until merged or closed"
+	NoChecksPassedCompleteMsg  = "repository declares no CI (no_ci: true) - treating as all checks passed - validation complete, releasing without waiting for the merge"
+	ChecksRunningMsg           = "CI checks running, waiting for results..."
+	ChecksHeadWaitingPrefix    = "waiting for the delivered commit's own checks: "
+	ChecksAwaitingApprovalMsg  = "CI workflows are held awaiting maintainer approval - no jobs have run, waiting..."
 	ChecksAwaitingManualJobMsg = "CI is held on a blocking manual job awaiting a person to run it, waiting..."
-	// BehindBaseMsg is the one poll a green PR the forge reports BEHIND
-	// waits for its base to stop moving before the monitor rebases it.
-	BehindBaseMsg = "all CI checks passed but the PR is behind a base that requires up-to-date branches, waiting for the base to settle before rebasing..."
+	BehindBaseMsg              = "all CI checks passed but the PR is behind a base that requires up-to-date branches, waiting for the base to settle before rebasing..."
 )
 
-// Activity summarizes what the CI step has been doing, derived from its logs.
 type Activity struct {
 	CIFixes      int    // number of auto-fix attempts observed
 	AutoFixing   bool   // an auto-fix is currently in progress
@@ -72,9 +22,6 @@ type Activity struct {
 	LastEvent    string // the most recent recognized log line
 }
 
-// FromAuthoritative combines pipeline-owned readiness with CI activity logs.
-// Readiness fields from logs are treated as activity only and never override
-// the persisted state supplied by the pipeline.
 func FromAuthoritative(ready, declaredNoCI bool, logs []string) Activity {
 	a := ParseActivity(logs)
 	a.Ready = ready
@@ -82,9 +29,6 @@ func FromAuthoritative(ready, declaredNoCI bool, logs []string) Activity {
 	return a
 }
 
-// ParseActivity extracts log-derived activity from CI messages. Its readiness
-// fields reflect recognized log vocabulary only; consumers use
-// FromAuthoritative for the persisted readiness state.
 func ParseActivity(logs []string) Activity {
 	var a Activity
 	for _, line := range logs {
@@ -164,16 +108,10 @@ func ParseActivity(logs []string) Activity {
 	return a
 }
 
-// ChecksPassed reports whether the CI monitor's latest state is "checks passed,
-// PR ready to merge". It is the agent-facing summary of ParseActivity(logs).Ready.
-// Ready covers both all-green checks and a trusted no_ci declaration with zero
-// registered checks; use DeclaredNoCI to distinguish the two for help text.
 func ChecksPassed(logs []string) bool {
 	return ParseActivity(logs).Ready
 }
 
-// DeclaredNoCI reports whether the latest ready state is backed by an explicit
-// trusted no_ci declaration rather than observed green checks.
 func DeclaredNoCI(logs []string) bool {
 	return ParseActivity(logs).DeclaredNoCI
 }

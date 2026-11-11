@@ -10,8 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/ipc"
 )
 
-// The capability contract requires an affirmative, decodable reply. A health
-// response or successful RPC with absent/false OK cannot prove account isolation.
 func TestRequireTranscriptHomes(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

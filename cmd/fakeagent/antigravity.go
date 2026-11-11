@@ -89,9 +89,6 @@ func runAgy(args []string, scenario *Scenario) int {
 	return 0
 }
 
-// patchAgyFixture rewrites the agent_response text delta and the terminal
-// result's response/structured_output to match the scenario action, leaving
-// every other event byte-for-byte so the envelope stays a real agy trace.
 func patchAgyFixture(raw []byte, action Action) ([]byte, error) {
 	text := action.textOrDefault()
 	structuredJSON := action.structuredJSON()
@@ -164,8 +161,6 @@ func hasAgySchema(args []string) bool {
 	return false
 }
 
-// extractAgyPrompt mirrors agy's print-mode contract: --print (or -p /
-// --prompt) is followed by the prompt text as the next argv element.
 func extractAgyPrompt(args []string) (string, error) {
 	for _, flag := range []string{"--print", "-p", "--prompt"} {
 		if prompt := argAfter(args, flag); prompt != "" {

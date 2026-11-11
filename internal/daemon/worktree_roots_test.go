@@ -20,8 +20,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/worktrees"
 )
 
-// mockWorkDirStep records the directory the pipeline executed it in, which is
-// the run's worktree.
 type mockWorkDirStep struct {
 	name    types.StepName
 	workDir chan string
@@ -36,22 +34,10 @@ func (s *mockWorkDirStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOut
 	return &pipeline.StepOutcome{}, nil
 }
 
-// yamlPath quotes a path for YAML so a Windows drive letter is not read as a
-// mapping and its separators survive as literal backslashes.
 func yamlPath(path string) string {
 	return `"` + strings.ReplaceAll(path, `\`, `\\`) + `"`
 }
 
-// namesPath reports whether a refusal identifies path to the operator who has
-// to repair it. Two spellings of one directory both count, and so does the
-// quoted rendering:
-//
-// A refusal writes paths with %q, which escapes the separator, so a Windows
-// path appears as "C:\\src\\repo" and never contains its own raw spelling.
-// And a refusal names either the spelling the configuration carries or its
-// canonical form, which differ wherever the filesystem has a second name for a
-// directory - the macOS /var -> /private/var symlink, and the 8.3 short names
-// Windows keeps for the temporary directories these tests run in.
 func namesPath(err error, path string) bool {
 	msg := err.Error()
 	for _, spelling := range []string{path, worktrees.Canonical(path)} {
@@ -62,9 +48,6 @@ func namesPath(err error, path string) bool {
 	return false
 }
 
-// configureWorktreeRoot points a checkout's run worktrees at root, the way an
-// operator does in the global config, preserving whatever the test daemon
-// already configured.
 func configureWorktreeRoot(t *testing.T, p *paths.Paths, workingPath, root string) {
 	t.Helper()
 	existing, err := os.ReadFile(p.ConfigFile())
@@ -81,11 +64,6 @@ func configureWorktreeRoot(t *testing.T, p *paths.Paths, workingPath, root strin
 	}
 }
 
-// TestRunWorktreeIsCreatedInConfiguredRoot is the end of the operator's
-// problem: a run worktree under NM_HOME inherits no directory-scoped toolchain
-// configuration, so a repository with a worktree_roots entry must have its run
-// created under that directory instead - and removed from it afterwards,
-// leaving the operator's own files in the same directory untouched.
 func TestRunWorktreeIsCreatedInConfiguredRoot(t *testing.T) {
 	step := &mockWorkDirStep{name: types.StepReview, workDir: make(chan string, 1)}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -142,14 +120,6 @@ func TestRunWorktreeIsCreatedInConfiguredRoot(t *testing.T) {
 	}
 }
 
-// TestRunSetupFailureLeavesNoWorktreeBehind covers the failures that happen
-// between creating the worktree and the run goroutine taking ownership of it.
-// Cleanup ownership is armed the moment the directory exists, so none of them can
-// leave it behind - in the operator's own worktree root, where it would sit until
-// the next daemon start noticed it.
-//
-// git identity configuration is the earliest of those failures: it reads the
-// checkout's git config, so a repository whose checkout is gone fails there.
 func TestRunSetupFailureLeavesNoWorktreeBehind(t *testing.T) {
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
 		return []pipeline.Step{&mockPassStep{name: types.StepReview}}
@@ -207,13 +177,6 @@ func TestRunSetupFailureLeavesNoWorktreeBehind(t *testing.T) {
 	}
 }
 
-// TestRunCreationJudgesOnlyItsOwnPlacement covers the placement mistake that
-// appears while the daemon is already running: the registered-checkout half of
-// the policy depends on state that changes after startup, so an entry that was
-// fine at boot can become unusable once another repository is gated into its
-// path. The repository that entry names must stop starting runs; every other
-// repository must keep working, and must never be failed with an error naming an
-// entry it has nothing to do with.
 func TestRunCreationJudgesOnlyItsOwnPlacement(t *testing.T) {
 	step := &mockPassStep{name: types.StepReview}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -262,11 +225,6 @@ func TestRunCreationJudgesOnlyItsOwnPlacement(t *testing.T) {
 	}
 }
 
-// TestCleanupOrphanWorktrees_ConfiguredRootRemovesOnlyRunDirectories is the
-// startup-cleanup half of the same contract. The configured root belongs to
-// the operator, so cleanup removes the leftovers of terminal runs and nothing
-// else: not an active run's worktree, not their files, not their directories,
-// and never the root itself.
 func TestCleanupOrphanWorktrees_ConfiguredRootRemovesOnlyRunDirectories(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -337,8 +295,6 @@ func TestCleanupOrphanWorktrees_ConfiguredRootRemovesOnlyRunDirectories(t *testi
 	}
 }
 
-// A repository without a worktree_roots entry keeps the default placement,
-// which is what makes the feature invisible to everyone who does not use it.
 func TestCleanupOrphanWorktrees_UnconfiguredRepoUsesDefaultRoot(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -383,12 +339,6 @@ func TestCleanupOrphanWorktrees_UnconfiguredRepoUsesDefaultRoot(t *testing.T) {
 	}
 }
 
-// TestValidatedWorktreeLayoutRefusesWhenTheCheckoutListIsUnreadable is the
-// fail-closed half of that same judgement. The registered checkouts are the set
-// the placement guard protects, so a guard that cannot read them has no evidence
-// at all - and validating against the empty set it gets instead accepts exactly
-// the root the readable list refuses, placing run worktrees inside a checkout
-// that is then dirty for the duration of somebody else's run.
 func TestValidatedWorktreeLayoutRefusesWhenTheCheckoutListIsUnreadable(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -436,12 +386,6 @@ func TestValidatedWorktreeLayoutRefusesWhenTheCheckoutListIsUnreadable(t *testin
 	}
 }
 
-// TestDaemonRefusesToStartWithWorktreeRootInsideAnotherRegisteredCheckout is the
-// placement only the daemon can judge: a root inside a checkout that is not the
-// one whose runs it holds. Every run placed there leaves that checkout with an
-// untracked worktree, so its branch synchronization is blocked for the duration
-// of somebody else's run, with nothing naming the cause. The repository list is
-// what makes the victim knowable, and it lives here.
 func TestDaemonRefusesToStartWithWorktreeRootInsideAnotherRegisteredCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -478,14 +422,6 @@ func TestDaemonRefusesToStartWithWorktreeRootInsideAnotherRegisteredCheckout(t *
 	}
 }
 
-// TestDaemonRefusesToStartWithWorktreeRootInsideItsOwnWorktreesDirectory is the
-// reviewer's scenario for the destructive misconfiguration: <NM_HOME>/worktrees
-// holds one ULID-named directory per repository, a run ID is a ULID too, so a
-// worktree root pointed at that directory would have every repository's
-// directory read as a leftover run worktree - including the ones holding
-// another repository's pending and running run worktrees. Config loading cannot
-// catch it (it never learns where NM_HOME is), so the daemon refuses to start
-// rather than starting and sweeping.
 func TestDaemonRefusesToStartWithWorktreeRootInsideItsOwnWorktreesDirectory(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -536,11 +472,6 @@ func TestDaemonRefusesToStartWithWorktreeRootInsideItsOwnWorktreesDirectory(t *t
 	}
 }
 
-// TestCleanupOrphanWorktrees_OperatorRootRemovesOnlyWhatARunRecorded is the
-// other half of the same misconfiguration: a run-shaped directory in the
-// operator's own directory is not evidence that a run created it. Cleanup there
-// removes the exact directories run records name - whichever repository's run
-// recorded them - and never enumerates the directory to guess at the rest.
 func TestCleanupOrphanWorktrees_OperatorRootRemovesOnlyWhatARunRecorded(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -631,15 +562,6 @@ func TestCleanupOrphanWorktrees_OperatorRootRemovesOnlyWhatARunRecorded(t *testi
 	}
 }
 
-// TestStartupSweepSetIsBoundedByThePresentNotByRunHistory pins what the startup
-// process sweep may carry outside the default tree. Every entry costs a path
-// matcher tested against every candidate process, and run rows are never pruned,
-// so a set built from the whole recorded history would make each restart of a
-// long-lived install slower than the last. Two things must hold at once: a
-// finished run whose worktree is already gone contributes nothing, and a run
-// that was still executing when the daemon started contributes even though its
-// directory is gone - that is the leaked-process case the sweep exists for, and
-// nothing else can name that directory.
 func TestStartupSweepSetIsBoundedByThePresentNotByRunHistory(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -719,12 +641,6 @@ func TestStartupSweepSetIsBoundedByThePresentNotByRunHistory(t *testing.T) {
 	}
 }
 
-// TestCleanupOrphanWorktrees_ReachesARootTheConfigNoLongerNames is the stale
-// placement: a run executed in a directory the operator has since edited out of
-// worktree_roots (or pointed elsewhere). Its worktree is still recorded, so the
-// leftover must still be removed - deriving the search set from the live config
-// instead would leave that directory behind forever, with nothing left to name
-// it.
 func TestCleanupOrphanWorktrees_ReachesARootTheConfigNoLongerNames(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -767,11 +683,6 @@ func TestCleanupOrphanWorktrees_ReachesARootTheConfigNoLongerNames(t *testing.T)
 	}
 }
 
-// TestStepDiff_ReadsThePlacementItsRunRecorded covers a config edit made while
-// a run exists - exactly what `init --worktree-root` invites, since it prints
-// an entry for the operator to paste in. The fix-review diff is served from the
-// run's worktree on demand, so a re-derived placement would resolve a directory
-// that never existed and fail the RPC the parked gate depends on.
 func TestStepDiff_ReadsThePlacementItsRunRecorded(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -824,9 +735,6 @@ func TestStepDiff_ReadsThePlacementItsRunRecorded(t *testing.T) {
 	}
 }
 
-// TestPrepareRecoveredRun_LocatesThePlacementItsRunRecorded is the crash-recovery
-// half: a parked run whose placement was re-derived from an edited config looks
-// like a run whose worktree vanished, which fails it instead of resuming it.
 func TestPrepareRecoveredRun_LocatesThePlacementItsRunRecorded(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -868,13 +776,6 @@ func TestPrepareRecoveredRun_LocatesThePlacementItsRunRecorded(t *testing.T) {
 	}
 }
 
-// TestPrepareRecoveredRun_UnrecordedRunKeepsItsDefaultPlacement is the upgrade
-// path: a run parked at a gate when the operator upgraded to a build that
-// records placement has no recorded value, and then they add a worktree_roots
-// entry for that checkout - which `init --worktree-root` invites. Its worktree
-// is in the default tree, where the previous build put it, and resolving it
-// through the new entry would report it missing, fail the parked run as a crash,
-// and let the default-tree walk delete the worktree it was still using.
 func TestPrepareRecoveredRun_UnrecordedRunKeepsItsDefaultPlacement(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -916,11 +817,6 @@ func TestPrepareRecoveredRun_UnrecordedRunKeepsItsDefaultPlacement(t *testing.T)
 	}
 }
 
-// TestReportUnusableWorktreeRoots_NamesEntriesThatDoNothing covers the silent
-// failure mode of a path-keyed setting: an entry whose key does not match a
-// registered checkout - a stale key after a move, a spelling this filesystem
-// does not consider equal - places nothing at all, with no other symptom than
-// runs continuing to appear under NM_HOME.
 func TestReportUnusableWorktreeRoots_NamesEntriesThatDoNothing(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {

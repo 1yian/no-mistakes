@@ -197,8 +197,6 @@ func TestLoadGlobalRejectsInvalidGHUserProfiles(t *testing.T) {
 	}
 }
 
-// The owner-to-login mapping decides which account's credentials a run
-// executes with, so nothing on the pushed branch may supply or extend it.
 func TestMergeTakesForgeProfilesFromGlobalOnly(t *testing.T) {
 	global, err := LoadGlobalFromBytes([]byte("forge_profiles:\n  github.com/acme:\n    gh_user: acme-bot\n"))
 	if err != nil {

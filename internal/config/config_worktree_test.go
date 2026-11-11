@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-// TestWorktreeDefaultsWithoutSetup pins the built-in retention budget a
-// machine with no worktree configuration at all still gets (issue #1093): a
-// leftover run worktree - one immediate removal could not clear - is bounded
-// even if the operator never touches the setting.
 func TestWorktreeDefaultsWithoutSetup(t *testing.T) {
 	cfg, err := LoadGlobal(filepath.Join(t.TempDir(), "absent.yaml"))
 	if err != nil {
@@ -35,8 +31,6 @@ func TestWorktreeSettingsAreConfigurable(t *testing.T) {
 	}
 }
 
-// TestWorktreeRetentionUnlimitedDisablesAging mirrors the keyword parsing
-// test.evidence.retention already accepts, so the two settings behave alike.
 func TestWorktreeRetentionUnlimitedDisablesAging(t *testing.T) {
 	cfg, err := LoadGlobalFromBytes([]byte("worktree:\n  retention: unlimited\n"))
 	if err != nil {
@@ -47,9 +41,6 @@ func TestWorktreeRetentionUnlimitedDisablesAging(t *testing.T) {
 	}
 }
 
-// TestWorktreeMaxRunsZeroKeepsEveryLeftover pins that an explicit zero
-// survives the "not set" pointer check instead of falling back to the
-// default ceiling.
 func TestWorktreeMaxRunsZeroKeepsEveryLeftover(t *testing.T) {
 	cfg, err := LoadGlobalFromBytes([]byte("worktree:\n  max_runs: 0\n"))
 	if err != nil {
@@ -74,10 +65,6 @@ func TestLoadGlobalRejectsUnparseableWorktreeRetention(t *testing.T) {
 	}
 }
 
-// TestRepoConfigCannotChangeWorktreeRetention pins worktree retention as an
-// operator-only, machine-level setting, matching eval and
-// test.evidence.retention: it governs this machine's local disk, so a pushed
-// branch must not be able to widen or shrink it.
 func TestRepoConfigCannotChangeWorktreeRetention(t *testing.T) {
 	global, err := LoadGlobalFromBytes([]byte("worktree:\n  retention: 12h\n  max_runs: 3\n"))
 	if err != nil {
@@ -93,11 +80,6 @@ func TestRepoConfigCannotChangeWorktreeRetention(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigYAMLDocumentsWorktreeRetention keeps the shipped template
-// honest about a setting an operator has to be able to find and change:
-// someone reading their own config.yaml has to be able to see the example and
-// its default values (it ships commented out, since the Go defaults already
-// apply without any setup, unlike eval's active-by-default block).
 func TestDefaultConfigYAMLDocumentsWorktreeRetention(t *testing.T) {
 	if !strings.Contains(defaultConfigYAML, "# worktree:") {
 		t.Fatal("shipped default config template does not document the worktree key")

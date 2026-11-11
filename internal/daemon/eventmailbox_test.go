@@ -33,8 +33,6 @@ func fillActivity(m *RunManager, runID string) {
 	}
 }
 
-// subscribeDrained subscribes and consumes the mandatory opening gap so a case
-// starts from an empty mailbox. The opening gap itself is asserted in A1.
 func subscribeDrained(t *testing.T, m *RunManager, runID string) *Subscription {
 	t.Helper()
 	sub, err := m.Subscribe(runID)
@@ -50,8 +48,6 @@ func subscribeDrained(t *testing.T, m *RunManager, runID string) *Subscription {
 	return sub
 }
 
-// drainReady consumes everything currently available without blocking on an
-// empty mailbox.
 func drainReady(t *testing.T, sub *Subscription) []ipc.Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -70,8 +66,6 @@ func drainReady(t *testing.T, sub *Subscription) []ipc.Event {
 	}
 }
 
-// coversStateUpTo reports whether the drained frames either delivered the named
-// event type or raised a gap whose revision covers everything up to wantRev.
 func coversStateUpTo(events []ipc.Event, want ipc.EventType, wantRev int64) bool {
 	var gapRev int64
 	for _, e := range events {
@@ -85,9 +79,6 @@ func coversStateUpTo(events []ipc.Event, want ipc.EventType, wantRev int64) bool
 	return gapRev >= wantRev
 }
 
-// A1: every subscription opens with a reconcile trigger, so "subscribe then
-// read authoritative state" is a server-side invariant rather than a rule each
-// consumer has to remember.
 func TestMailbox_SubscriptionOpensWithGap(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub, err := m.Subscribe("run-1")
@@ -107,8 +98,6 @@ func TestMailbox_SubscriptionOpensWithGap(t *testing.T) {
 	}
 }
 
-// A2: a lifecycle transition behind a full activity buffer survives, because
-// activity is the only class that is ever evicted.
 func TestMailbox_LifecycleSurvivesFullActivityBuffer(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -130,8 +119,6 @@ func TestMailbox_LifecycleSurvivesFullActivityBuffer(t *testing.T) {
 	t.Fatal("expected the state event to be delivered by evicting activity, not folded")
 }
 
-// A3: state pressure never evicts state. When the queue holds nothing
-// droppable, the transition folds into the gap instead of displacing a peer.
 func TestMailbox_StatePressureFoldsInsteadOfEvictingState(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -162,9 +149,6 @@ func TestMailbox_StatePressureFoldsInsteadOfEvictingState(t *testing.T) {
 	}
 }
 
-// A4: a terminal completion cannot be hidden, even when it folds into the gap
-// and the run is closed immediately afterwards. Close is soft: queued frames
-// and the pending gap still drain first.
 func TestMailbox_TerminalCompletionCannotBeHidden(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -198,7 +182,6 @@ func TestMailbox_TerminalCompletionCannotBeHidden(t *testing.T) {
 	}
 }
 
-// A5: approval/finding state cannot be hidden.
 func TestMailbox_FindingsAndApprovalCannotBeHidden(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -216,8 +199,6 @@ func TestMailbox_FindingsAndApprovalCannotBeHidden(t *testing.T) {
 	}
 }
 
-// A6: ordinary logs stay bounded, are droppable, and never force a consumer to
-// do reconciliation work.
 func TestMailbox_ActivityIsBoundedDroppableAndRaisesNoGap(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -241,8 +222,6 @@ func TestMailbox_ActivityIsBoundedDroppableAndRaisesNoGap(t *testing.T) {
 	}
 }
 
-// The byte ceiling binds independently of the count ceiling, so a burst of
-// large frames cannot inflate a subscriber past its budget.
 func TestMailbox_ByteCeilingBindsBeforeCountCeiling(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -265,8 +244,6 @@ func TestMailbox_ByteCeilingBindsBeforeCountCeiling(t *testing.T) {
 	}
 }
 
-// A7: overflow notices coalesce. The signal is a scalar, so it never grows
-// with the number of losses.
 func TestMailbox_GapCoalescesAndNeverGrows(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -293,8 +270,6 @@ func TestMailbox_GapCoalescesAndNeverGrows(t *testing.T) {
 	}
 }
 
-// The gap drains ahead of queued payload so a coalesced invalidation reaches
-// the consumer before it renders more stale frames.
 func TestMailbox_GapDrainsAheadOfQueuedPayload(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -313,7 +288,6 @@ func TestMailbox_GapDrainsAheadOfQueuedPayload(t *testing.T) {
 	}
 }
 
-// A8: no publisher ever blocks, including on subscribers that never read.
 func TestMailbox_PublisherNeverBlocksOnWedgedSubscribers(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	for i := 0; i < 4; i++ {
@@ -338,9 +312,6 @@ func TestMailbox_PublisherNeverBlocksOnWedgedSubscribers(t *testing.T) {
 	}
 }
 
-// A9: a delta queued before an authoritative snapshot cannot regress state
-// after it. This exercises the consumer-side revision guard the TUI and AXI
-// both apply.
 func TestMailbox_StaleDeltasCannotRegressAfterSnapshot(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -381,8 +352,6 @@ func TestMailbox_StaleDeltasCannotRegressAfterSnapshot(t *testing.T) {
 	}
 }
 
-// A10: unsubscribe removes the registration, releases retained payload, is
-// idempotent, and leaves later broadcasts harmless.
 func TestMailbox_UnsubscribeReleasesEverything(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub, err := m.Subscribe("run-1")
@@ -414,8 +383,6 @@ func TestMailbox_UnsubscribeReleasesEverything(t *testing.T) {
 	}
 }
 
-// A11: a reconnecting consumer converges, because the new subscription opens
-// gapped at the current revision.
 func TestMailbox_ReconnectConvergesAtCurrentRevision(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	first := subscribeDrained(t, m, "run-1")
@@ -440,7 +407,6 @@ func TestMailbox_ReconnectConvergesAtCurrentRevision(t *testing.T) {
 	}
 }
 
-// A12: cancellation releases a waiting reader.
 func TestMailbox_CancellationUnblocksWaitingReader(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -464,7 +430,6 @@ func TestMailbox_CancellationUnblocksWaitingReader(t *testing.T) {
 	}
 }
 
-// A13: publish, drain, subscribe, and unsubscribe are race-free under churn.
 func TestMailbox_ConcurrentChurnIsRaceFree(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -504,9 +469,6 @@ func TestMailbox_ConcurrentChurnIsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
-// Many simultaneous transitions collapse into exactly one repair signal whose
-// revision covers all of them. A single reserved slot would be overrun by the
-// second concurrent transition; a coalescing scalar is not.
 func TestMailbox_ManySimultaneousTransitionsCollapseToOneGap(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")
@@ -542,8 +504,6 @@ func TestMailbox_ManySimultaneousTransitionsCollapseToOneGap(t *testing.T) {
 	}
 }
 
-// The subscriber cap bounds the global mailbox footprint. Refusing is an
-// ordinary error, never unbounded growth.
 func TestMailbox_SubscriberCapIsEnforced(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	for i := 0; i < maxSubscribersPerRun; i++ {
@@ -558,9 +518,6 @@ func TestMailbox_SubscriberCapIsEnforced(t *testing.T) {
 	}
 }
 
-// State revisions are assigned only to state events and advance monotonically
-// in enqueue order, which is what lets a consumer's monotonic guard discard a
-// stale delta without discarding a newer one's payload.
 func TestMailbox_StateRevisionsAdvanceInEnqueueOrder(t *testing.T) {
 	m := NewRunManager(nil, nil, nil)
 	sub := subscribeDrained(t, m, "run-1")

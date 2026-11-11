@@ -10,12 +10,6 @@ import (
 	"time"
 )
 
-// codexMetricsAccumulator extracts bounded InvocationMetrics from the codex
-// `exec --json` event stream. codex batches one exec into a single turn and
-// does not surface internal poll round-trips as events, so every completed item
-// is productive work: agent messages and tool calls count as model round-trips,
-// tool calls are categorized by their command, and each tool's
-// started->completed interval (reader-clocked) accrues to subprocess wait time.
 type codexMetricsAccumulator struct {
 	modelRoundtrips  int
 	toolCalls        int
@@ -28,8 +22,6 @@ func newCodexMetricsAccumulator() *codexMetricsAccumulator {
 	return &codexMetricsAccumulator{starts: map[string]time.Time{}}
 }
 
-// onItem folds one item.started/item.completed event into the accumulator,
-// timing tool subprocesses with at (the reader's wall clock).
 func (m *codexMetricsAccumulator) onItem(eventType string, item *codexItem, at time.Time) {
 	if m == nil || item == nil {
 		return
@@ -78,9 +70,6 @@ func (m *codexMetricsAccumulator) metrics() InvocationMetrics {
 	}
 }
 
-// codexToolItemKind classifies a codex item type: whether it is a tool call,
-// its default category when it carries no shell command, and whether its
-// command string should be classified.
 func codexToolItemKind(itemType string) (isTool bool, defaultCategory ToolCategory, classifyCommand bool) {
 	switch itemType {
 	case "command_execution", "local_shell_call", "exec_command":
@@ -94,11 +83,6 @@ func codexToolItemKind(itemType string) (isTool bool, defaultCategory ToolCatego
 	}
 }
 
-// resolveCodexModel best-effort reads the model identity codex recorded for a
-// thread from its local rollout transcript. It extracts only the model name and
-// provider - never paths, prompts, commands, or any other rollout content - and
-// returns empty strings on any failure so a missing rollout is recorded as
-// unknown, never fabricated. now is the current time (injectable for tests).
 func resolveCodexModel(threadID string, now time.Time) (model, provider string) {
 	if threadID == "" {
 		return "", ""
@@ -115,8 +99,6 @@ func resolveCodexModel(threadID string, now time.Time) (model, provider string) 
 	return parseCodexRolloutModel(f)
 }
 
-// codexSessionsDir returns codex's session transcript directory, honoring
-// CODEX_HOME and falling back to ~/.codex.
 func codexSessionsDir() string {
 	home := os.Getenv("CODEX_HOME")
 	if home == "" {
@@ -129,10 +111,6 @@ func codexSessionsDir() string {
 	return filepath.Join(home, "sessions")
 }
 
-// findCodexRollout locates the rollout file for threadID. codex partitions
-// rollouts by session-start date (YYYY/MM/DD), so it checks the day of now and
-// the two preceding days - a bounded search that covers a session started just
-// before midnight or resumed across a day boundary.
 func findCodexRollout(sessionsDir, threadID string, now time.Time) string {
 	if sessionsDir == "" {
 		return ""
@@ -148,9 +126,6 @@ func findCodexRollout(sessionsDir, threadID string, now time.Time) string {
 	return ""
 }
 
-// parseCodexRolloutModel scans the head of a rollout transcript for the model
-// (turn_context.payload.model) and provider (session_meta.payload.model_provider).
-// It reads at most a bounded prefix and stops once both are found.
 func parseCodexRolloutModel(r io.Reader) (model, provider string) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
@@ -186,9 +161,6 @@ func parseCodexRolloutModel(r io.Reader) (model, provider string) {
 	return sanitizeModelToken(model), sanitizeModelToken(provider)
 }
 
-// sanitizeModelToken keeps model identity low-cardinality and content-free: it
-// bounds length and strips anything but the conventional model-id characters,
-// so a malformed rollout can never smuggle arbitrary text into telemetry.
 func sanitizeModelToken(s string) string {
 	// A model identity is a single token (e.g. "gpt-5.6-sol"); take the first
 	// whitespace-delimited field so a malformed multi-word rollout value cannot

@@ -9,26 +9,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// strandedTestFixOptions shape the issue #1421 fixture's deliberate deviations.
 type strandedTestFixOptions struct {
-	// withoutReviewAuthority leaves review_approved_head_sha NULL, as a run that
-	// never completed a review would.
 	withoutReviewAuthority bool
-	// rebased replays the submitted commit onto the base before the fix commits,
-	// so the recorded head no longer descends from the submitted head.
-	rebased bool
+	rebased                bool
 }
 
-// newStrandedTestFixFixture reproduces issue #1421 exactly as the run left it.
-// The pipeline ran in a detached worktree of the gate (git.WorktreeAdd), so its
-// Review fix and Test fix commits entered the gate's object store while the gate
-// branch stayed at the submitted head. Review approved the Review fix, Test
-// moved the head again, and Document then failed on a transient fetch - a
-// non-code failure - before Push. The worktree was removed when the run
-// finished, leaving the recorded head as an unreferenced gate object, the
-// terminal head never verified, and the operator's clean checkout sitting
-// exactly at that recorded head (the reporter's state when every documented
-// next action refused). It returns the fixture and the review-approved head.
 func newStrandedTestFixFixture(t *testing.T, opts strandedTestFixOptions) (*recoverFixture, string) {
 	t.Helper()
 	f := newRecoverFixtureAtSubmittedHead(t)
@@ -87,9 +72,6 @@ func newStrandedTestFixFixture(t *testing.T, opts strandedTestFixOptions) (*reco
 	return f, reviewed
 }
 
-// newRecoverFixtureAtSubmittedHead builds the operator repo, the upstream, and
-// a gate whose feature/recover branch holds exactly the submitted head, plus
-// the run row for that submission; the pipeline's work is added by the caller.
 func newRecoverFixtureAtSubmittedHead(t *testing.T) *recoverFixture {
 	t.Helper()
 	root, heads := copyGitFixture(t, "recover-at-submitted-head", buildRecoverRepositoriesAtSubmittedHead)
@@ -142,8 +124,6 @@ func buildRecoverRepositoriesAtSubmittedHead(t *testing.T, root string) recoverH
 	return recoverHeads{base: base, submitted: submitted}
 }
 
-// commitOutsidePreservedHistory adds one commit on top of the submitted head in
-// the gate that the recorded head does not contain, and returns it.
 func commitOutsidePreservedHistory(t *testing.T, f *recoverFixture) string {
 	t.Helper()
 	side := filepath.Join(filepath.Dir(f.local), "side-worktree")
@@ -157,11 +137,6 @@ func commitOutsidePreservedHistory(t *testing.T, f *recoverFixture) string {
 	return sha
 }
 
-// TestRecoverReturnsCustodyAtTheRecordedHeadThatExtendsTheGateBranch is the
-// regression test for issue #1421. Before the fix, Recover reached the
-// equal-tree rewrite proof for this shape, found two different trees, and
-// refused with blocked_recover_unverified_head - while axi status kept
-// pointing at `sync --recover` as the next action.
 func TestRecoverReturnsCustodyAtTheRecordedHeadThatExtendsTheGateBranch(t *testing.T) {
 	t.Parallel()
 
@@ -232,9 +207,6 @@ func TestRecoverReturnsCustodyAtTheRecordedHeadThatExtendsTheGateBranch(t *testi
 	}
 }
 
-// TestRecoverRecordedHeadExtendingTheGateBranchFailsClosed pins every edge of
-// the #1421 proof: each control removes exactly one premise and recovery must
-// go back to refusing without touching a file, a ref, or the run.
 func TestRecoverRecordedHeadExtendingTheGateBranchFailsClosed(t *testing.T) {
 	t.Parallel()
 

@@ -41,10 +41,6 @@ func TestServiceDefinitionMatchesRootRejectsPrefixOnlyMatch(t *testing.T) {
 	}
 }
 
-// TestRenderLaunchAgentIncludesManagedPath locks in that the generated plist
-// ships a sensible PATH in EnvironmentVariables. Without this, launchd runs
-// the daemon with `/usr/bin:/bin:/usr/sbin:/sbin` and the agent binary (at
-// e.g. /opt/homebrew/bin/codex) is invisible to exec.LookPath. See #143.
 func TestRenderLaunchAgentIncludesManagedPath(t *testing.T) {
 	t.Parallel()
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm"))
@@ -73,9 +69,6 @@ func TestRenderLaunchAgentIncludesManagedPath(t *testing.T) {
 	}
 }
 
-// TestRenderSystemdUnitIncludesManagedPath mirrors the launchd coverage for
-// systemd user services so Linux installs don't regress into the same
-// "agent binary not in PATH" failure mode when launched at login.
 func TestRenderSystemdUnitIncludesManagedPath(t *testing.T) {
 	t.Parallel()
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm"))
@@ -134,9 +127,6 @@ func TestManagedServicePathUsesSharedWellKnownDirs(t *testing.T) {
 	}
 }
 
-// extractPlistValue pulls the <string> value that follows a given <key> in
-// an Apple plist. Keeps the rendering assertions readable and independent
-// of byte-for-byte formatting.
 func extractPlistValue(t *testing.T, plist, key string) string {
 	t.Helper()
 	keyTag := "<key>" + key + "</key>"

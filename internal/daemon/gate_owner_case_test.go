@@ -9,7 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// swapCase flips the letter case of every ASCII letter in s.
 func swapCase(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
@@ -22,9 +21,6 @@ func swapCase(s string) string {
 	}, s)
 }
 
-// filesystemFoldsCase reports whether dir's filesystem resolves two spellings
-// that differ only in letter case to the same entry, by asking the filesystem
-// instead of assuming from GOOS (APFS and NTFS volumes can be either).
 func filesystemFoldsCase(t *testing.T, dir string) bool {
 	t.Helper()
 	probe := filepath.Join(dir, "CaseProbe")
@@ -35,12 +31,6 @@ func filesystemFoldsCase(t *testing.T, dir string) bool {
 	return err == nil
 }
 
-// TestOwnedGateAcceptsACaseVariantSpellingOnACaseInsensitiveFilesystem pins
-// issue #1452: the account's home is registered as /Users/Name while the
-// directory on disk is /Users/name, so the gate git hands the hook is spelled
-// differently from the root the daemon runs with. canonicalRoot only folds
-// case on Windows, so the textual compare refused every push even though both
-// spellings are one directory.
 func TestOwnedGateAcceptsACaseVariantSpellingOnACaseInsensitiveFilesystem(t *testing.T) {
 	base := t.TempDir()
 	if !filesystemFoldsCase(t, base) {
@@ -63,9 +53,6 @@ func TestOwnedGateAcceptsACaseVariantSpellingOnACaseInsensitiveFilesystem(t *tes
 	}
 }
 
-// TestOwnedGateRefusesACaseVariantThatIsAnotherDirectory keeps the guard
-// fail-closed where case is significant: there a differently-cased gate path is
-// a different directory, possibly a foreign root, and must never be admitted.
 func TestOwnedGateRefusesACaseVariantThatIsAnotherDirectory(t *testing.T) {
 	base := t.TempDir()
 	if filesystemFoldsCase(t, base) {
@@ -87,9 +74,6 @@ func TestOwnedGateRefusesACaseVariantThatIsAnotherDirectory(t *testing.T) {
 	}
 }
 
-// TestOwnedGateRefusesAMissingCaseVariant covers the other fail-closed edge: a
-// gate path that cannot be identified on disk is never accepted on a
-// case-folded guess.
 func TestOwnedGateRefusesAMissingCaseVariant(t *testing.T) {
 	base := t.TempDir()
 	const repoID = "missing-variant-repo"

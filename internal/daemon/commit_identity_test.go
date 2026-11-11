@@ -16,8 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// bindFixtureCommitIdentity supplies the submission metadata a normal launch
-// writes for fixtures that create current-version runs directly in the DB.
 func bindFixtureCommitIdentity(t *testing.T, d *db.DB, runID string) {
 	t.Helper()
 	identity := git.CommitIdentity{AuthorName: "Test", AuthorEmail: "test@test.com", CommitterName: "Test", CommitterEmail: "test@test.com"}

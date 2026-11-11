@@ -17,8 +17,6 @@ const (
 	containmentMinTokens = 8
 )
 
-// Score is one candidate's finding-level confusion matrix against gold.
-// Pending is unmatched candidate findings: queued, never punished as FP.
 type Score struct {
 	TruePositive      int
 	TruePositiveExact int
@@ -29,21 +27,6 @@ type Score struct {
 	Pending           int
 }
 
-// ScoreCandidate matches a candidate finding list against recorded gold.
-//
-//   - TP: the candidate raises the same underlying issue as a true-issue gold
-//     (human-accepted Fix, auto-fix that landed in a merged PR, a
-//     human-added miss, or a confirmed post-PR miss)
-//   - FN: the candidate misses a true-issue gold
-//   - FP: only an explicit false-positive gold that the candidate still raised
-//   - Pending: unmatched candidate findings, never inferred as invalid
-//
-// Matching is a documented cascade of strengths: exact-id, exact-text,
-// nearby-line Jaccard, then gated containment. Assignment is one globally
-// optimal assignment over the whole graph (see assignMatches), so neither
-// candidate ordering nor a tier boundary can consume a candidate another gold
-// needed. Headline recall uses the full cascade; exact vs fuzzy counts are
-// reported separately so a threshold change is visible.
 func ScoreCandidate(labels Labels, findingsJSON string) Score {
 	candidate := parseFindingItems(findingsJSON)
 	assigned := assignMatches(labels.Findings, candidate)
@@ -94,24 +77,6 @@ type assignedMatch struct {
 	strength string
 }
 
-// assignMatches pairs gold findings with candidate findings as one globally
-// optimal assignment rather than a per-strength-tier pass.
-//
-// Tiered assignment - maximum matching on exact edges, then on the residual for
-// each weaker strength - is not optimal for the whole graph, because WHICH
-// maximum exact matching it happens to pick decides what the weaker tiers can
-// still reach. With gold A matching candidate 1 exactly and candidate 2 by
-// location, and gold B matching only candidate 1 exactly, the exact tier can
-// hand candidate 1 to A and strand B forever, scoring one match where two exist.
-// That understates recall for reasons that have nothing to do with the review
-// under test, so the assignment is solved once over every edge at once.
-//
-// Optimality is lexicographic by strength: an exact pair is worth strictly more
-// than every possible combination of weaker pairs (weightFor scales each tier by
-// a base larger than any achievable count), so the optimum never trades one
-// exact match for two fuzzy ones, and among the assignments with the most exact
-// pairs it takes the one with the most location pairs, then the most containment
-// pairs. hungarianMinCost solves that max-weight assignment exactly.
 func assignMatches(golds []FindingGold, candidate []types.Finding) []assignedMatch {
 	out := make([]assignedMatch, len(golds))
 	for i := range out {
@@ -147,10 +112,6 @@ func assignMatches(golds []FindingGold, candidate []types.Finding) []assignedMat
 	return out
 }
 
-// weightFor ranks the strengths so that no number of weaker pairs can outweigh
-// a single stronger one. base exceeds the largest possible pair count, so the
-// total weight of an assignment reads as a positional number whose digits are
-// the per-strength counts.
 func weightFor(strength string, base int64) int64 {
 	switch strength {
 	case matchExactID, matchExactText:
@@ -164,10 +125,6 @@ func weightFor(strength string, base int64) int64 {
 	}
 }
 
-// maxWeightAssignment returns, for each gold row, the candidate column assigned
-// to it (-1 when there are no columns), maximizing total weight. It solves the
-// rectangular assignment problem exactly, transposing when there are more rows
-// than columns because the solver requires rows <= columns.
 func maxWeightAssignment(weight [][]int64) []int {
 	rows, cols := len(weight), len(weight[0])
 	if rows <= cols {
@@ -204,10 +161,6 @@ func negate(weight [][]int64) [][]int64 {
 	return out
 }
 
-// hungarianMinCost is the O(n^2*m) Hungarian (Kuhn-Munkres) algorithm for the
-// rectangular assignment problem: it returns the minimum-cost assignment of
-// every row to a distinct column, which is the exact optimum rather than a
-// greedy approximation. It requires len(cost) <= len(cost[0]).
 func hungarianMinCost(cost [][]int64) []int {
 	n := len(cost)
 	if n == 0 {

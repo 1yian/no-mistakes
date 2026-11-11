@@ -317,10 +317,6 @@ func TestReviewFixRoundCountExcludesNonFixTurns(t *testing.T) {
 	}
 }
 
-// A clean last rereview that parks only for missing coverage spends no fix
-// round on its continuation (repo-config.md, review.max_fix_rounds), so the
-// exhausted-budget notice must not turn its empty findings list into one that
-// complete-coverage refuses.
 func TestExecutor_ReviewFixRoundLimitCoverageOnlyParkCanCompleteCoverage(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	cfg := &config.Config{TrustedConfigSHA: "fixture-trusted", Review: config.Review{MaxFixRounds: 1}, AutoFix: config.AutoFix{Review: 1}}
@@ -376,9 +372,6 @@ func TestExecutor_ReviewFixRoundLimitCoverageOnlyParkCanCompleteCoverage(t *test
 	}
 }
 
-// The refusal is built from the parked gate's findings; it must read them
-// under the executor mutex, because cancellation clears the gate concurrently.
-// Run with -race: the unlocked read is reported as a data race.
 func TestExecutor_ReviewFixRoundLimitRefusalRacingCancellation(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	cfg := &config.Config{Review: config.Review{MaxFixRounds: 1}, AutoFix: config.AutoFix{Review: 3}}

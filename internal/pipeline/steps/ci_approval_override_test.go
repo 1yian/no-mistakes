@@ -8,13 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline/steps/internal/stepstest"
 )
 
-// TestCIStep_VerifyApprovalOverride pins CIStep's implementation of
-// pipeline.ApprovalOverrideVerifier against the real scm.Host/gh plumbing
-// (via the fakecli gh double every other CI step test uses), not just the
-// executor-level fake used in internal/pipeline's regression tests. See
-// pipeline.ApprovalOverrideVerifier's doc for the incident this exists for:
-// a human approving a CI gate must never let a still-failing live check read
-// as a clean pass.
 func TestCIStep_VerifyApprovalOverride(t *testing.T) {
 	t.Parallel()
 
@@ -99,10 +92,6 @@ func TestCIStep_VerifyApprovalOverride(t *testing.T) {
 	}
 }
 
-// TestCIStep_VerifyApprovalOverride_NoPRURL covers the "cannot verify" fail-
-// closed path: a run with no PR URL yet cannot have a live state to check
-// against, so this must report an unresolved reason (never silently clear),
-// matching ApprovalOverrideVerifier's documented fail-closed contract.
 func TestCIStep_VerifyApprovalOverride_NoPRURL(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -118,12 +107,6 @@ func TestCIStep_VerifyApprovalOverride_NoPRURL(t *testing.T) {
 	}
 }
 
-// TestCIStep_VerifyApprovalOverride_EmptyChecks is the other half of the
-// upstream review P1 "unresolved checks become clean passes": before this
-// fix, !hasFailingChecks(nil) is true (an empty slice contains no failing
-// check), so a PR reporting zero live checks at all read as a clean pass.
-// allChecksPassed correctly treats an empty check list as NOT passed, and
-// VerifyApprovalOverride must report that as unresolved rather than clear.
 func TestCIStep_VerifyApprovalOverride_EmptyChecks(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -144,10 +127,6 @@ func TestCIStep_VerifyApprovalOverride_EmptyChecks(t *testing.T) {
 	}
 }
 
-// fakeCIGlabOverride serves the GitLab CI endpoints for the override verifier:
-// the merge request reports headSHA as its source revision and ran its head
-// pipeline at pipelineSHA. A pipelineSHA different from headSHA is the stale or
-// stranded pipeline the verifier must refuse.
 func fakeCIGlabOverride(t *testing.T, headSHA, pipelineSHA, checksJSON string) []string {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -161,12 +140,6 @@ func fakeCIGlabOverride(t *testing.T, headSHA, pipelineSHA, checksJSON string) [
 	})
 }
 
-// TestCIStep_VerifyApprovalOverride_NamesTheDeliveredCommit covers the
-// verifier's own read on a host that binds checks to a named commit. The
-// delivered commit must be named there too: a green pipeline that ran at
-// another commit is another commit's checks, so it must refuse (recording an
-// override) rather than read as a clean pass, and the refusal must not be
-// reported as a provider or CLI failure.
 func TestCIStep_VerifyApprovalOverride_NamesTheDeliveredCommit(t *testing.T) {
 	t.Parallel()
 

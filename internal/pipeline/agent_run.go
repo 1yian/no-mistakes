@@ -14,13 +14,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/safeurl"
 )
 
-// ErrAgentTimeout is the context cause used when the default per-invocation
-// agent deadline expires. Callers wrap it with a diagnostic that names the
-// budget; a late successful return after this cause is still a timeout.
 var ErrAgentTimeout = errors.New("agent timeout")
 
-// AgentTimeout is the silent-kill budget applied at the shared agent-run
-// seam. A positive Config.AgentTimeout wins; otherwise the default (30m).
 func AgentTimeout(cfg *config.Config) time.Duration {
 	if cfg != nil && cfg.AgentTimeout > 0 {
 		return cfg.AgentTimeout
@@ -28,8 +23,6 @@ func AgentTimeout(cfg *config.Config) time.Duration {
 	return config.DefaultAgentTimeout
 }
 
-// AgentWorkingTimeout is the optional still-working cap for the shared seam.
-// Zero means the cap is unset and a turn stops at AgentTimeout.
 func AgentWorkingTimeout(cfg *config.Config) time.Duration {
 	if cfg == nil {
 		return 0
@@ -37,16 +30,6 @@ func AgentWorkingTimeout(cfg *config.Config) time.Duration {
 	return cfg.AgentWorkingTimeout
 }
 
-// RunAgent executes one agent invocation with a deadline scoped only to that
-// call. The parent StepContext.Ctx is left unchanged so post-agent work
-// (commits, git, parsing) is not cancelled by the invocation budget.
-//
-// If the parent context already has a deadline (intent extraction, caller
-// cancellation), that bound is honored and no shorter default is stacked.
-// Otherwise AgentTimeout is the silent-kill budget. A turn still producing
-// output or waiting on a live child continues only until AgentWorkingTimeout
-// when that cap is set; an unset cap does not extend the turn. A late
-// successful return after the deadline is rejected.
 func (sctx *StepContext) RunAgent(opts agent.RunOpts) (*agent.Result, error) {
 	parent := context.Background()
 	if sctx != nil {
@@ -55,28 +38,18 @@ func (sctx *StepContext) RunAgent(opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(parent, opts, "", 0, 0, nil)
 }
 
-// RunAgentContext is RunAgent with an explicit parent.
 func (sctx *StepContext) RunAgentContext(parent context.Context, opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(parent, opts, "", 0, 0, nil)
 }
 
-// RunAgentBudget is RunAgentContext with a step-specific silent budget,
-// optional still-working cap, and cause (Review and Test). The parent must
-// not already carry that budget as a context deadline, or the activity-aware
-// extension cannot run. A working cap equal to timeout does not extend the
-// turn.
 func (sctx *StepContext) RunAgentBudget(parent context.Context, timeout, working time.Duration, cause error, opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(parent, opts, "", timeout, working, cause)
 }
 
-// RunAgentSessionContext is RunAgentSession with an explicit parent.
 func (sctx *StepContext) RunAgentSessionContext(parent context.Context, role SessionRole, opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(parent, opts, role, 0, 0, nil)
 }
 
-// RunAgentSessionBudget is RunAgentSessionContext with a step-specific silent
-// budget and optional still-working cap so a fixer turn can use
-// review_agent_timeout without installing an absolute parent deadline.
 func (sctx *StepContext) RunAgentSessionBudget(parent context.Context, timeout, working time.Duration, cause error, role SessionRole, opts agent.RunOpts) (*agent.Result, error) {
 	return sctx.runAgent(parent, opts, role, timeout, working, cause)
 }
@@ -121,55 +94,22 @@ func invokeAgent(parent context.Context, timeout, working time.Duration, cause e
 	return result, nil
 }
 
-// agentActivity records when an in-flight invocation last produced anything
-// observable: streamed assistant text or raw subprocess bytes
-// (agent.LifecyclePhaseActivity). Lifecycle control metadata is not output.
-//
-// It exists because the timeout diagnostics used to assert that the agent had
-// been "silent for <budget>" without ever measuring silence - the budget was
-// simply printed twice. An operator reading that line cannot tell a wedged
-// process from one that streamed until the last second, which is exactly the
-// distinction that decides whether to re-run, raise the budget, or go look at
-// the agent CLI. Everything reported now is measured.
 type agentActivity struct {
-	mu sync.Mutex
-	// begun is when the current attempt was handed to the agent.
-	begun time.Time
-	// last is when output was most recently observed; zero when none ever was.
-	last time.Time
-	// observed counts output events. A subprocess launch is deliberately not
-	// one of them: launching proves the binary ran, not that it is doing
-	// anything, and counting it would erase the difference this whole
-	// measurement exists to expose.
-	observed int
-	// launchedPID is the native subprocess PID, when one was reported.
-	launchedPID int
-	launchedAt  time.Time
-	launched    bool
-	// exited is set once the launched subprocess reported its exit, so its
-	// PID is never probed for children after the kernel may have reused it.
-	exited bool
-	// trackChildren is set when a stall budget applies, the only reader of
-	// the child samples below.
-	trackChildren bool
-	// finished stops the child sampler once the invocation returned.
-	finished bool
-	// generation stops a sampler whose attempt or launch was superseded.
-	generation int
-	// current and previous are the two most recent periodic samples of the
-	// launched subprocess's live descendants.
+	mu                sync.Mutex
+	begun             time.Time
+	last              time.Time
+	observed          int
+	launchedPID       int
+	launchedAt        time.Time
+	launched          bool
+	exited            bool
+	trackChildren     bool
+	finished          bool
+	generation        int
 	current, previous childSample
-	// helpers is frozen from a sample completed before the most recent
-	// output, and is never refreshed during a quiet stretch, so a tool the
-	// agent launched after speaking, including one its first output
-	// announced, cannot age into it. waitingOnChild counts only descendants
-	// missing from it. It stays zero when every output so far came before
-	// any sample settled, and then every live descendant counts.
-	helpers childSample
+	helpers           childSample
 }
 
-// childSample is one read of a subprocess's live descendants, completed at
-// at.
 type childSample struct {
 	children map[int]bool
 	ok       bool
@@ -177,13 +117,8 @@ type childSample struct {
 }
 
 const (
-	// childSampleInterval paces the descendant sampler.
 	childSampleInterval = time.Second
-	// childSampleSettle is how long before an observed output a sample must
-	// have completed to be frozen as helpers. Output is read a moment after
-	// the agent wrote it, and a tool it announced may already be running in
-	// between; a sample completed that close to the read could hold it.
-	childSampleSettle = 50 * time.Millisecond
+	childSampleSettle   = 50 * time.Millisecond
 )
 
 func newAgentActivity() *agentActivity {
@@ -208,10 +143,6 @@ func (a *agentActivity) observe() {
 	a.mu.Unlock()
 }
 
-// sampleChildren reads the launched subprocess's live descendants
-// periodically until the subprocess exits, the invocation returns, or a new
-// attempt or launch supersedes it. Only observe() turns a sample into the
-// helper baseline.
 func (a *agentActivity) sampleChildren(pid, generation int) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -295,16 +226,6 @@ func (a *agentActivity) observeExit() {
 	a.mu.Unlock()
 }
 
-// waitingOnChild reports whether the launched agent subprocess is running a
-// child process missing from the baseline frozen before its latest output,
-// such as a test suite a tool call announced and then launched. Such a wait
-// emits no output, so it is the only evidence that a quiet agent is working
-// rather than wedged. Helpers (an ACP agent under acpx, stdio MCP servers)
-// live for the whole turn and prove nothing, and an agent that never produced
-// output never announced a tool call. A baseline frozen from a failed sample
-// or an unreadable process table reports false, so the budget is never
-// extended on a guess. It is liveness, not output: evidence() never
-// reports it as the agent having produced anything.
 func (a *agentActivity) waitingOnChild() bool {
 	if a == nil {
 		return false
@@ -330,7 +251,6 @@ func (a *agentActivity) waitingOnChild() bool {
 	return false
 }
 
-// evidence renders what was actually observed, for the timeout message.
 func (a *agentActivity) evidence() string {
 	if a == nil {
 		return "agent activity was not observed for this invocation"
@@ -358,9 +278,6 @@ func roundActivity(d time.Duration) time.Duration {
 	return d.Round(time.Second)
 }
 
-// observeAgentActivity instruments opts so every streamed chunk and every
-// native lifecycle event is recorded before it reaches the caller's callbacks.
-// The wrappers are pure observers: they always forward.
 func observeAgentActivity(opts *agent.RunOpts) *agentActivity {
 	activity := newAgentActivity()
 	onChunk := opts.OnChunk
@@ -398,10 +315,6 @@ func observeAgentActivity(opts *agent.RunOpts) *agentActivity {
 	return activity
 }
 
-// AgentTimeoutIdleGrace is how long an invocation may stay quiet after the
-// stall budget before it is cancelled. Production 30m budgets use the same
-// 10m quiet window AXI already treats as "this looks stalled"; shorter test
-// budgets use the budget itself so tests stay fast.
 func AgentTimeoutIdleGrace(timeout time.Duration) time.Duration {
 	if timeout <= 0 {
 		return 0
@@ -412,8 +325,6 @@ func AgentTimeoutIdleGrace(timeout time.Duration) time.Duration {
 	return config.DefaultStepQuietWarning
 }
 
-// agentBudget is the silent budget and optional still-working cap the shared
-// seam applied to one invocation.
 type agentBudget struct {
 	timeout time.Duration
 	working time.Duration
@@ -421,12 +332,6 @@ type agentBudget struct {
 	start   time.Time
 }
 
-// bound names which limit cut the invocation and how long it actually ran.
-// With no cap the silent budget is a plain deadline that never looked at
-// activity, so that label claims nothing about output or children. With a
-// cap, a deadline that fired is the cap, which also cuts a quiet turn still
-// inside its idle window, so that label claims no activity either; a cancel
-// before the cap is the watcher finding the turn idle.
 func (b *agentBudget) bound(deadlineExceeded bool) string {
 	ran := roundActivity(time.Since(b.start))
 	if b.working <= 0 {
@@ -441,10 +346,6 @@ func (b *agentBudget) bound(deadlineExceeded bool) string {
 		b.timeout, ran)
 }
 
-// AgentBudgetBound renders which bound cut an invocation for a step's own
-// timeout message: the silent budget or the still-working cap, plus the
-// elapsed time.
-// Errors the shared seam did not diagnose fall back to naming timeout.
 func AgentBudgetBound(err error, timeout time.Duration) string {
 	var inv *agentInvocationError
 	if errors.As(err, &inv) && inv.bound != "" {
@@ -556,11 +457,6 @@ func classifyAgentRun(ctx context.Context, budget *agentBudget, activity *agentA
 	return cause
 }
 
-// diagnoseAgentTimeout builds the one error a timed-out invocation returns. It
-// always carries the measured activity evidence and, crucially, whatever the
-// adapter reported - a killed native agent's stderr and exit status is the only
-// account of what the process was doing, and dropping it is what made this
-// failure mode undiagnosable in the first place.
 func diagnoseAgentTimeout(prefix, bound string, activity *agentActivity, adapterErr, cause error) error {
 	parts := make([]string, 0, 3)
 	if prefix != "" {
@@ -578,9 +474,6 @@ func diagnoseAgentTimeout(prefix, bound string, activity *agentActivity, adapter
 	}
 }
 
-// agentReportClause renders the adapter's own error for the timeout message.
-// A nil error, or one that only restates the cancellation the deadline caused,
-// adds nothing and is dropped.
 func agentReportClause(err error) string {
 	if err == nil {
 		return ""
@@ -601,12 +494,8 @@ func agentReportClause(err error) string {
 	return "agent reported: " + text
 }
 
-// agentInvocationError carries both the deadline cause (so a step's own
-// sentinel keeps matching) and the adapter's error (so the concrete failure
-// stays matchable, not just quoted in the message).
 type agentInvocationError struct {
 	message string
-	// bound is which applied budget limit cut the invocation, when one did.
 	bound   string
 	cause   error
 	adapter error
@@ -625,9 +514,6 @@ func (e *agentInvocationError) Unwrap() []error {
 	return errs
 }
 
-// timeoutAgent is the executor backstop: every sctx.Agent.Run is bounded even
-// if a future step forgets RunAgent. Nested with RunAgent it is a no-op when
-// the incoming context already has a deadline.
 type timeoutAgent struct {
 	inner   agent.Agent
 	timeout time.Duration

@@ -23,8 +23,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A read error with partial text must not launch a run with the partial intent.
-// It also detects accidental stdin reads on the absent/string/file paths.
 type intentErrorReader struct{ reads int }
 
 func (r *intentErrorReader) Read(p []byte) (int, error) {
@@ -194,7 +192,6 @@ func TestAxiRunIntentReattachDoesNotReplaceIntent(t *testing.T) {
 			t.Fatal("ordinary reattach read unselected stdin")
 		}
 	}
-	// Presence must also be respected when an active run exists.
 	var lookups atomic.Int32
 	fx.setGetActive(func(context.Context) (*ipc.RunInfo, error) {
 		lookups.Add(1)
@@ -247,9 +244,6 @@ func TestAxiRunIntentStrictClaimUsesResolvedBytes(t *testing.T) {
 	}
 }
 
-// This crosses the real executable, Cobra, local Git push and IPC boundaries.
-// A synthetic no-op gate push reaches AXI's existing rerun fallback. The fake
-// server records the request and returns a completed run; no agent or forge runs.
 func TestNoMistakesBinary_IntentTransport(t *testing.T) {
 	wantHomes := runenv.TranscriptHomes{ClaudeConfigDir: filepath.Join(t.TempDir(), "claude account"), CodexHome: filepath.Join(t.TempDir(), "codex account")}
 	t.Setenv("CLAUDE_CONFIG_DIR", wantHomes.ClaudeConfigDir)
@@ -355,8 +349,6 @@ func TestNoMistakesBinary_IntentTransport(t *testing.T) {
 	}
 }
 
-// This producer never sends EOF. It reports an error after the permitted probe
-// byte so an unbounded implementation fails deterministically without an OOM.
 type intentProducingReader struct{ bytes int }
 
 func (r *intentProducingReader) Read(p []byte) (int, error) {

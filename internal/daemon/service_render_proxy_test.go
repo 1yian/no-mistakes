@@ -7,12 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestSystemdUnitProxyEnvRoundTripsThroughRenderer guards the parser that lets
-// drift detection inherit already-baked proxy entries: parsing a rendered unit
-// back and re-rendering with the result must reproduce the same unit
-// byte-for-byte, including a percent-encoded credential whose `%` the renderer
-// doubled (`%` -> `%%`) and the parser must undo. The fixed HOME/PATH
-// Environment= lines must not be mistaken for proxy entries.
 func TestSystemdUnitProxyEnvRoundTripsThroughRenderer(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	in := [][2]string{
@@ -32,9 +26,6 @@ func TestSystemdUnitProxyEnvRoundTripsThroughRenderer(t *testing.T) {
 	}
 }
 
-// TestLaunchAgentProxyEnvRoundTripsThroughRenderer is the launchd counterpart:
-// parsing the EnvironmentVariables dict back and re-rendering must reproduce the
-// same plist, and HOME/PATH must be skipped.
 func TestLaunchAgentProxyEnvRoundTripsThroughRenderer(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	in := [][2]string{
@@ -54,9 +45,6 @@ func TestLaunchAgentProxyEnvRoundTripsThroughRenderer(t *testing.T) {
 	}
 }
 
-// TestServiceProxyEnvParsersReturnNilForNoProxyDefinition confirms the parsers
-// return nothing for a definition rendered without any proxy, so inheritance is
-// a no-op when there was never a baked-in proxy.
 func TestServiceProxyEnvParsersReturnNilForNoProxyDefinition(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	unit := renderSystemdUnitWithProxyEnv("/usr/local/bin/no-mistakes", p, "/home/u", nil)

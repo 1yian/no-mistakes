@@ -7,9 +7,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// resolveReviewBotComments runs one global YAML document and one repository
-// YAML document through the real loaders, the trusted/pushed effective-config
-// rule, and Merge, and reports the policy the CI step would actually see.
 func resolveReviewBotComments(t *testing.T, globalYAML, trustedRepoYAML, pushedRepoYAML string) string {
 	t.Helper()
 	global, err := LoadGlobalFromBytes([]byte(globalYAML))
@@ -46,8 +43,6 @@ func TestCIReviewBotComments_DefaultAndPrecedence(t *testing.T) {
 	}
 }
 
-// A pushed branch must not be able to silence a green bot's comments on
-// itself, nor opt itself in: the whole ci block is trusted-only.
 func TestCIReviewBotComments_TrustedOnly(t *testing.T) {
 	t.Parallel()
 	const always = "ci:\n  review_bot_comments: always\n"
@@ -60,8 +55,6 @@ func TestCIReviewBotComments_TrustedOnly(t *testing.T) {
 	}
 }
 
-// An unrecognized value fails the config closed rather than falling back to
-// the default, so a typo cannot quietly keep reporting green.
 func TestCIReviewBotComments_RejectsUnknownValue(t *testing.T) {
 	t.Parallel()
 	const typo = "ci:\n  review_bot_comments: allways\n"

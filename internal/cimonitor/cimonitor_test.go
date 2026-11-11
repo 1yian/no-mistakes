@@ -146,10 +146,6 @@ func TestChecksPassed(t *testing.T) {
 	}
 }
 
-// TestChecksPassed_PR607RealLogSequence replays the exact CI log prefix that
-// caused the false checks-passed signal on PR 607. The generic empty-checks
-// marker must never make Ready true; the proven all-green PR 605 shape must
-// still make Ready true.
 func TestChecksPassed_PR607RealLogSequence(t *testing.T) {
 	// Verbatim prefix the agent saw when it emitted "checks green" for PR 607
 	// (see nm-pr607-merge-safety-diagnostic-r1). Grace had expired; Actions had

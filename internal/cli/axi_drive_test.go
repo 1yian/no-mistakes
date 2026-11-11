@@ -775,10 +775,6 @@ func TestRenderDriveResult_FailedHasNoSummarizeInstruction(t *testing.T) {
 	}
 }
 
-// A stream gap is state-bearing for the reconciler: it forces exactly one
-// authoritative read, which is how a transition the daemon had to coalesce
-// away reaches AXI. Subscribe-first behaviour and the single-read budget are
-// unchanged.
 func TestRunReconciler_StreamGapForcesOneAuthoritativeRead(t *testing.T) {
 	events := make(chan ipc.Event, 4)
 	source := &scriptedRunStateSource{
@@ -815,8 +811,6 @@ func TestRunReconciler_StreamGapForcesOneAuthoritativeRead(t *testing.T) {
 	}
 }
 
-// An event type this build does not recognise must be treated as state-bearing
-// rather than ignored, so a future producer cannot strand a consumer.
 func TestRunReconciler_UnknownEventTypeIsTreatedAsStateBearing(t *testing.T) {
 	events := make(chan ipc.Event, 2)
 	source := &scriptedRunStateSource{
@@ -845,19 +839,6 @@ func TestRunReconciler_UnknownEventTypeIsTreatedAsStateBearing(t *testing.T) {
 	}
 }
 
-// TestDriveRun_YesLeavesAnOpenReviewQuestionAwaitingAnAnswer is the regression
-// for the hole --yes used to open in the review conversation.
-//
-// An open question is an ask-user warning on the ordinary findings channel, so
-// HasActionableFindings counted it and gateResolution selected its id like any
-// other finding and returned ActionFix. The fixer was then handed "Review
-// question awaiting an answer: ..." as work, guessed an answer and edited code;
-// the rereview re-emitted the still-open question and the second gate was
-// approved as already-fixed. The stated property that no verdict can release a
-// gate with questions open held only for the explicit answer path.
-//
-// Asserting zero IPC responses is the whole point: any response at all - fix or
-// approve - is the bug, because a question is resolved by an answer.
 func TestDriveRun_YesLeavesAnOpenReviewQuestionAwaitingAnAnswer(t *testing.T) {
 	socketPath := filepath.Join(makeSocketSafeTempDir(t), "review-question.sock")
 	srv := ipc.NewServer()
@@ -928,8 +909,6 @@ func TestDriveRun_YesLeavesAnOpenReviewQuestionAwaitingAnAnswer(t *testing.T) {
 	}
 }
 
-// A gate with no review question is unaffected: --yes still resolves ordinary
-// ask-user findings as standing consent, which is what it is for.
 func TestDriveRun_YesStillResolvesAGateWithoutAReviewQuestion(t *testing.T) {
 	findings := `{"findings":[{"id":"f1","severity":"warning","description":"ordinary finding","action":"ask-user"}],"summary":"one issue"}`
 	parsed, err := types.ParseFindingsJSON(findings)
@@ -950,15 +929,6 @@ func TestDriveRun_YesStillResolvesAGateWithoutAReviewQuestion(t *testing.T) {
 	}
 }
 
-// TestDriveRun_YesLeavesAnUnreadableQuestionHistoryAwaitingAHuman covers the
-// gate the review step parks when the reviewer's question history could not be
-// read in full. That marker deliberately carries no review-question category -
-// an answer is exactly what the daemon refuses for such a conversation - so the
-// carve-out above does not reach it, and without its own predicate
-// gateResolution selected its id, returned ActionFix, and handed the fixer
-// "Decide this gate yourself" as work; the rereview re-emitted the identical
-// marker and the fix_review gate was then approved as already-fixed, so the
-// possibly-dropped major question reached nobody.
 func TestDriveRun_YesLeavesAnUnreadableQuestionHistoryAwaitingAHuman(t *testing.T) {
 	socketPath := filepath.Join(makeSocketSafeTempDir(t), "unreadable-history.sock")
 	srv := ipc.NewServer()

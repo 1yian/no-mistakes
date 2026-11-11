@@ -17,19 +17,6 @@ import (
 	"time"
 )
 
-// recordOpencode boots the real `opencode serve` server and drives it
-// the same way no-mistakes does: open SSE, POST /session, POST a message,
-// wait for session.idle. Every byte read from the server is teed to disk
-// so the fake can replay the exact wire shape.
-//
-// Output layout under <out>/<flavour>/:
-//
-//	session.json     — POST /session response
-//	sse.txt          — raw SSE bytes from /global/event up to session.idle
-//	message.json     — POST /session/{id}/message response
-//
-// Two flavours are recorded: "structured" (json_schema format) and
-// "plain" (no format).
 func recordOpencode(ctx context.Context, out string, args []string) int {
 	bin, forward := splitBinArgs(args, "opencode")
 

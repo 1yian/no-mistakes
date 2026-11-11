@@ -16,9 +16,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Store is the opt-in sqlite-first local registry. It is intentionally a
-// separate database so merely opening the normal pipeline DB never creates an
-// eval table or runs an eval migration.
 type Store struct {
 	root            string
 	cases           string
@@ -27,8 +24,6 @@ type Store struct {
 	repoNames       map[string]string
 }
 
-// Open creates the local eval registry. The eval CLI, AutoCapture, and
-// RelabelRun open it explicitly; opening the pipeline database never does.
 func Open(root string) (*Store, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("eval root is empty")
@@ -233,8 +228,6 @@ func (s *Store) Close() error {
 	return err
 }
 
-// SetDiversifiedSize sets the official-set cap. 0 means one gold case per
-// stratum with no Hamilton bound. Negative values restore the default cap.
 func (s *Store) SetDiversifiedSize(n int) {
 	if s == nil {
 		return
@@ -245,9 +238,6 @@ func (s *Store) SetDiversifiedSize(n int) {
 	s.diversifiedSize = n
 }
 
-// SetRepoNames teaches the store how to display the repository fingerprints
-// its cases carry (see RepoDisplayNames). It is display-only: an unresolved
-// fingerprint still renders, just as its short opaque form.
 func (s *Store) SetRepoNames(names map[string]string) {
 	if s == nil {
 		return
@@ -255,8 +245,6 @@ func (s *Store) SetRepoNames(names map[string]string) {
 	s.repoNames = names
 }
 
-// repoDisplay renders one case's repository identity for a dashboard: the
-// resolved name when known, else the short fingerprint, never blank.
 func (s *Store) repoDisplay(fingerprint string) string {
 	if s != nil {
 		if name := strings.TrimSpace(s.repoNames[fingerprint]); name != "" {
@@ -328,17 +316,10 @@ func (s *Store) appendFindingGold(c Case, added []FindingGold) (Case, int, error
 	return c, n, nil
 }
 
-// ListCases resolves the logical sets. Diversified is gold-only, size-capped,
-// stratified, and pinned: unlabeled cases never fill it. Pins stay until the
-// case is pruned, loses its gold, RefreshDiversified is called, or the live
-// cap shrinks (the read path trims oldest pins to the current cap, at most
-// one per stratum when reconciling to 0 or a lower cap). Tune is leftover
-// labeled cases after those pins, the set matcher thresholds may be fitted on.
 func (s *Store) ListCases(set string) ([]Case, error) {
 	return s.listCases(set, false)
 }
 
-// RefreshDiversified rebuilds the official pin set from current gold.
 func (s *Store) RefreshDiversified() ([]Case, error) {
 	return s.listCases("diversified", true)
 }
@@ -502,13 +483,6 @@ func (s *Store) updateCaseGoldCount(id string, n int) error {
 	return nil
 }
 
-// pendingFindingCounts sums the queued unmatched candidate findings per case
-// from the recorded completed replays. The evaluations table is the single
-// owner of that count: deriving it here (instead of incrementing a stored
-// counter inside labels.json on every replay) keeps replay from ever rewriting
-// a case's labels, so re-running the same eval run cannot double-append corpus
-// state. Legacy stored counters carry the same information - every historical
-// increment corresponded to one persisted evaluation row - so they are ignored.
 func (s *Store) pendingFindingCounts() (map[string]int, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("eval registry is closed")
@@ -544,16 +518,6 @@ func (s *Store) pinCount() (int, error) {
 	return n, nil
 }
 
-// Prune bounds the corpus at maxCases by dropping the oldest cases first, and
-// reports how many it removed. A maxCases of 0 or less keeps every case.
-//
-// It never removes a case reserved by a replay session or one that already has
-// recorded candidate replays: those evaluations are the result of tokens
-// somebody spent, and a cohort in an eval report pins the exact case IDs it
-// compared, so reclaiming one would silently invalidate a published comparison.
-// When protected cases alone exceed the cap the corpus stays over it rather than
-// deleting that evidence - the cap is a retention target, not a promise to
-// reach a number.
 func (s *Store) Prune(ctx context.Context, maxCases int) (int, error) {
 	if s == nil || s.db == nil {
 		return 0, fmt.Errorf("eval registry is closed")
@@ -699,9 +663,6 @@ func readJSON(path string, dest any) error {
 	return nil
 }
 
-// writeJSON publishes the file atomically (write-then-rename in the same
-// directory), so a crash mid-write can never leave a half-written labels or
-// manifest file that would corrupt the case on the next read.
 func writeJSON(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

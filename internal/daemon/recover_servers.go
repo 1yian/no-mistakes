@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// orphanStartTimeTolerance bounds the acceptable difference between the
-// process start time recorded in a PID file and the one reported by the
-// kernel now. A small nonzero value absorbs clock quirks and the sub-second
-// gap between cmd.Start() and the time.Now() we record.
 const orphanStartTimeTolerance = 2 * time.Second
 
 var processRunningFunc = processRunning
@@ -29,17 +25,6 @@ type daemonPIDFile struct {
 	StartedAt time.Time `json:"started_at,omitempty"`
 }
 
-// reapOrphanedServers kills managed-server subprocesses (opencode,
-// rovodev) left behind by a crashed predecessor daemon and deletes their
-// stale PID files.
-//
-// Safety rules:
-//   - If another no-mistakes daemon is still running, skip everything so
-//     we don't kill that daemon's live servers.
-//   - For each PID file, require the recorded StartedAt to match the
-//     process's actual start time within orphanStartTimeTolerance. If not,
-//     the PID has been reused by something unrelated; delete the file but
-//     do not signal the process.
 func reapOrphanedServers(p *paths.Paths) {
 	dir := p.ServerPIDsDir()
 	if otherDaemonAlive(p) {
@@ -151,9 +136,6 @@ func removeServerPIDFile(path string) {
 	}
 }
 
-// otherDaemonAlive returns true if the daemon PID file points at a running
-// process that isn't us. The recovery path runs before the new daemon
-// writes its own PID file, so any live PID here belongs to a predecessor.
 func otherDaemonAlive(p *paths.Paths) bool {
 	record, err := readDaemonPIDFile(p.PIDFile())
 	if err != nil {

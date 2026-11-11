@@ -12,21 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestExecutor_RecoveredAnswerRoundIsTriggeredAsAnAnswer drives the DAEMON
-// RESTART path specifically, which is the only path that got this wrong.
-//
-// A review parks on the questions its reviewer asked; a park lasts tens of
-// minutes to hours, so a restart inside that window is exactly what Resume
-// exists for. Resume's ActionAnswer branch sets `answering` and deliberately
-// leaves `fixing` false, because no code changed - so a trigger derived from
-// Fixing alone labelled the finalize round "initial" and left step_rounds
-// claiming the run had two initial review rounds. That is a durable wrong
-// label, rendered back into round-history prompt sections and the PR pipeline
-// summary, and nothing errors.
-//
-// The live loop already labels this "answer" when it re-enters the step
-// itself, so a test driving the live loop passes on the broken code and proves
-// nothing. This one goes through Resume.
 func TestExecutor_RecoveredAnswerRoundIsTriggeredAsAnAnswer(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {
@@ -119,18 +104,6 @@ func TestExecutor_RecoveredAnswerRoundIsTriggeredAsAnAnswer(t *testing.T) {
 	}
 }
 
-// TestExecutor_AnswerActionIsRefusedForAnyStepButReview drives the guard that
-// keeps the answer action review-scoped.
-//
-// Only the review step owns a question channel, so any other step receiving
-// this action would re-execute with review semantics it does not implement -
-// SkipFixExecution, FinalizingAnswers and an "answer" round on a step that has
-// no reviewer to resume. It therefore fails closed.
-//
-// This replaces a test that asserted only that types.ActionAnswer differs from
-// the two verdict constants, which could not fail for any change to the
-// behavior its name claimed: deleting the guard entirely left every test in the
-// tree green.
 func TestExecutor_AnswerActionIsRefusedForAnyStepButReview(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	step := newApprovalStep(types.StepDocument, `{"findings":[{"id":"d-1","severity":"warning","description":"waiting","action":"ask-user"}],"summary":"1 issue"}`)
@@ -166,25 +139,6 @@ func TestExecutor_AnswerActionIsRefusedForAnyStepButReview(t *testing.T) {
 	}
 }
 
-// TestExecutor_RecoveredAnswerRoundInheritsAFixReviewGatesContext drives the
-// case the sibling test above cannot: a gate that parked as fix_review, not
-// awaiting_approval.
-//
-// A question can be asked by a rereview INSIDE a fix round, so the gate parks as
-// fix_review carrying the question finding. The live answer path leaves
-// sctx.Fixing set and adds SkipFixExecution, so the finalize turn re-parks as
-// fix_review. Resume's branch built its state with fixing false and no skip
-// flag, so the identical state re-parked as awaiting_approval - and that label
-// is exactly what the automatic resolvers branch on: they approve a fix_review
-// gate but send FIX for an awaiting_approval one, so after a restart --yes and
-// yolo spent an extra pipeline-authored fix round on a gate that had already
-// converged.
-//
-// Two things must hold together, which is why one test covers both: the
-// inherited context must NOT re-run the fixer over already-fixed code, and the
-// round must still be labelled an answer rather than an auto_fix - the trigger
-// switch tested sctx.Fixing first, so inheriting the context without reordering
-// it would persist a human's answer as a pipeline fix round.
 func TestExecutor_RecoveredAnswerRoundInheritsAFixReviewGatesContext(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {
@@ -292,16 +246,6 @@ func TestExecutor_RecoveredAnswerRoundInheritsAFixReviewGatesContext(t *testing.
 	}
 }
 
-// TestExecutor_RecoveredAnswerRoundKeepsTheOutstandingFindings covers what the
-// answer round must NOT resolve. The live path keeps the outstanding set in
-// locals across its `continue rounds`, so an answer there never loses it; the
-// recovered path rebuilds the state from scratch, and seeding it empty let the
-// finalize round start with nothing outstanding and complete the review clean
-// over a finding no rereview ever verified.
-//
-// The gate here parks on a code finding that was selected for a fix AND a
-// question; the answer settles only the question, so a clean finalize turn must
-// still leave f-1 outstanding and re-park rather than completing the step.
 func TestExecutor_RecoveredAnswerRoundKeepsTheOutstandingFindings(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {

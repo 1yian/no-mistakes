@@ -11,9 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-// ValidatePRTemplatePath accepts a literal repository-relative Git path, not a
-// filesystem path, glob, ref expression or URL. Empty leaves template mode off.
-// Keep this platform-independent: a Windows spelling is unsafe on POSIX too.
 func ValidatePRTemplatePath(name string) error {
 	if name == "" {
 		return nil
@@ -38,13 +35,8 @@ const (
 	maxPRTitleBytes              = 4096
 )
 
-// MaxPRTitleBytes is the longest PR title pr.title_format may render, and the
-// bound on a caller-supplied title.
 const MaxPRTitleBytes = maxPRTitleBytes
 
-// ContainsUnsafeTitleRune reports whether a PR title holds a control, bidi,
-// line-separator, or invisible format character: the policy rendered
-// pr.title_format titles are held to.
 func ContainsUnsafeTitleRune(title string) bool {
 	return containsUnsafeFixMessageRune(title)
 }
@@ -159,8 +151,6 @@ func validateRenderedPRTitle(title string) error {
 	return nil
 }
 
-// RequiresBranch reports whether configured PR title format uses the branch
-// identifier placeholder.
 func (p PR) RequiresBranch() bool {
 	if p.TitleFormat == "" {
 		return false
@@ -169,9 +159,6 @@ func (p PR) RequiresBranch() bool {
 	return err == nil && prTitleTemplateUsesBranch(tmpl)
 }
 
-// RenderTitle applies the configured repository PR title format. An empty
-// format leaves the caller's title unchanged, preserving conventional-title
-// behavior for repositories that configure nothing.
 func (p PR) RenderTitle(branch, title string) (string, error) {
 	if p.TitleFormat == "" {
 		return title, nil

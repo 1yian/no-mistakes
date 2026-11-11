@@ -13,25 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestFailedInvocationUsageJourney drives issue #1054 through the stock
-// operator surfaces: a push that triggers a real pipeline, then
-// `no-mistakes stats --run` / `stats --agents` reading the rows the daemon
-// persisted.
-//
-// Rounds that all end in failure must read differently:
-//
-//   - a review round whose output the adapter rejected against the schema
-//     really did burn tokens, so its row carries them. Before the fix the
-//     adapter discarded its parsed usage with the rejected result and the
-//     row stored a fabricated 0.
-//   - a review round killed by its wall-clock budget never reported usage at
-//     all, so its row reads "-" (unknown), never 0.
-//   - a review fix round that failed keeps its usage too, and a failure alone
-//     is never read as a session fallback.
-//
-// The aggregate follows the same rule as every other nullable column: one
-// invocation without usage blanks that purpose's total rather than silently
-// summing the rows it happens to have.
 func TestFailedInvocationUsageJourney(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "failed-invocation-usage.yaml")
 	content := `actions:
@@ -217,7 +198,6 @@ func TestFailedInvocationUsageJourney(t *testing.T) {
 	}
 }
 
-// tokenRow is one rendered line of the per-run token table.
 type tokenRow struct {
 	step    string
 	purpose string
@@ -226,13 +206,9 @@ type tokenRow struct {
 	rawOut  string
 }
 
-// tokenRows reads the per-invocation token table `no-mistakes stats --run`
-// prints. The table is the operator-facing report this change alters, so the
-// assertions read the rendered columns rather than the database behind them.
 func tokenRows(t *testing.T, out, step string) []tokenRow {
 	t.Helper()
 	const (
-		// STEP ROUND PURPOSE SESSION ΔIN ΔOUT ΔCACHERD IN OUT CACHERD CACHEWR FRESHIN REASON
 		columns  = 13
 		rawInCol = 7
 	)
@@ -253,12 +229,9 @@ func tokenRows(t *testing.T, out, step string) []tokenRow {
 	return rows
 }
 
-// aggregateInputTokens reads the IN TOK cell of one purpose's row in the
-// `no-mistakes stats --agents` aggregate table.
 func aggregateInputTokens(t *testing.T, out, purpose string) string {
 	t.Helper()
 	const (
-		// PURPOSE COUNT AVG TOTAL COLD STARTED RESUMED FALLBACK ERRORS IN OUT CACHERD CACHEWR FRESHIN REASON
 		columns = 15
 		inCol   = 9
 	)

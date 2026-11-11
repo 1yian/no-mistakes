@@ -24,8 +24,6 @@ func submissionIdentity(ctx context.Context, checkout string) (git.CommitIdentit
 	if identity, ok := git.CommitIdentityFromContext(ctx); ok {
 		return identity, identity.Validate()
 	}
-	// An older caller cannot prove which global config or environment it used.
-	// Only a complete checkout-local identity is safe without its snapshot.
 	var identity git.CommitIdentity
 	scopes := [][]string{{"--local"}}
 	isolated, err := git.Run(ctx, checkout, "config", "--local", "--type=bool", "--get", "--default", "false", "extensions.worktreeConfig")

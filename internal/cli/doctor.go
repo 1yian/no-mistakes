@@ -254,12 +254,6 @@ func doctorForgeProfiles(
 	return allOK
 }
 
-// doctorProviderPlugins reports each configured provider plugin and whether
-// its command resolves. It deliberately does not run the plugin's handshake:
-// doctor has no repository, and a plugin is free to check authentication per
-// repository, so a synthetic handshake could fail for a correctly configured
-// plugin. The PR step skips with a refused handshake's message and fails on
-// a handshake that breaks the protocol.
 func doctorProviderPlugins(
 	w io.Writer,
 	plugins config.ProviderPlugins,

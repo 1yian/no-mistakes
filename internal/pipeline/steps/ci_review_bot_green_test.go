@@ -12,9 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// greenGreptileChecksJSON is an all-green head on which Greptile concluded
-// its own check success, the shape of kunchenguid/gh-axi#184 after the CI
-// step's first repair: green, yet with an unresolved bot comment.
 const greenGreptileChecksJSON = `[{"name":"build","state":"SUCCESS","bucket":"pass","app":"github-actions"},{"name":"Greptile Review","state":"SUCCESS","bucket":"pass","app":"greptile-apps","link":"https://greptile.com/"}]`
 
 const greenGreptileCommentJSON = `FAKE_CLI_REVIEW_COMMENTS=[{"author":"greptile-apps[bot]","path":"src/commands/api.test.ts","line":88,"body":"The test asserts a request GitHub would reject"}]`
@@ -37,9 +34,6 @@ func newGreenReviewBotContext(t *testing.T, policy string, env []string) (*pipel
 	return sctx, ag, &logs, &everReady, headSHA
 }
 
-// Under ci.review_bot_comments: always, an unresolved comment from a review
-// bot whose check concluded green parks the step exactly as a red bot check
-// does: one ask-user finding per comment, no fix round, and no checks-passed.
 func TestCIStep_GreenReviewBotCommentsParkUnderAlways(t *testing.T) {
 	t.Parallel()
 	env := append(fakeCIGH(t, "OPEN", greenGreptileChecksJSON), greenGreptileCommentJSON)
@@ -88,11 +82,6 @@ func TestCIStep_GreenReviewBotCommentsParkUnderAlways(t *testing.T) {
 	}
 }
 
-// Fast checks can finish green on a new head before the review bot has
-// registered its check there, while its threads from an earlier head stay
-// unresolved. Under always those comments are still read, withhold
-// checks-passed, and park as ask-user findings; under the default the head is
-// green as before.
 func TestCIStep_UnregisteredReviewBotCommentsFollowThePolicy(t *testing.T) {
 	t.Parallel()
 	const fastChecksJSON = `[{"name":"build","state":"SUCCESS","bucket":"pass","app":"github-actions"}]`
@@ -150,10 +139,6 @@ func TestCIStep_UnregisteredReviewBotCommentsFollowThePolicy(t *testing.T) {
 	})
 }
 
-// A trusted no_ci head with no checks at all is ready only after the same
-// comment read: under always an unresolved review-bot comment withholds the
-// no-checks readiness and parks as an ask-user finding; under the default the
-// declared no-CI head is ready as before.
 func TestCIStep_NoCIZeroChecksReviewBotCommentsFollowThePolicy(t *testing.T) {
 	t.Parallel()
 	t.Run("always", func(t *testing.T) {
@@ -208,8 +193,6 @@ func TestCIStep_NoCIZeroChecksReviewBotCommentsFollowThePolicy(t *testing.T) {
 	})
 }
 
-// The default (on_failure, or the key unset) keeps today's behavior: a green
-// review-bot check is green, whatever comments it left.
 func TestCIStep_GreenReviewBotCommentsIgnoredByDefault(t *testing.T) {
 	t.Parallel()
 	for _, policy := range []string{"", config.CIReviewBotCommentsOnFailure} {
@@ -233,7 +216,6 @@ func TestCIStep_GreenReviewBotCommentsIgnoredByDefault(t *testing.T) {
 	}
 }
 
-// A green review bot that left nothing unresolved is green under always too.
 func TestCIStep_GreenReviewBotWithoutCommentsPassesUnderAlways(t *testing.T) {
 	t.Parallel()
 	env := fakeCIGH(t, "OPEN", greenGreptileChecksJSON)
@@ -249,9 +231,6 @@ func TestCIStep_GreenReviewBotWithoutCommentsPassesUnderAlways(t *testing.T) {
 	}
 }
 
-// Under always, a comment list that cannot be read is not evidence of no
-// comments: checks-passed is withheld, and a read that keeps failing parks for
-// a decision instead of spinning until ci_timeout.
 func TestCIStep_GreenReviewBotUnreadableCommentsParkUnderAlways(t *testing.T) {
 	t.Parallel()
 	env := append(fakeCIGH(t, "OPEN", greenGreptileChecksJSON), `FAKE_CLI_REVIEW_COMMENTS=not-json`)
@@ -287,9 +266,6 @@ func TestCIStep_GreenReviewBotUnreadableCommentsParkUnderAlways(t *testing.T) {
 	}
 }
 
-// When a job failure and a green review bot share a settled observation, the
-// bot's unresolved comments ride along as ask-user findings under always, and
-// are left out under the default.
 func TestCIObservationFindings_GreenReviewBotCommentsFollowThePolicy(t *testing.T) {
 	t.Parallel()
 	issues := ciIssues{
@@ -336,8 +312,6 @@ func TestCIObservationFindings_GreenReviewBotCommentsFollowThePolicy(t *testing.
 	}
 }
 
-// A still-running review bot is never read under always: its review may still
-// be posting, so only a completed check counts.
 func TestGreenReviewBotChecksExcludesPendingAndFailing(t *testing.T) {
 	t.Parallel()
 	got := greenReviewBotChecks(scm.ReviewBotsFor([]string{"coderabbit"}), []scm.Check{
@@ -358,9 +332,6 @@ func TestGreenReviewBotChecksExcludesPendingAndFailing(t *testing.T) {
 	}
 }
 
-// Approving a CI gate over a green bot's unresolved comments is an override
-// under always, never a silent clean pass; under the default it is a clean
-// pass as before.
 func TestCIStep_VerifyApprovalOverride_GreenReviewBotComments(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -389,10 +360,6 @@ func TestCIStep_VerifyApprovalOverride_GreenReviewBotComments(t *testing.T) {
 	}
 }
 
-// A job failure observed next to a green review bot: under always the step's
-// settled observation reads the bot's comments and carries them as ask-user
-// findings beside the auto-fix job failure; under the default it carries only
-// the job failure.
 func TestCIStep_JobFailureWithGreenReviewBotFollowsThePolicy(t *testing.T) {
 	t.Parallel()
 	const checksJSON = `[{"name":"build","state":"FAILURE","bucket":"fail","app":"github-actions"},{"name":"Greptile Review","state":"SUCCESS","bucket":"pass","app":"greptile-apps","link":"https://greptile.com/"}]`
@@ -439,9 +406,6 @@ func TestCIStep_JobFailureWithGreenReviewBotFollowsThePolicy(t *testing.T) {
 	}
 }
 
-// gitlabReviewCommentHost stands in for the GitLab adapter's read half: it
-// declares the capability GitLab now does and answers with the login the bot
-// comments under there.
 type gitlabReviewCommentHost struct {
 	scm.Host
 	calls    int
@@ -459,11 +423,6 @@ func (h *gitlabReviewCommentHost) GetReviewComments(context.Context, *scm.PR) ([
 	return h.comments, nil
 }
 
-// On GitLab a review bot is identified by the login it comments as, and only
-// the comment half exists: no job names a publishing application, so no check
-// can ever be attributed to a bot. ci.review_bot_comments: always therefore
-// reads the bot's unresolved discussions through the green/not-yet-registered
-// path, and on_failure never consults the reader at all.
 func TestReviewBotCommentsOnGitLabFollowThePolicy(t *testing.T) {
 	t.Parallel()
 

@@ -11,14 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/shellenv"
 )
 
-// Retry parameters for `launchctl bootstrap` after a preceding bootout.
-// launchctl bootout is async: it SIGTERMs the existing service and gives
-// launchd up to ~5s to finalize cleanup. During that window, bootstrap
-// returns errno 37 EPROGRESS ("Operation already in progress") and there
-// is no synchronous API to wait for the previous instance to fully detach.
-// A stop+start sequence (which is exactly what `make install` does, and
-// what `daemon restart` does) collides with this window unless bootstrap
-// is retried. Exposed as package vars so tests can shrink the timings.
 var (
 	launchctlBootstrapRetryTimeout  = 10 * time.Second
 	launchctlBootstrapRetryInterval = 200 * time.Millisecond
@@ -46,12 +38,6 @@ func installLaunchAgent(p *paths.Paths, exe string) error {
 	return nil
 }
 
-// cleanupLegacyLaunchAgent removes any plist installed by a pre-scoping
-// binary at the globally-named path so the new scoped install is the only
-// managed daemon for this user going forward. We bootout the legacy label
-// before deleting so an already-loaded legacy daemon is released from
-// launchd (it will exit on SIGTERM). Any error is best-effort: if there's
-// no legacy plist or launchctl refuses, we proceed with the scoped install.
 func cleanupLegacyLaunchAgent(p *paths.Paths) {
 	path := legacyLaunchAgentPath()
 	data, err := os.ReadFile(path)
@@ -83,10 +69,6 @@ func startLaunchAgent(p *paths.Paths) error {
 	return nil
 }
 
-// launchctlBootstrapWithRetry runs `launchctl bootstrap` and retries on
-// errno 37 EPROGRESS until the bootout-cleanup window closes. Non-busy
-// failures (bad plist, bad permissions) return immediately so they can
-// surface through the normal managed-start fallback path.
 func launchctlBootstrapWithRetry(domain, path string) error {
 	deadline := time.Now().Add(launchctlBootstrapRetryTimeout)
 	var lastErr error
@@ -106,11 +88,6 @@ func launchctlBootstrapWithRetry(domain, path string) error {
 	}
 }
 
-// launchctlBootstrapBusy reports whether a bootstrap error is the
-// "previous instance still unloading" race. launchctl surfaces this as
-// exit 37 with stderr "Bootstrap failed: 37: Operation already in
-// progress". Match both exit status and message text so we remain robust
-// to launchctl output tweaks across macOS releases.
 func launchctlBootstrapBusy(err error) bool {
 	if err == nil {
 		return false
@@ -143,10 +120,6 @@ func removeLaunchAgent(p *paths.Paths) error {
 	return nil
 }
 
-// launchctlBootoutServiceNotLoaded reports whether a launchctl bootout
-// failure is the ESRCH case ("No such process", exit 3) that launchctl
-// emits when the service label isn't currently loaded. That is semantically
-// a successful stop - the service is already not running.
 func launchctlBootoutServiceNotLoaded(err error, output []byte) bool {
 	if err == nil {
 		return false
@@ -179,15 +152,10 @@ func launchdDomainTarget() (string, error) {
 	return "gui/" + u.Uid, nil
 }
 
-// renderLaunchAgent is a test convenience wrapper using serviceEnv(nil).
-// Production callers use renderLaunchAgentWithProxyEnv with the environment
-// resolved by serviceEnv from the process and existing definition.
 func renderLaunchAgent(exe string, p *paths.Paths, home string) string {
 	return renderLaunchAgentWithProxyEnv(exe, p, home, serviceEnv(nil))
 }
 
-// renderLaunchAgentWithProxyEnv renders the launchd plist using the forwarded
-// proxy and telemetry environment supplied by the caller (see serviceEnv).
 func renderLaunchAgentWithProxyEnv(exe string, p *paths.Paths, home string, proxyEnv [][2]string) string {
 	values := []string{exe, "daemon", "run", "--root", p.Root()}
 	var args strings.Builder
@@ -196,13 +164,6 @@ func renderLaunchAgentWithProxyEnv(exe string, p *paths.Paths, home string, prox
 		args.WriteString(xmlEscaped(value))
 		args.WriteString("</string>\n")
 	}
-	// Build the entire EnvironmentVariables <dict> as one self-contained block:
-	// the fixed HOME/PATH entries plus the forwarded environment, closed by
-	// its own </dict>. Assembling the complete dict here avoids splicing a
-	// proxy fragment into the template via "%s  </dict>", which depended on the
-	// fragment's trailing newline and indentation lining up. Proxy variables are
-	// forwarded so the daemon (and the agents it spawns) can reach the network
-	// through the user's proxy. See serviceProxyEnv.
 	var envDict strings.Builder
 	envDict.WriteString("  <dict>\n")
 	envDict.WriteString("    <key>HOME</key>\n    <string>")
@@ -245,13 +206,6 @@ func renderLaunchAgentWithProxyEnv(exe string, p *paths.Paths, home string, prox
 `, xmlEscaped(launchdServiceLabel(p)), args.String(), xmlEscaped(p.Root()), envDict.String(), xmlEscaped(p.DaemonBootstrapLog()), xmlEscaped(p.DaemonBootstrapLog()))
 }
 
-// managedServicePath returns a default PATH for daemons started by a service
-// manager (launchd, systemd) that would otherwise inherit only the service
-// manager's minimal PATH. Home-directory entries are interpolated here
-// because neither plist nor systemd Environment= expands $HOME.
-//
-// Entry order: user-scoped dirs first so user-managed tools (go, cargo,
-// ~/.local/bin) win over system packages, then Homebrew and distro defaults.
 func managedServicePath(home string) string {
 	return strings.Join(shellenv.WellKnownBinDirsForHome(home), string(os.PathListSeparator))
 }

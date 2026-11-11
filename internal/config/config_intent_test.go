@@ -262,11 +262,6 @@ func TestIntentConfigRejectsInvalidPolicies(t *testing.T) {
 	}
 }
 
-// The global publication default must live only in global config. The repo
-// raw type has no publication key (compile-enforced), so a pushed branch's
-// .no-mistakes.yaml writing intent.publish_intent is silently ignored and the
-// operator's global default always wins. This test pins the observable half:
-// the ignored key parses without error and leaves the resolved defaults.
 func TestRepoConfigCannotExpressIntentPublishIntent(t *testing.T) {
 	repo, err := LoadRepoFromBytes([]byte("intent:\n  publish_intent: false\n"))
 	if err != nil {

@@ -161,13 +161,6 @@ func TestInspectorUsesAuthenticatedProcessAncestryAfterCWDChange(t *testing.T) {
 	}
 }
 
-// TestInspectorAttributesRunInConfiguredWorktreeRoot covers a repository whose
-// run worktrees the operator placed in a directory of their own
-// (worktree_roots): the path no longer spells out <NM_HOME>/worktrees, so
-// run/phase attribution comes from the placement the run recorded. Without it
-// the caller is still refused as managed Git, but the refusal cannot name what
-// it is standing in - and reading the record rather than the configuration is
-// what keeps that naming working when the global config cannot be read at all.
 func TestInspectorAttributesRunInConfiguredWorktreeRoot(t *testing.T) {
 	f := newTopologyFixture(t)
 	runRecord, err := f.d.InsertRun(f.repoID, "feature", "head", "base")
@@ -251,14 +244,6 @@ func assertAllowed(t *testing.T, inspector gatecontext.Inspector, cwd, label str
 	}
 }
 
-// TestInspectorClassifiesAgainstADatabaseOlderThanTheBinary is the upgrade path.
-// This classifier runs in the CLI preflight of every pipeline-control command,
-// before anything opens the database read-write - so on the first invocation
-// after an upgrade it reads a schema this binary has not migrated, through a
-// read-only handle that deliberately will not migrate it. A query naming a column
-// that schema lacks would fail here, and since the commands it guards include the
-// ones that perform the migration, the whole CLI would be stuck until the file was
-// repaired by hand.
 func TestInspectorClassifiesAgainstADatabaseOlderThanTheBinary(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy.sqlite")
 	legacy, err := sql.Open("sqlite", dbPath)

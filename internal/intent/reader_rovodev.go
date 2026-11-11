@@ -12,14 +12,10 @@ import (
 	"time"
 )
 
-// RovoDevReaderName is the agent name used in cache keys and DB rows.
 const RovoDevReaderName = "rovodev"
 
-// rovodevReader reads Atlassian Rovo Dev session JSON files from
-// ~/.rovodev/sessions/<session-id>/.
 type rovodevReader struct{}
 
-// NewRovoDevReader returns a Reader for Rovo Dev transcripts.
 func NewRovoDevReader() Reader { return &rovodevReader{} }
 
 func (r *rovodevReader) Name() string { return RovoDevReaderName }
@@ -119,9 +115,6 @@ type rovodevMetadata struct {
 	startedAt time.Time
 }
 
-// rovodevPeek reads the small metadata.json next to session_context.json
-// to learn the workspace path and start time without parsing the full
-// conversation.
 func rovodevPeek(sessionDir string) (*rovodevMetadata, error) {
 	// Try metadata.json first.
 	if data, err := os.ReadFile(filepath.Join(sessionDir, "metadata.json")); err == nil {

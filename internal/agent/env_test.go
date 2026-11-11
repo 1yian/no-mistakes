@@ -63,9 +63,6 @@ func TestGitSafeEnv_DisablesInteractiveGit(t *testing.T) {
 	}
 }
 
-// TestGitSafeEnv_CouplesPWDToWorkdir guards the regression where assigning
-// cmd.Env dropped os/exec's automatic PWD=cmd.Dir, making os.Getwd in the agent
-// report a symlink-resolved path instead of the worktree path.
 func TestGitSafeEnv_CouplesPWDToWorkdir(t *testing.T) {
 	t.Setenv("PWD", "/somewhere/else")
 
@@ -83,12 +80,6 @@ func TestGitSafeEnv_CouplesPWDToWorkdir(t *testing.T) {
 	}
 }
 
-// TestGitSafeEnv_StampsGateRoleMarker locks in the ambient-authority containment
-// marker: every spawned gate agent must carry NO_MISTAKES_GATE=1 so a
-// cooperating orchestration harness in the target repo can recognize the gate
-// agent and refuse to let it drive the fleet. If this regresses, a gate agent
-// validating a firstmate-shaped repo becomes indistinguishable from a real
-// fleet operator.
 func TestGitSafeEnv_StampsGateRoleMarker(t *testing.T) {
 	resolved := resolveAgentEnv(gitSafeEnv("/work/dir"))
 	if resolved[GateRoleEnvVar] != "1" {
@@ -116,13 +107,6 @@ func TestGitSafeEnvIsObservedBySpawnedProcess(t *testing.T) {
 	}
 }
 
-// TestEverySupportedAdapterCarriesTheRunOverlayAndGateMarker executes the
-// environment every adapter NewWithOptions can build. Native one-shot adapters
-// spawn their command directly, OpenCode and Rovo Dev hand the same overlay to
-// the shared managed-server launcher, and Cursor plus arbitrary ACP targets go
-// through acpx - so the containment marker, compact-adviser disable flag, and
-// the run-scoped forge overlay are asserted per adapter rather than trusted
-// to stay in sync.
 func TestEverySupportedAdapterCarriesTheRunOverlayAndGateMarker(t *testing.T) {
 	t.Setenv("GH_TOKEN", "ambient-must-not-leak")
 	t.Setenv(GateRoleEnvVar, "0")
@@ -187,9 +171,6 @@ func TestEverySupportedAdapterCarriesTheRunOverlayAndGateMarker(t *testing.T) {
 	}
 }
 
-// TestGitSafeEnvIsTheEmptyOverlayCase pins the free helper as exactly the
-// zero-overlay spelling of the overlay-aware one, so a caller that has no
-// run-scoped forge context cannot drift onto a different environment policy.
 func TestGitSafeEnvIsTheEmptyOverlayCase(t *testing.T) {
 	extra := []string{"NM_HOME=/isolated/eval"}
 	plain := gitSafeEnv("/work/dir", extra)
@@ -217,10 +198,6 @@ func TestAgentEnvProbe(t *testing.T) {
 	fmt.Printf("%s|%s|%s", os.Getenv("NM_HOME"), os.Getenv(GateRoleEnvVar), os.Getenv(CompactAdviserDisableEnvVar))
 }
 
-// TestGitSafeEnv_GateMarkerWinsOverAmbient guards that a target repo (or a
-// confused parent) cannot pre-empt the marker with its own ambient value: the
-// stamp is appended last, and exec resolves duplicate keys to the last
-// occurrence.
 func TestGitSafeEnv_GateMarkerWinsOverAmbient(t *testing.T) {
 	t.Setenv(GateRoleEnvVar, "0")
 	resolved := resolveAgentEnv(gitSafeEnv("/work/dir"))
@@ -229,10 +206,6 @@ func TestGitSafeEnv_GateMarkerWinsOverAmbient(t *testing.T) {
 	}
 }
 
-// TestGitSafeEnv_CompactAdviserDisableWinsOverOverlay guards that a forge
-// profile overlay cannot unset or weaken the compact-adviser kill switch:
-// the stamp is appended last, and exec resolves duplicate keys to the last
-// occurrence. Default product behavior is always-on disable for agents.
 func TestGitSafeEnv_CompactAdviserDisableWinsOverOverlay(t *testing.T) {
 	t.Setenv(CompactAdviserDisableEnvVar, "0")
 	resolved := resolveAgentEnv(gitSafeEnvWithOverlay("/work/dir", runenv.Overlay{

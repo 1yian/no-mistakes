@@ -1,63 +1,4 @@
 #!/usr/bin/env python3
-"""Enforce that a pull request was raised through the no-mistakes pipeline.
-
-This is the single shared implementation of the `PR must be raised via
-no-mistakes` gate. Enforcing repositories can call the `require-no-mistakes`
-composite action instead of copying this logic into their own workflows; the
-inline copies drifted (several fleet copies never gained the head_sha bind),
-which is exactly what this file exists to prevent.
-
-The verdict is a pure function of the pull request body plus the PR head SHA:
-
-  1. the body carries the no-mistakes signature line;
-  2. the body carries a parseable v1 pipeline-step attestation comment;
-  3. the attestation's head_sha equals the current PR head SHA, so a later push
-     cannot pass on an older attestation;
-  4. review, test, and document each recorded status == "completed". Skips
-     (quota or agent) and failures are not compliant.
-  5. a test step whose attestation carries a non-empty override_reason is
-     treated as approved over a failing configured commands.test. That is
-     non-compliant unless the attestation also carries a non-empty
-     allow_test_command_override reason (the repo-config opt-in). Older
-     attestations without override_reason are unchanged: they are not
-     approved-over-failure.
-
-Nothing here reads the repository contents, so a fork's code is never executed.
-
-The PR body and head SHA compared in step 3 are read live from the GitHub API
-whenever possible (see live_pr_facts()), not from the workflow's own cached
-event payload. A GitHub Actions job RERUN replays the event payload archived
-at the run's ORIGINAL trigger rather than delivering a fresh one; re-running
-an old, already-superseded failed run therefore reproduces its stale verdict
-with a brand-new timestamp, which both GitHub's own required-check view and
-this repository's check-collapsing logic (internal/scm/github collapseLatestByName)
-treat as the current state - permanently resurrecting a stale failure on an
-otherwise-green commit with no clean recovery short of a new SHA. Live facts
-close that hole: a rerun of any age re-derives its verdict from the PR's
-actual current state instead of a frozen snapshot.
-
-When a live lookup is REQUIRED (no explicit pr-body/pr-head-sha input was
-forwarded) and it fails, main() fails the whole gate closed rather than
-falling back to the cached event payload: evaluating compliance against that
-payload is precisely the staleness hole described above, so a lookup failure
-must never itself become a route to a passing verdict on stale data. Grant
-this workflow `pull-requests: read`, or forward explicit pr-body/pr-head-sha
-inputs, to avoid depending on the live lookup at all.
-
-NON-GOAL: this gate is a CONTRIBUTOR GUARDRAIL, not a forgery-proof security
-boundary. The signature line and the attestation are author-editable assertions
-published in the PR body, so a hand-written body that reproduces the documented
-format passes this check and exits 0. That is a known and accepted limitation,
-and a pre-existing one: it is inherited verbatim from the inline gate this file
-consolidates, not introduced by consolidating it. What the gate does reliably
-catch is the case it exists for - a contributor who bypassed the pipeline by
-accident, a malformed or incomplete declaration, and an attestation left stale
-by a later push. It authorizes nothing against an author who forges the format
-on purpose. Authenticated (signed) attestations are the robust fix and are
-tracked separately as backlog item nm-signed-attestations-r1; do not build them
-into this file.
-"""
-
 from __future__ import annotations
 
 import fnmatch
@@ -87,7 +28,6 @@ def env(name: str) -> str:
 
 
 def event_payload() -> dict:
-    """Read the workflow event payload, so a caller need not forward PR facts."""
     path = os.environ.get("GITHUB_EVENT_PATH") or ""
     if not path or not os.path.exists(path):
         return {}
@@ -106,21 +46,6 @@ LIVE_LOOKUP_TIMEOUT_SECONDS = 10
 
 
 def live_pr_facts(number: str) -> dict | None:
-    """Fetch the PR's current body and head SHA directly from the GitHub API.
-
-    This is the only source Facts uses for body/head_sha whenever a caller
-    forwards no explicit pr-body/pr-head-sha input. See the module docstring
-    for why the cached event_payload() is untrustworthy specifically on an
-    Actions job rerun, and why main() fails the whole gate closed - rather
-    than falling back to event_payload() - when this returns None in that
-    situation.
-
-    Returns None - never raises - whenever a live lookup cannot be attempted
-    (no token, no repo, no PR number) or fails for any reason (network error,
-    non-2xx response, unexpected body). A caller that has not granted the
-    token `pull-requests: read` degrades the same way: the request 403s and
-    this returns None.
-    """
     token = env("GITHUB_TOKEN")
     repo = env("GITHUB_REPOSITORY")
     if not token or not repo or not number:
@@ -152,7 +77,6 @@ def live_pr_facts(number: str) -> dict | None:
 
 
 def parse_list(raw: str) -> list[str]:
-    """Split a newline- or comma-separated input into trimmed, non-empty items."""
     items: list[str] = []
     for line in raw.replace(",", "\n").splitlines():
         value = line.strip()
@@ -223,7 +147,6 @@ def _payload_str(payload: dict, key: str) -> str:
 
 
 def exemption_reason(facts: Facts) -> str:
-    """Return why this PR is exempt from the gate, or "" when it is not."""
     authors = parse_list(os.environ.get("NM_EXEMPT_AUTHORS") or "")
     if facts.author and facts.author in authors:
         return f"author {facts.author} is a configured exempt author"
@@ -286,12 +209,6 @@ def parse_attestation(facts: Facts) -> dict:
 
 
 def check_head_bind(facts: Facts, attested_head: str) -> None:
-    """Bind the attestation to the commit the forge currently has for this PR.
-
-    Without this the gate certifies a body, not a commit: a compliant PR can be
-    pushed to afterwards and the stale attestation would still pass. This is the
-    piece the drifted fleet copies were missing.
-    """
     if attested_head and facts.head_sha and attested_head == facts.head_sha:
         return
     fail(
@@ -341,14 +258,6 @@ def check_required_steps(facts: Facts, steps: list) -> None:
 
 
 def check_test_command_override(facts: Facts, payload: dict) -> None:
-    """Refuse a test step approved over a failing configured command unless opted in.
-
-    override_reason on the last-wins test record is the durable marker that
-    the step was approved while commands.test was still red. An older
-    attestation that omits the field is not that pattern. The opt-in is a
-    recorded reason on allow_test_command_override, copied from trusted repo
-    config; empty or absent is off.
-    """
     override_reason = ""
     for item in payload.get("steps") or []:
         if not isinstance(item, dict):
@@ -408,14 +317,14 @@ def main() -> int:
         # replays the payload archived at the run's ORIGINAL trigger, not a
         # live event, so evaluating compliance against it can certify a
         # stale, already-superseded verdict instead of the PR's current
-        # state (see the module docstring). Fail closed instead of silently
+        # state (see the action README). Fail closed instead of silently
         # downgrading to that stale source.
         fail(
             "::error::Could not verify this PR's live body/head via the GitHub API, so "
             "require-no-mistakes cannot safely evaluate compliance: falling back to the "
             "workflow's own cached event payload risks certifying a stale, "
-            "already-superseded verdict if this job was rerun (see verify.py's module "
-            "docstring).\n\n"
+            "already-superseded verdict if this job was rerun (see the require-no-mistakes "
+            "README).\n\n"
             "Add `pull-requests: read` to this workflow's `permissions:` so "
             "require-no-mistakes can verify against live PR state, or forward explicit "
             "`pr-body`/`pr-head-sha` inputs to bypass the live lookup entirely.\n\n"

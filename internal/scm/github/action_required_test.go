@@ -7,9 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// heldWorkflowRunResponses is the shape GitHub reports for a pull request whose
-// workflows are held for maintainer approval: the head commit carries no check
-// runs at all, and the workflow runs themselves conclude action_required.
 func heldWorkflowRunResponses(runsJSON string, extra map[string]githubTestResponse) map[string]githubTestResponse {
 	responses := map[string]githubTestResponse{
 		"gh pr view 123 --repo test/repo --json headRefOid --jq .headRefOid": {stdout: "deadbeef\n"},
@@ -31,9 +28,6 @@ const heldWorkflowRun = `[{"total_count":1,"workflow_runs":[
 	{"id":101,"name":"CI","display_title":"","status":"completed","conclusion":"action_required","updated_at":"2026-09-24T12:34:56Z"}
 ]}]` + "\n"
 
-// A workflow run held for maintainer approval ran no jobs, so it is a wait on a
-// human rather than a verdict on the commit. Reporting it as a failing check
-// sends the CI step's auto-fix rounds after checks that never executed.
 func TestGetChecksTreatsHeldWorkflowRunWithNoJobsAsAwaitingApproval(t *testing.T) {
 	t.Parallel()
 
@@ -60,8 +54,6 @@ func TestGetChecksTreatsHeldWorkflowRunWithNoJobsAsAwaitingApproval(t *testing.T
 	}
 }
 
-// An action_required run that DID execute jobs is not the maintainer-approval
-// hold, so its classification is unchanged.
 func TestGetChecksKeepsActionRequiredWorkflowRunWithJobsFailing(t *testing.T) {
 	t.Parallel()
 
@@ -83,8 +75,6 @@ func TestGetChecksKeepsActionRequiredWorkflowRunWithJobsFailing(t *testing.T) {
 	}
 }
 
-// The job read is positive evidence, so a run whose jobs cannot be read keeps
-// the classification it has today rather than being guessed as a hold.
 func TestGetChecksKeepsActionRequiredWorkflowRunFailingWhenJobsUnreadable(t *testing.T) {
 	t.Parallel()
 
@@ -103,8 +93,6 @@ func TestGetChecksKeepsActionRequiredWorkflowRunFailingWhenJobsUnreadable(t *tes
 	}
 }
 
-// A workflow run that actually failed is unaffected: no job read is made for it
-// and it stays a failing check.
 func TestGetChecksKeepsGenuineWorkflowRunFailureFailing(t *testing.T) {
 	t.Parallel()
 
@@ -125,10 +113,6 @@ func TestGetChecksKeepsGenuineWorkflowRunFailureFailing(t *testing.T) {
 	}
 }
 
-// Only a PRESENT, empty job list is evidence that the run executed nothing.
-// A response whose `jobs` key is missing, or explicitly null, carries no job
-// data at all: that is unreadable, not proof of a hold, so the run keeps the
-// failing classification it had before this behaviour existed.
 func TestGetChecksKeepsActionRequiredWorkflowRunFailingWhenJobsAreAbsent(t *testing.T) {
 	t.Parallel()
 

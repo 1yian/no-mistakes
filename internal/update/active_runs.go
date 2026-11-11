@@ -38,9 +38,6 @@ func (u *updater) confirmActiveRunsBeforeUpdate() error {
 			u.writeActiveRunWarning(runs)
 			return fmt.Errorf("refusing update because %d active pipeline runs are in progress and %v; pass --force to stop/restart the daemon anyway", len(runs), waitErr)
 		}
-		// No run is active. Only a daemon that is absent or too old falls
-		// back to the immediate restart; any other probe failure leaves a
-		// daemon that may still be running, so refuse before replacing it.
 		var probeErr *probeFailedError
 		if errors.As(waitErr, &probeErr) {
 			return fmt.Errorf("refusing update because %v; retry, or pass --force to stop/restart the daemon anyway", waitErr)
@@ -59,8 +56,6 @@ func (u *updater) confirmActiveRunsBeforeUpdate() error {
 	return fmt.Errorf("refusing update because %d active pipeline runs are in progress; pass --force to stop/restart the daemon anyway", len(runs))
 }
 
-// daemonCanRestartWhenIdle reports why the running daemon cannot wait for
-// active runs before restarting, or nil when it can.
 func (u *updater) daemonCanRestartWhenIdle() error {
 	if u.restartStatus == nil || u.scheduleRestart == nil {
 		return errors.New("the running daemon cannot wait for them")
@@ -81,8 +76,6 @@ func (u *updater) daemonCanRestartWhenIdle() error {
 	return nil
 }
 
-// probeFailedError marks a restart_status failure that is neither a missing
-// nor an unsupported daemon.
 type probeFailedError struct{ err error }
 
 func (e *probeFailedError) Error() string {

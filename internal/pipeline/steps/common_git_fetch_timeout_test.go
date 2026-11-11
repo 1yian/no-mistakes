@@ -14,8 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/testgit"
 )
 
-// hangingGitRemote accepts TCP connections and then says nothing, which is what
-// a dead SSH/git peer looks like to a fetch: connected, and never answering.
 func hangingGitRemote(t *testing.T) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

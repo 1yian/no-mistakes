@@ -77,14 +77,6 @@ func TestStartInstallsLaunchAgentAndBootstrapsManagedDaemon(t *testing.T) {
 	}
 }
 
-// TestStopLaunchAgentTreatsBootoutNotLoadedAsSuccess locks in that
-// `launchctl bootout` returning ESRCH ("No such process", exit 3) is
-// treated as a successful no-op. launchctl emits this when the service
-// label isn't currently loaded, which is semantically the same as "already
-// stopped" for stop purposes. Without this, a plain `daemon stop` after
-// the plist was unloaded out-of-band surfaces a scary error and the
-// detached-fallback path in Start() short-circuits on an install where
-// bootstrap/kickstart failed and the service was never loaded.
 func TestStopLaunchAgentTreatsBootoutNotLoadedAsSuccess(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	home := t.TempDir()
@@ -138,14 +130,6 @@ func TestInstallLaunchAgentKeepsLegacyPlistOnScopedWriteFailure(t *testing.T) {
 	}
 }
 
-// TestStartLaunchAgentRetriesBootstrapOnEPROGRESS locks in the fix for the
-// stop+start race observed during `make install`: launchctl bootout is
-// async and SIGTERMs the old service while keeping the label registered
-// for up to ~5s. A bootstrap in that window returns exit 37 "Operation
-// already in progress". Without retry, the caller sees a hard failure and
-// falls back to the detached-daemon path, dropping the plist on the floor -
-// which breaks auto-start on reboot and was the reason the #143 PATH fix
-// never actually reached the user's launchd daemon.
 func TestStartLaunchAgentRetriesBootstrapOnEPROGRESS(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -188,9 +172,6 @@ func TestStartLaunchAgentRetriesBootstrapOnEPROGRESS(t *testing.T) {
 	}
 }
 
-// TestStartLaunchAgentDoesNotRetryNonBusyBootstrapErrors ensures that
-// genuine failures (bad plist, missing binary, permissions) surface fast
-// rather than being silently retried for 10 seconds.
 func TestStartLaunchAgentDoesNotRetryNonBusyBootstrapErrors(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -288,14 +269,6 @@ func TestRenderLaunchAgentForwardsProxyEnv(t *testing.T) {
 	}
 }
 
-// TestRenderLaunchAgentForwardsEveryProxyEnvKey guards that the renderer and
-// proxyEnvKeys cannot drift apart: every declared key handed to the renderer -
-// both the upper- and lower-case spellings - must reach the plist with its
-// exact value, paired correctly. The proxy environment is injected directly
-// rather than read from the process environment so the assertion is independent
-// of the host's env-var case sensitivity (it ran on Windows CI, where setting
-// both spellings to distinct values is impossible); serviceProxyEnv's own
-// platform-specific behaviour is covered by the TestServiceProxyEnv* tests.
 func TestRenderLaunchAgentForwardsEveryProxyEnvKey(t *testing.T) {
 	var proxyEnv [][2]string
 	for _, key := range proxyEnvKeys {

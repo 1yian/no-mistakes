@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// diffLineType classifies a line in a unified diff.
 type diffLineType int
 
 const (
@@ -19,13 +18,11 @@ const (
 	diffLineHunkHeader                     // hunk header (@@...@@)
 )
 
-// diffLine is a single classified line from a unified diff.
 type diffLine struct {
 	Type diffLineType
 	Text string
 }
 
-// parseDiffLines parses a raw unified diff string into classified lines.
 func parseDiffLines(raw string) []diffLine {
 	if raw == "" {
 		return nil
@@ -50,7 +47,6 @@ func parseDiffLines(raw string) []diffLine {
 	return result
 }
 
-// classifyDiffLine determines the type of a diff line from its prefix.
 func classifyDiffLine(line string) diffLineType {
 	switch {
 	case strings.HasPrefix(line, "diff --git"):
@@ -72,7 +68,6 @@ func classifyDiffLine(line string) diffLineType {
 	}
 }
 
-// diffStats returns summary statistics from a parsed diff.
 func diffStats(lines []diffLine) (files, additions, deletions int) {
 	seen := map[string]bool{}
 	for _, l := range lines {
@@ -94,8 +89,6 @@ func diffStats(lines []diffLine) (files, additions, deletions int) {
 	return
 }
 
-// findDiffOffset returns the best line index in parsed diff lines to scroll to
-// for a given file path and line number. Returns 0 if not found.
 func findDiffOffset(lines []diffLine, file string, line int) int {
 	// Find the file's "diff --git" header and its hunks.
 	fileHeaderIdx := -1
@@ -126,9 +119,6 @@ func findDiffOffset(lines []diffLine, file string, line int) int {
 	return 0
 }
 
-// parseHunkNewRange extracts the new-file start and count from a hunk header.
-// Input format: "@@ -oldStart,oldCount +newStart,newCount @@ optional context"
-// Returns (start, count). Returns (0, 0) if parsing fails.
 func parseHunkNewRange(header string) (int, int) {
 	// Find "+start,count" or "+start" portion.
 	idx := strings.Index(header, "+")
@@ -158,9 +148,6 @@ func parseHunkNewRange(header string) (int, int) {
 	return start, 1
 }
 
-// computeDiffLineNumbers assigns new-file line numbers to each diff line.
-// Context and addition lines get incrementing new-file numbers; deletion,
-// file header, and hunk header lines get 0 (no number shown).
 func computeDiffLineNumbers(lines []diffLine) []int {
 	nums := make([]int, len(lines))
 	curLine := 0
@@ -185,7 +172,6 @@ func computeDiffLineNumbers(lines []diffLine) []int {
 	return nums
 }
 
-// diffLineStyle returns the lipgloss style for a diff line type.
 func diffLineStyle(t diffLineType) lipgloss.Style {
 	switch t {
 	case diffLineAddition:
@@ -201,11 +187,6 @@ func diffLineStyle(t diffLineType) lipgloss.Style {
 	}
 }
 
-// renderDiff renders a scrollable, color-coded diff view inside a boxed section.
-// offset is the scroll position (first visible line), viewHeight is the number of visible lines.
-// If viewHeight <= 0, all lines are rendered. stepLabel is included in the box title when non-empty.
-// findingContext, when non-empty, is displayed below the stats as a dim context line
-// showing the current finding's info (for n/p navigation).
 func renderDiff(raw string, width, viewHeight, offset int, stepLabel string, findingContext string) string {
 	lines := parseDiffLines(raw)
 	if len(lines) == 0 {

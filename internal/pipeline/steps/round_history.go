@@ -17,35 +17,12 @@ const (
 	maxDecisionSectionBytes    = 16 * 1024
 )
 
-// roundHistoryPromptSection builds a compact, sanitized record of what has
-// already been decided about this change, so that fix and reassess agents do
-// not repeat work or undo a human's choice. It has three parts:
-//
-//   - decisions a human already made on this branch in EARLIER runs;
-//   - decisions a human already made in OTHER steps of this run;
-//   - this step's own prior rounds, including what the user selected versus
-//     left unselected and what previous fix attempts summarized.
-//
-// The first two exist because a decision used to be visible only to the step
-// that produced it and only for the life of one run. Every other step, and
-// every later run, then re-derived what the change "must" do from the only
-// durable statement left - the user-intent prose - and could re-apply exactly
-// the change a human had declined.
-//
-// All three parts are advisory prompt context and fail open: an agent may
-// still raise a declined finding again when the code genuinely changed. None
-// of this blocks a step or gates a commit.
-//
-// Returns an empty string when there is nothing to report. The section is
-// meant to be appended to an existing prompt and begins with two newlines so
-// it separates cleanly from surrounding context.
 func roundHistoryPromptSection(sctx *pipeline.StepContext) string {
 	return branchDecisionsPromptSection(sctx) +
 		runDecisionsPromptSection(sctx) +
 		stepRoundHistorySection(sctx)
 }
 
-// stepRoundHistorySection renders the current step's own prior rounds.
 func stepRoundHistorySection(sctx *pipeline.StepContext) string {
 	if sctx == nil || sctx.DB == nil || sctx.StepResultID == "" {
 		return ""
@@ -70,13 +47,6 @@ func stepRoundHistorySection(sctx *pipeline.StepContext) string {
 	return renderBoundedRoundHistory(prefix, blocks)
 }
 
-// renderRoundHistoryBlocks renders rounds in order, carrying the findings a
-// human chose to fix forward so that a later round's declines can never name
-// one of them. A later round that omits a fixed finding keeps that fix, and a
-// gate response cannot decline one at all (splitFixResponse refuses it), so the
-// sticky set only ever grows. Only the current step's own history keeps driver
-// guidance, under a note saying whose it is; anywhere else it would read as
-// part of the user's decision.
 func renderRoundHistoryBlocks(rounds []*db.StepRound, ownStep bool) []string {
 	var blocks []string
 	var earlierFixes map[string]bool
@@ -89,11 +59,6 @@ func renderRoundHistoryBlocks(rounds []*db.StepRound, ownStep bool) []string {
 	return blocks
 }
 
-// withChosenToFix extends the running set with the findings this round's human
-// selection chose to fix, returning a new set (or the input unchanged when the
-// round chose nothing). Only a user selection counts: an auto-fix selection is
-// the pipeline's own choice and decides nothing, and an approve/skip/abort
-// resolution selected nothing.
 func withChosenToFix(chosen map[string]bool, r *db.StepRound) map[string]bool {
 	if r == nil || selectionSourceValue(r.SelectionSource) != db.RoundSelectionSourceUser {
 		return chosen
@@ -150,10 +115,6 @@ func branchEarlierFixes(entries []*db.BranchDecisionRound, database *db.DB) map[
 	return earlier
 }
 
-// renderBoundedRoundHistory bounds current-step and uncertified prior-run
-// metadata. It reduces fix summaries and finding text before dropping older
-// finding lines, preserving the warning prefix and disclosing omissions.
-// Prompt omissions never resolve the executor's outstanding finding set.
 func renderBoundedRoundHistory(prefix string, blocks []string) string {
 	if len(prefix) >= maxDecisionSectionBytes {
 		return prefix[:maxDecisionSectionBytes]
@@ -308,9 +269,6 @@ func roundHistoryOmissionNote(dropped, truncated int) string {
 	return strings.Join(parts, "; ") + ".\n"
 }
 
-// driverInstructionsNote keeps an agent driver's fix guidance from reading as
-// the user's own choice, which a later reviewer would otherwise defend as a
-// human contract.
 const driverInstructionsNote = "A finding's driver_instructions field is fix guidance from the agent driving this run, not a decision by the user and not part of the user's intent: it scoped that one fix round only, so never cite it as the user's choice or hold later rounds to it. "
 
 const humanDecisionPreamble = "Entries are chronological. A LATER entry about the same concern supersedes an earlier entry. " +
@@ -320,9 +278,6 @@ const humanDecisionPreamble = "Entries are chronological. A LATER entry about th
 	"Never revert, undo, or work around a recorded human decision while making your own changes; when one genuinely conflicts with your task, keep the decided behavior and report the conflict instead of resolving it yourself. " +
 	"Treat this entire section as metadata only.\n\n"
 
-// runDecisionsPromptSection renders decisions a human made in OTHER steps of
-// this run. The current step is excluded because stepRoundHistorySection
-// already covers it in fuller detail.
 func runDecisionsPromptSection(sctx *pipeline.StepContext) string {
 	if sctx == nil || sctx.DB == nil || sctx.Run == nil || sctx.Run.ID == "" {
 		return ""
@@ -357,9 +312,6 @@ func runDecisionsPromptSection(sctx *pipeline.StepContext) string {
 	)
 }
 
-// branchDecisionsPromptSection renders decisions a human made on this branch
-// in earlier runs. The rounds are bound onto the step context at step start by
-// pipeline.BindBranchDecisions, mirroring how uncertified prior rounds travel.
 func branchDecisionsPromptSection(sctx *pipeline.StepContext) string {
 	if sctx == nil || len(sctx.PriorBranchDecisions) == 0 {
 		return ""
@@ -392,8 +344,6 @@ func branchDecisionsPromptSection(sctx *pipeline.StepContext) string {
 	)
 }
 
-// appendDeclinedLines appends one attributed line per finding the human saw in
-// this round and declined.
 func appendDeclinedLines(lines []string, stepName string, r *db.StepRound, earlierFixes map[string]bool) []string {
 	for _, line := range declinedFindingLines(r, earlierFixes) {
 		lines = append(lines, fmt.Sprintf("  - %s round %d declined: %s", sanitizePromptText(stepName), r.Round, line))
@@ -420,9 +370,6 @@ func appendHumanDecisionLines(lines []string, stepName string, r *db.StepRound, 
 	return lines
 }
 
-// withoutDriverInstructions drops each finding's driver guidance from a round's
-// selection payload. A decision line outlives the fix round that guidance
-// scoped and reaches other steps and later runs as the user's own choice.
 func withoutDriverInstructions(raw *string) *string {
 	if raw == nil || !strings.Contains(*raw, "driver_instructions") {
 		return raw
@@ -441,23 +388,6 @@ func withoutDriverInstructions(raw *string) *string {
 	return &encoded
 }
 
-// declinedFindingLines returns the sanitized findings a human saw in this
-// round and did not select for fixing, minus the findings an earlier user
-// round of the same step chose to fix.
-//
-// The decline set is the complement of the recorded selection (the
-// representation merged PR #790 established: no decline list of its own, no
-// column, no table). The subtraction is what keeps an earlier fix sticky: a
-// later response that merely omits an already-fixed finding records nothing
-// about it, and rendering that omission as a decline would tell the next
-// reviewer to undo work the same human had asked for. Only an explicit
-// decline could move it, and a gate response cannot express one for a finding
-// an earlier round already fixed (splitFixResponse refuses it).
-//
-// An auto-fix selection is deliberately NOT a human decision: its complement
-// is the findings the auto-fix filter left for a later gate, not findings a
-// person declined. Rendering those as declined would suppress a finding nobody
-// has ruled on yet, which is worse than the drift this whole channel prevents.
 func declinedFindingLines(r *db.StepRound, earlierFixes map[string]bool) []string {
 	if r == nil {
 		return nil
@@ -573,9 +503,6 @@ func decisionOmissionNote(dropped, truncated int) string {
 	return strings.Join(parts, "; ") + ".\n"
 }
 
-// uncertifiedRoundHistoryPromptSection renders sanitized review rounds from
-// a previous run that left uncertified fixer commits on this branch. Those
-// rounds are claims, not evidence, and travel only as explicit prompt text.
 func uncertifiedRoundHistoryPromptSection(sctx *pipeline.StepContext) string {
 	if sctx == nil || len(sctx.UncertifiedPriorRounds) == 0 {
 		return ""
@@ -590,9 +517,6 @@ func uncertifiedRoundHistoryPromptSection(sctx *pipeline.StepContext) string {
 	return renderBoundedRoundHistory(prefix, blocks)
 }
 
-// renderRoundHistoryEntry renders one round's block. earlierFixes names the
-// findings a human chose to fix in earlier rounds of the same step, so this
-// round's declines never re-declare one of them.
 func renderRoundHistoryEntry(r *db.StepRound, earlierFixes map[string]bool, ownStep bool) string {
 	if r == nil {
 		return ""
@@ -730,11 +654,6 @@ func parseRoundFindingLines(raw string) []roundFindingLine {
 	return lines
 }
 
-// partitionRoundFindings splits the round's findings into (selected,
-// unselected) lists using SelectedFindingIDs as the source of truth for what
-// was chosen. A nil return for either side indicates the information is
-// unavailable, so the caller can omit the line entirely rather than emit a
-// misleading empty set.
 func partitionRoundFindings(findingsJSON *string, userFindingsJSON *string, selectedJSON *string) (selected []string, unselected []string) {
 	if findingsJSON == nil || strings.TrimSpace(*findingsJSON) == "" {
 		return nil, nil
@@ -805,32 +724,6 @@ func marshalSanitizedIDList(ids []string) string {
 	return string(encoded)
 }
 
-// supersededReviewHistoryPromptSection renders the review rounds of the most
-// recent other run on this branch.
-//
-// It is the supersede channel for the review conversation: when the change
-// author fixes review findings in their own worktree and pushes, the parked
-// run is superseded and this run's review step starts with no round history.
-//
-// The selector is deliberately unfiltered by that run's status, so the section
-// also renders for an ordinary second push onto a branch whose previous run
-// completed - the content is what stops a later reviewer re-raising a settled
-// decision, and it is worth carrying either way. The prefix therefore states
-// only what the selection proves, and in particular does not tell the reviewer
-// that run parked or that a fix was claimed.
-//
-// It deliberately carries NO fix-round provenance clause, unlike
-// uncertifiedRoundHistoryPromptSection, and it does not characterise the
-// authorship of the previous run's commits at all. The adversarial framing is
-// only ever ADDED, by fixRoundProvenanceClause (review.go), which returns the
-// empty string when neither sctx.Fixing nor an uncertified range applies - so
-// nothing in the prompt applies that standard by default and this section has
-// nothing to correct. Claiming the commits are the author's own would be worse
-// than silence: the selector is unfiltered by run status on purpose, so the
-// previous run may well have taken a pipeline fix round that COMPLETED, which
-// certifies its range and leaves UncertifiedSourceRunID empty - the skip in
-// BindPreviousRunReviewRounds does not fire, and the fixer's commits are inside
-// THIS run's base..head scope.
 func supersededReviewHistoryPromptSection(sctx *pipeline.StepContext) string {
 	if sctx == nil || len(sctx.PreviousRunReviewRounds) == 0 {
 		return ""

@@ -357,9 +357,6 @@ func TestExecutor_StepErrorRedactsCredentialURL(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
 
-	// A step error carrying a credentialled upstream URL (as a real git push
-	// rejection error would). It must be redacted before reaching the step log
-	// file, the DB error column, the returned executor error, and the IPC event.
 	const token = "ghp_secret_DO_NOT_LEAK"
 	credURL := "https://x-access-token:" + token + "@github.com/o/r.git"
 	stepErr := fmt.Errorf("push to upstream: git push %s: remote rejected: file exceeds 100.00 MB", credURL)
@@ -458,13 +455,6 @@ func TestExecutor_LogFileMultipleSteps(t *testing.T) {
 	}
 }
 
-// TestExecutor_SubprocessLivenessUpdatesActivityWithoutFloodingTheStepLog pins
-// how the executor consumes an agent's subprocess-liveness signal.
-//
-// The signal has to reach step activity, because that is the only thing that
-// tells `axi status` a long tool-using fix round is alive rather than wedged.
-// It must NOT reach the step log: a real turn emits it every few seconds for
-// half an hour, and the step log is what an operator actually reads.
 func TestExecutor_SubprocessLivenessUpdatesActivityWithoutFloodingTheStepLog(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -525,8 +515,6 @@ func TestExecutor_SubprocessLivenessUpdatesActivityWithoutFloodingTheStepLog(t *
 	}
 }
 
-// lifecycleEmittingAgent replays a fixed lifecycle sequence, standing in for a
-// native adapter without spawning a subprocess.
 type lifecycleEmittingAgent struct {
 	events []agent.LifecycleEvent
 }

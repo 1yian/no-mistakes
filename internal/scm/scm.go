@@ -32,15 +32,8 @@ const (
 	ProviderUnknown     Provider = "unknown"
 )
 
-// pluginProviderPrefix namespaces operator-configured provider plugins
-// (global provider_plugins). The prefix keeps a plugin identity from ever
-// colliding with a built-in provider, so every built-in switch on Provider
-// keeps falling through to its default branch for a plugin.
 const pluginProviderPrefix = "plugin:"
 
-// BuiltinProviders lists the provider names compiled into no-mistakes. Plugin
-// names must not reuse them, so an operator reading "provider gitea" in a log
-// never has to wonder which implementation ran.
 var BuiltinProviders = []Provider{
 	ProviderGitHub,
 	ProviderGitLab,
@@ -52,14 +45,10 @@ var BuiltinProviders = []Provider{
 	ProviderUnknown,
 }
 
-// PluginProvider returns the provider identity for the configured provider
-// plugin name.
 func PluginProvider(name string) Provider {
 	return Provider(pluginProviderPrefix + name)
 }
 
-// PluginName reports the configured plugin name when p identifies a provider
-// plugin.
 func (p Provider) PluginName() (string, bool) {
 	name, ok := strings.CutPrefix(string(p), pluginProviderPrefix)
 	if !ok || name == "" {
@@ -68,7 +57,6 @@ func (p Provider) PluginName() (string, bool) {
 	return name, true
 }
 
-// IsPlugin reports whether p identifies an operator-configured provider plugin.
 func (p Provider) IsPlugin() bool {
 	_, ok := p.PluginName()
 	return ok
@@ -76,52 +64,27 @@ func (p Provider) IsPlugin() bool {
 
 type sshHostnameLookup func(context.Context, string) (string, error)
 
-// DetectProvider identifies the SCM provider for url. SSH host aliases are
-// resolved through the user's SSH configuration before detection falls back to
-// ProviderUnknown.
 func DetectProvider(remoteURL string) Provider {
 	return DetectProviderContext(context.Background(), remoteURL)
 }
 
-// DetectProviderContext is DetectProvider with caller-controlled cancellation.
 func DetectProviderContext(ctx context.Context, remoteURL string) Provider {
 	return detectProvider(ctx, remoteURL, lookupSSHHostname)
 }
 
-// DetectProviderWithForgejoBaseURL detects a provider while allowing an
-// explicit forgejo-axi base URL to identify an otherwise-unrecognizable
-// self-hosted Forgejo origin. Known hosted providers keep precedence so a
-// stray Forgejo setting cannot reroute GitHub, GitLab, Bitbucket, Azure,
-// or Cursor Origin.
 func DetectProviderWithForgejoBaseURL(remoteURL, forgejoBaseURL string) Provider {
 	return DetectProviderContextWithForgejoBaseURL(context.Background(), remoteURL, forgejoBaseURL)
 }
 
-// ForgejoEnvironment carries the Forgejo settings provider detection may
-// consult. SSHDomain mirrors Forgejo's own SSH_DOMAIN setting: the hostname an
-// instance publishes in SSH clone URLs when it differs from the web host in
-// BaseURL. Named fields keep two hostname-shaped strings from being swapped at
-// a call site.
 type ForgejoEnvironment struct {
 	BaseURL   string
 	SSHDomain string
 }
 
-// DetectProviderContextWithForgejo is DetectProviderContextWithForgejoBaseURL
-// plus the declared SSH hostname, so a self-hosted Forgejo whose SSH_DOMAIN
-// differs from its web host is recognized from an SSH remote. Hosted providers
-// and glab-, gh-, and tea-configured hosts are consulted first; against the
-// remaining hostname guesses the declared domain has exactly the standing a
-// FORGEJO_BASE_URL match already has. An SSH domain is inert without a valid
-// base URL.
 func DetectProviderContextWithForgejo(ctx context.Context, remoteURL string, forgejo ForgejoEnvironment) Provider {
 	return detectProviderWithForgejo(ctx, remoteURL, forgejo, lookupSSHHostname)
 }
 
-// DetectProviderStaticContext identifies providers from the remote URL and
-// SSH HostName resolution without consulting ambient gh, glab, or forgejo
-// configuration. It is used when a caller already selected an explicit
-// provider profile.
 func DetectProviderStaticContext(ctx context.Context, url string) Provider {
 	if provider := detectStaticProvider(url); provider != ProviderUnknown {
 		return provider
@@ -133,8 +96,6 @@ func DetectProviderStaticContext(ctx context.Context, url string) Provider {
 	return detectStaticProvider(host)
 }
 
-// detectStaticProvider recognizes providers purely from URL/host text, with no
-// ambient CLI configuration consulted.
 func detectStaticProvider(url string) Provider {
 	lower := strings.ToLower(url)
 	if strings.Contains(lower, "codeberg.org") || strings.Contains(lower, "forgejo") {
@@ -146,8 +107,6 @@ func detectStaticProvider(url string) Provider {
 	return detectLegacyProviderHost(lower)
 }
 
-// DetectProviderContextWithForgejoBaseURL is DetectProviderWithForgejoBaseURL
-// with caller-controlled cancellation for SSH host alias resolution.
 func DetectProviderContextWithForgejoBaseURL(ctx context.Context, remoteURL, forgejoBaseURL string) Provider {
 	return detectProviderWithForgejoBaseURL(ctx, remoteURL, forgejoBaseURL, lookupSSHHostname)
 }
@@ -241,16 +200,11 @@ func detectLegacyProviderHost(host string) Provider {
 	}
 }
 
-// isCursorOriginGitHost reports whether host is Cursor Origin's git forge.
-// The web UI lives on cursor.com/codebase/...; that is detectCursorOriginWeb.
 func isCursorOriginGitHost(host string) bool {
 	host = strings.ToLower(strings.TrimSpace(host))
 	return host == "origin.cursor.com" || strings.HasSuffix(host, ".origin.cursor.com")
 }
 
-// detectCursorOrigin reports whether remote is a Cursor Origin git URL or a
-// cursor.com/codebase web PR URL. Bare cursor.com pages (docs, changelog)
-// must not match.
 func detectCursorOrigin(remote string) bool {
 	if isCursorOriginGitHost(ExtractHost(remote)) {
 		return true
@@ -266,10 +220,6 @@ func detectCursorOriginWeb(remote string) bool {
 	return strings.HasPrefix(path, "codebase/")
 }
 
-// ResolveHost returns the canonical host for a remote. For SSH remotes it
-// honors HostName mappings from the user's SSH configuration while preserving
-// the original remote URL for all Git operations. The SSH-over-HTTPS endpoints
-// ssh.github.com and altssh.gitlab.com are returned as github.com and gitlab.com.
 func ResolveHost(ctx context.Context, remote string) string {
 	return resolveHost(ctx, remote, lookupSSHHostname)
 }
@@ -291,9 +241,6 @@ func resolveHost(ctx context.Context, remote string, lookup sshHostnameLookup) s
 	return canonicalProviderHost(resolved)
 }
 
-// canonicalProviderHost maps the two provider SSH-over-HTTPS endpoints back
-// to the host their API clients and credential stores use. Any other
-// hostname, including GitHub Enterprise and self-hosted GitLab, is unchanged.
 func canonicalProviderHost(host string) string {
 	switch host {
 	case "ssh.github.com":
@@ -392,13 +339,6 @@ func forgejoBaseMatchesResolvedRemote(baseRaw, remoteRaw, resolvedHost string) b
 	return ok && forgejoPathsMatch(base.Path, remotePath)
 }
 
-// forgejoSSHDomainMatchesRemote reports whether remote is an SSH origin of the
-// configured Forgejo instance reached through its declared SSH hostname.
-// Forgejo's SSH_DOMAIN setting lets an instance publish clone URLs on a host
-// that differs from its web base URL, which no comparison against that base URL
-// can match. The base URL stays required and its path prefix must still match:
-// the SSH domain only names the clone host of an already-configured instance,
-// never a new one.
 func forgejoSSHDomainMatchesRemote(forgejo ForgejoEnvironment, remoteRaw, resolvedHost string) bool {
 	domain, err := NormalizeForgejoSSHDomain(forgejo.SSHDomain)
 	if err != nil {
@@ -504,21 +444,8 @@ func NormalizeForgejoBaseURL(raw string) (string, *url.URL, error) {
 	return strings.TrimRight(parsed.String(), "/"), parsed, nil
 }
 
-// errInvalidForgejoSSHDomain carries no part of the rejected value on purpose.
-// This error reaches a step's skip reason, the step log, and the run database,
-// and an operator can paste a clone URL with an embedded credential into the
-// setting, so the text stays static the way NormalizeForgejoBaseURL keeps its
-// credentials rejection value-free.
 var errInvalidForgejoSSHDomain = errors.New("invalid Forgejo SSH domain; expected a bare hostname or IP address, with an optional port")
 
-// NormalizeForgejoSSHDomain canonicalizes a declared Forgejo SSH domain to a
-// lowercase bare host. Only an ASCII DNS hostname or an IP address is accepted,
-// because nothing else can equal a remote's resolved host. A port is accepted
-// and dropped, since an instance's SSH clone port varies independently of its
-// hostname. A value carrying a scheme, path, credentials, query, or fragment is
-// rejected rather than trimmed into something host-shaped, so a malformed
-// setting fails closed exactly as an invalid base URL does. The error names
-// nothing from the value; see errInvalidForgejoSSHDomain.
 func NormalizeForgejoSSHDomain(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	// The character filter rejects every shape a bare hostname cannot have: a
@@ -545,12 +472,6 @@ func NormalizeForgejoSSHDomain(raw string) (string, error) {
 	return hostname, nil
 }
 
-// ForgejoSSHDomainMatchesHost reports whether a remote's resolved host is the
-// host that an already-normalized Forgejo SSH domain names. The resolved host
-// goes through the domain normalizer too, so an IPv6 remote host, which keeps
-// its brackets through host extraction, matches the same address declared as the
-// domain. That keeps the settings NormalizeForgejoSSHDomain accepts identical to
-// the settings that can match a remote.
 func ForgejoSSHDomainMatchesHost(resolvedHost, normalizedDomain string) bool {
 	if normalizedDomain == "" {
 		return false
@@ -558,12 +479,6 @@ func ForgejoSSHDomainMatchesHost(resolvedHost, normalizedDomain string) bool {
 	return canonicalSSHHost(resolvedHost) == canonicalSSHHost(normalizedDomain)
 }
 
-// canonicalSSHHost reduces a host to the spelling NormalizeForgejoSSHDomain
-// produces. A remote's resolved host reaches this code in three shapes: a name,
-// a bare IP address from a URL's Hostname, and a bracketed IPv6 address from
-// host extraction. Brackets come off first and an address is only then stripped
-// of a port, because stripPort would otherwise read the last group of an
-// unbracketed IPv6 address as one.
 func canonicalSSHHost(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if inner, bracketed := strings.CutPrefix(host, "["); bracketed {
@@ -582,12 +497,6 @@ func canonicalSSHHost(host string) string {
 	return stripped
 }
 
-// matchableSSHDomainHost reports whether host is an IP address or an ASCII DNS
-// hostname, the only two shapes a resolved remote host can ever equal. A
-// wildcard, a trailing dot, an empty label, a label edged by a hyphen or an
-// underscore, a non-ASCII name, and the ":" that an unbracketed IPv6 literal
-// collapses to are all rejected, so a setting that could never match fails
-// loudly at the source instead of being stored and quietly ignored.
 func matchableSSHDomainHost(host string) bool {
 	if host == "" || len(host) > 253 {
 		return false
@@ -627,9 +536,6 @@ func ForgejoRemoteSchemeSupported(scheme string) bool {
 	}
 }
 
-// glabKnowsHost reports whether host appears in glab's configured hosts map,
-// either as a top-level key or as a host's api_host. Any read/parse error is
-// treated as "not configured" so detection fails closed to ProviderUnknown.
 func glabKnowsHost(host string) bool {
 	path := glabConfigPath()
 	if path == "" {
@@ -659,9 +565,6 @@ func glabKnowsHost(host string) bool {
 	return false
 }
 
-// glabConfigPath resolves glab's config file location, preferring
-// $GLAB_CONFIG_DIR, then $XDG_CONFIG_HOME/glab-cli, then ~/.config/glab-cli.
-// It returns "" when no home/config directory can be determined.
 func glabConfigPath() string {
 	if dir := os.Getenv("GLAB_CONFIG_DIR"); dir != "" {
 		return filepath.Join(dir, "config.yml")
@@ -676,9 +579,6 @@ func glabConfigPath() string {
 	return filepath.Join(home, ".config", "glab-cli", "config.yml")
 }
 
-// ghKnowsHost reports whether host appears as a top-level key in gh's
-// hosts.yml. Any read/parse error is treated as "not configured" so detection
-// fails closed to ProviderUnknown.
 func ghKnowsHost(host string) bool {
 	path := ghConfigPath()
 	if path == "" {
@@ -701,9 +601,6 @@ func ghKnowsHost(host string) bool {
 	return false
 }
 
-// ghConfigPath resolves gh's hosts config file location, preferring
-// $GH_CONFIG_DIR, then $XDG_CONFIG_HOME/gh, then ~/.config/gh.
-// It returns "" when no home/config directory can be determined.
 func ghConfigPath() string {
 	if dir := os.Getenv("GH_CONFIG_DIR"); dir != "" {
 		return filepath.Join(dir, "hosts.yml")
@@ -718,40 +615,21 @@ func ghConfigPath() string {
 	return filepath.Join(home, ".config", "gh", "hosts.yml")
 }
 
-// teaKnowsHost reports whether host appears in either tea generation's config:
-// as a login's url (or ssh_host) in tea 0.x's config.yml, or as an instance
-// (or its ssh_host) in tea 1.0's hosts.yml. Any read/parse error is treated as
-// "not configured" so detection fails closed to ProviderUnknown.
 func teaKnowsHost(host string) bool {
 	account := ResolveTeaAccount(host)
 	return account.Login != "" || account.Instance != ""
 }
 
-// TeaAccount names the tea account configured for a host, in each tea
-// generation's own terms. Unlike gh/glab, tea infers "which instance" from the
-// working directory's git remote, which the daemon's detached bare-gate repo
-// does not have, so every tea invocation must select the account explicitly.
-// tea 0.x keeps named logins in config.yml and selects one with --login
-// <name>; tea 1.0 (gitea/tea#1126) keeps instances in hosts.yml keyed by
-// their normalized URL and selects one with --host <url>. Which field applies
-// depends on the installed binary, which only the gitea Host probes, so both
-// are resolved here.
 type TeaAccount struct {
 	Login    string // tea 0.x: logins[].name in config.yml
 	Instance string // tea 1.0: a hosts.yml key, e.g. https://gitea.example.com
 }
 
-// ResolveTeaAccount returns the tea account configured for host; a field is
-// "" when that generation's config has no match.
 func ResolveTeaAccount(host string) TeaAccount {
 	login, _ := teaLoginForHost(host)
 	return TeaAccount{Login: login, Instance: teaInstanceForHost(host)}
 }
 
-// teaInstanceForHost returns the tea 1.0 hosts.yml instance whose URL host or
-// ssh_host is host. Two instances on one hostname (different ports or base
-// paths) are ambiguous and resolve to "", failing closed rather than letting
-// map order pick one.
 func teaInstanceForHost(host string) string {
 	path := teaHostsPath()
 	if path == "" {
@@ -815,10 +693,6 @@ func teaLoginForHost(host string) (string, bool) {
 	return "", false
 }
 
-// teaConfigPath resolves tea 0.x's config.yml. tea 0.x has no CLI-specific
-// override env var (unlike glab's GLAB_CONFIG_DIR or gh's GH_CONFIG_DIR); it
-// persists to $XDG_CONFIG_HOME/tea, falling back to ~/.config/tea. It returns
-// "" when no home/config directory can be determined.
 func teaConfigPath() string {
 	dir := teaDefaultConfigDir()
 	if dir == "" {
@@ -827,8 +701,6 @@ func teaConfigPath() string {
 	return filepath.Join(dir, "config.yml")
 }
 
-// teaHostsPath resolves tea 1.0's hosts.yml, which honors TEA_CONFIG_DIR
-// before the same default directory tea 0.x uses.
 func teaHostsPath() string {
 	dir := os.Getenv("TEA_CONFIG_DIR")
 	if dir == "" {

@@ -17,9 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Recovery writes the superseded push anchor in the invoking worktree when
-// that object is available there. A subsequent fresh submission must consult
-// that evidence, not require a hand-made recovery ref in the gate.
 func TestTriggerRunAfterRemoteRewrittenRecovery(t *testing.T) {
 	f := newCLISyncFixture(t)
 	if out, err := executeCmd("axi", "sync"); err != nil {

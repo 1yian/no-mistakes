@@ -17,30 +17,17 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/winproc"
 )
 
-// EmptyTreeSHA is the well-known SHA of an empty tree in git.
-// Used as a base when there is no prior commit to diff against.
 const EmptyTreeSHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
-// IsZeroSHA returns true if the SHA is the null/zero ref that git uses for
-// new or deleted branches (40 zeros).
 func IsZeroSHA(sha string) bool {
 	return sha == "0000000000000000000000000000000000000000"
 }
 
-// Run executes a git command in the given directory and returns trimmed stdout.
-// Returns an error that includes the command and stderr on failure.
-//
-// When dir is itself a bare repository (a gate repo), the repo is named
-// explicitly via --git-dir instead of relying on cwd-based discovery, which
-// safe.bareRepository=explicit forbids. Agent harnesses (e.g. Claude Code)
-// and hardened CI inject that setting, so gate operations must never depend
-// on discovering a bare repo from the working directory (issue #362).
 func Run(ctx context.Context, dir string, args ...string) (string, error) {
 	out, err := RunRaw(ctx, dir, args...)
 	return strings.TrimSpace(string(out)), err
 }
 
-// RunRaw executes a git command and returns stdout without modifying its bytes.
 func RunRaw(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	if isBareGitDir(dir) {
 		return runInDirWithEnvRaw(ctx, dir, nil, append([]string{"--git-dir=" + dir}, args...)...)
@@ -48,16 +35,10 @@ func RunRaw(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	return runInDirWithEnvRaw(ctx, dir, nil, args...)
 }
 
-// RunWithInput executes a git command with exact standard input and returns
-// trimmed stdout. It carries the same bare-repository handling as Run.
 func RunWithInput(ctx context.Context, dir, input string, args ...string) (string, error) {
 	return RunWithEnvAndInput(ctx, dir, nil, input, args...)
 }
 
-// RunBare executes Git against exactly bareDir. Unlike Run, it never falls
-// back to cwd-based repository discovery when bareDir is malformed. Gate
-// recovery uses this after structural validation so an invalid directory under
-// NM_HOME cannot discover or mutate an ancestor worktree.
 func RunBare(ctx context.Context, bareDir string, args ...string) (string, error) {
 	if bareDir == "" {
 		return "", fmt.Errorf("bare git directory is empty")
@@ -65,18 +46,10 @@ func RunBare(ctx context.Context, bareDir string, args ...string) (string, error
 	return runInDir(ctx, bareDir, append([]string{"--git-dir=" + bareDir}, args...)...)
 }
 
-// RunWithEnv is Run with extra KEY=VALUE entries appended to the git
-// environment. Later entries win, so a caller can override anything
-// NonInteractiveEnv sets. It exists for plumbing that is configured only
-// through the environment - GIT_INDEX_FILE for a scratch index, the
-// GIT_AUTHOR_*/GIT_COMMITTER_* identity for commit-tree - and carries the same
-// bare-repository handling as Run.
 func RunWithEnv(ctx context.Context, dir string, extraEnv []string, args ...string) (string, error) {
 	return RunWithEnvAndInput(ctx, dir, extraEnv, "", args...)
 }
 
-// RunWithEnvAndInput combines RunWithInput's exact stdin with RunWithEnv's
-// environment overrides and the same explicit bare-repository handling.
 func RunWithEnvAndInput(ctx context.Context, dir string, extraEnv []string, input string, args ...string) (string, error) {
 	if isBareGitDir(dir) {
 		return runInDirWithEnvAndInput(ctx, dir, extraEnv, input, append([]string{"--git-dir=" + dir}, args...)...)
@@ -109,9 +82,6 @@ func runInDirWithEnvAndInputRaw(ctx context.Context, dir string, extraEnv []stri
 		cmd.Stdin = strings.NewReader(input)
 	}
 	winproc.Harden(cmd)
-	// OutputShellCommand captures stdout only, so unlike cmd.Output it never
-	// fills ExitError.Stderr. Capture stderr explicitly or the git error text
-	// below silently becomes empty.
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	shellenv.ConfigureShellCommand(cmd)
@@ -125,13 +95,6 @@ func runInDirWithEnvAndInputRaw(ctx context.Context, dir string, extraEnv []stri
 	return out, nil
 }
 
-// StablePatchID returns Git's stable patch identity for one file between two
-// commits. The file path is part of the diff, so the same-shaped edit to a
-// different file cannot prove content preservation.
-//
-// The pathspec is explicitly literal: a wildcard or leading colon in a real
-// file name would otherwise be read as a glob or as pathspec magic and fold a
-// sibling file's diff into this file's identity.
 func StablePatchID(ctx context.Context, dir, from, to, path string) (string, error) {
 	diff, err := RunRaw(ctx, dir, "diff", "--no-ext-diff", "--binary", from, to, "--", ":(literal)"+path)
 	if err != nil {
@@ -155,9 +118,6 @@ func StablePatchID(ctx context.Context, dir, from, to, path string) (string, err
 	return fields[0], nil
 }
 
-// ValidateBareRepository verifies both the filesystem shape and Git's own bare
-// repository classification. The Git query is explicitly scoped with
-// --git-dir, so validation itself cannot discover an ancestor repository.
 func ValidateBareRepository(ctx context.Context, bareDir string) error {
 	if !isBareGitDir(bareDir) {
 		return fmt.Errorf("not a structurally valid bare repository: %s", bareDir)
@@ -172,17 +132,10 @@ func ValidateBareRepository(ctx context.Context, bareDir string) error {
 	return nil
 }
 
-// LooksLikeBareRepository performs the non-mutating structural half of bare
-// repository validation. Call ValidateBareRepository before mutating an
-// unstamped directory discovered from the filesystem.
 func LooksLikeBareRepository(dir string) bool {
 	return isBareGitDir(dir)
 }
 
-// isBareGitDir reports whether dir is itself a git directory (a bare repo),
-// as opposed to a working tree or linked worktree, which carry a .git entry
-// and keep using normal discovery. The check mirrors git's own git-dir
-// heuristic: a HEAD file plus an objects directory.
 func isBareGitDir(dir string) bool {
 	if dir == "" {
 		return false
@@ -201,10 +154,6 @@ func isBareGitDir(dir string) bool {
 	return err == nil && fi.IsDir()
 }
 
-// bareRepositoryIdentity proves that path names the bare repository itself,
-// rather than a worktree or a stale directory that discovers an ancestor. The
-// returned absolute path also keeps explicit --git-dir calls correct when the
-// caller supplied a relative path. Compare canonical paths to allow symlinks.
 func bareRepositoryIdentity(ctx context.Context, path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("intended bare repository is empty")
@@ -231,7 +180,6 @@ func bareRepositoryIdentity(ctx context.Context, path string) (string, error) {
 	return abs, nil
 }
 
-// InitBare creates a bare repository, or reinitializes a verified bare target.
 func InitBare(ctx context.Context, path string) error {
 	if path == "" {
 		return fmt.Errorf("intended bare repository is empty")
@@ -261,15 +209,11 @@ func InitBare(ctx context.Context, path string) error {
 	return nil
 }
 
-// AddRemote adds a named remote to the repo at dir.
 func AddRemote(ctx context.Context, dir, name, url string) error {
 	_, err := Run(ctx, dir, "remote", "add", name, url)
 	return err
 }
 
-// EnsureRemote sets the named remote to url, adding it when absent and
-// updating its URL when it already exists. Idempotent, so it is safe to call
-// when repairing or re-running an init.
 func EnsureRemote(ctx context.Context, dir, name, url string) error {
 	if _, err := GetRemoteURL(ctx, dir, name); err == nil {
 		_, err := Run(ctx, dir, "remote", "set-url", name, url)
@@ -278,26 +222,19 @@ func EnsureRemote(ctx context.Context, dir, name, url string) error {
 	return AddRemote(ctx, dir, name, url)
 }
 
-// RemoveRemote removes a named remote from the repo at dir.
 func RemoveRemote(ctx context.Context, dir, name string) error {
 	_, err := Run(ctx, dir, "remote", "remove", name)
 	return err
 }
 
-// GetRemoteURL returns the URL of a named remote.
 func GetRemoteURL(ctx context.Context, dir, name string) (string, error) {
 	return Run(ctx, dir, "remote", "get-url", name)
 }
 
-// GetConfiguredRemoteURL returns the literal remote URL from git config,
-// without applying url.*.insteadOf rewrites.
 func GetConfiguredRemoteURL(ctx context.Context, dir, name string) (string, error) {
 	return Run(ctx, dir, "config", "--get", "remote."+name+".url")
 }
 
-// GetConfiguredRemoteURLs returns every literal URL configured for a remote.
-// Callers that require an authoritative source can reject zero or multiple
-// values rather than letting git silently select one.
 func GetConfiguredRemoteURLs(ctx context.Context, dir, name string) ([]string, error) {
 	out, err := Run(ctx, dir, "config", "--null", "--get-all", "remote."+name+".url")
 	if err != nil {
@@ -306,8 +243,6 @@ func GetConfiguredRemoteURLs(ctx context.Context, dir, name string) ([]string, e
 	return strings.Split(strings.TrimSuffix(out, "\x00"), "\x00"), nil
 }
 
-// HasRemote reports whether a remote named name is configured in the repo at
-// dir, returning an error if the remote list cannot be read.
 func HasRemote(ctx context.Context, dir, name string) (bool, error) {
 	out, err := Run(ctx, dir, "remote")
 	if err != nil {
@@ -321,8 +256,6 @@ func HasRemote(ctx context.Context, dir, name string) (bool, error) {
 	return false, nil
 }
 
-// FindGitRoot walks up from path to find the git repository root.
-// Resolves symlinks for consistency on macOS (e.g. /tmp -> /private/tmp).
 func FindGitRoot(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -343,26 +276,6 @@ func FindGitRoot(path string) (string, error) {
 	return resolved, nil
 }
 
-// FindMainRepoRoot returns the root of the main working tree for a git
-// repository. Three layouts are supported:
-//
-//  1. A regular repository or a linked worktree: the git common dir is
-//     <root>/.git, so the main working tree is filepath.Dir(commonDir).
-//  2. An absorbed submodule (including nested .../modules/a/modules/b):
-//     the git common dir lives under the superproject's .git/modules/...
-//     and is detached from its working tree. Git writes core.worktree
-//     when it absorbs a submodule, pointing at the working tree whose
-//     remote.origin.url is the submodule's own origin (which is what
-//     callers like init and eject need).
-//  3. Exotic GIT_DIR layouts without a core.worktree: fall back to
-//     `git rev-parse --show-toplevel` from the original path, the same
-//     answer FindGitRoot returns.
-//
-// In every branch the returned path is run through filepath.EvalSymlinks
-// when possible so callers can compare it against other symlink-resolved
-// paths (notably on macOS, where /tmp and /private/tmp refer to the same
-// directory). Symlink resolution failures fall back to the unresolved
-// path, matching the historical behavior.
 func FindMainRepoRoot(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -417,8 +330,6 @@ func FindMainRepoRoot(path string) (string, error) {
 	return resolveMainRoot(strings.TrimSpace(string(topOut)))
 }
 
-// resolveMainRoot applies filepath.EvalSymlinks to path, falling back to
-// the unresolved path when symlink resolution fails.
 func resolveMainRoot(path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -427,13 +338,10 @@ func resolveMainRoot(path string) (string, error) {
 	return resolved, nil
 }
 
-// Diff returns the unified diff between two commits.
 func Diff(ctx context.Context, dir, base, head string) (string, error) {
 	return Run(ctx, dir, "diff", base+".."+head)
 }
 
-// DiffNameOnly returns the list of files changed between base and head.
-// Output is split on newlines with empty entries removed.
 func DiffNameOnly(ctx context.Context, dir, base, head string) ([]string, error) {
 	out, err := Run(ctx, dir, "diff", "--name-only", base+".."+head)
 	if err != nil {
@@ -448,10 +356,6 @@ func DiffNameOnly(ctx context.Context, dir, base, head string) ([]string, error)
 	return files, nil
 }
 
-// DiffStat returns the bounded size of the diff between base and head: the
-// number of changed files and the net changed lines (insertions + deletions)
-// from `git diff --numstat`. Binary files (numstat "-") contribute a changed
-// file but no line count. It carries no paths or content - just two counts.
 func DiffStat(ctx context.Context, dir, base, head string) (files, lines int, err error) {
 	out, err := Run(ctx, dir, "diff", "--numstat", base+".."+head)
 	if err != nil {
@@ -475,7 +379,6 @@ func DiffStat(ctx context.Context, dir, base, head string) (files, lines int, er
 	return files, lines, nil
 }
 
-// CommitTime returns the committer timestamp for a SHA in UTC.
 func CommitTime(ctx context.Context, dir, sha string) (time.Time, error) {
 	out, err := Run(ctx, dir, "show", "-s", "--format=%ct", sha)
 	if err != nil {
@@ -488,35 +391,26 @@ func CommitTime(ctx context.Context, dir, sha string) (time.Time, error) {
 	return time.Unix(secs, 0).UTC(), nil
 }
 
-// CommitAuthorEmail returns the author email for a SHA.
 func CommitAuthorEmail(ctx context.Context, dir, sha string) (string, error) {
 	return Run(ctx, dir, "show", "-s", "--format=%ae", sha)
 }
 
-// DiffHead returns the unified diff between HEAD and the working tree
-// (both staged and unstaged changes).
 func DiffHead(ctx context.Context, dir string) (string, error) {
 	return Run(ctx, dir, "diff", "HEAD")
 }
 
-// Log returns oneline log entries between two commits.
 func Log(ctx context.Context, dir, base, head string) (string, error) {
 	return Run(ctx, dir, "log", "--oneline", base+".."+head)
 }
 
-// HeadSHA returns the full SHA of HEAD.
 func HeadSHA(ctx context.Context, dir string) (string, error) {
 	return Run(ctx, dir, "rev-parse", "HEAD")
 }
 
-// CurrentBranch returns the current branch name.
 func CurrentBranch(ctx context.Context, dir string) (string, error) {
 	return Run(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
 }
 
-// IsDetachedHEAD reports whether the working tree is in a detached-HEAD state
-// (HEAD points at a commit rather than a branch ref). Uses `git symbolic-ref`
-// which fails cleanly when HEAD is not a symbolic ref.
 func IsDetachedHEAD(ctx context.Context, dir string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", "-q", "HEAD")
 	cmd.Dir = dir
@@ -533,9 +427,6 @@ func IsDetachedHEAD(ctx context.Context, dir string) (bool, error) {
 	return false, nil
 }
 
-// DefaultBranch queries a remote to determine its default branch name.
-// Uses git ls-remote --symref to read the remote's HEAD symref.
-// Falls back to "main" if detection fails (e.g. empty remote, unreachable).
 func DefaultBranch(ctx context.Context, dir, remote string) string {
 	out, err := Run(ctx, dir, "ls-remote", "--symref", remote, "HEAD")
 	if err != nil {
@@ -554,9 +445,6 @@ func DefaultBranch(ctx context.Context, dir, remote string) string {
 	return "main"
 }
 
-// FetchRemoteBranch fetches a single branch into a remote-tracking ref.
-// Uses a force-update refspec (+) so non-fast-forward updates (e.g. after
-// a force push on the remote) are accepted instead of silently rejected.
 func FetchRemoteBranch(ctx context.Context, dir, remote, branch string) error {
 	refspec := fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, remote, branch)
 	_, err := Run(ctx, dir, "fetch", "--no-tags", remote, refspec)
@@ -569,18 +457,12 @@ func FetchRemoteBranchToRef(ctx context.Context, dir, remote, branch, localRef s
 	return err
 }
 
-// FetchRemoteBranchToPrivateRef fetches one branch into a caller-owned private
-// ref without touching FETCH_HEAD or ordinary remote-tracking refs.
 func FetchRemoteBranchToPrivateRef(ctx context.Context, dir, remote, branch, localRef string) error {
 	refspec := fmt.Sprintf("+refs/heads/%s:%s", branch, localRef)
 	_, err := Run(ctx, dir, "fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", remote, refspec)
 	return err
 }
 
-// FetchRemoteRef imports the object named by one exact remote ref without
-// touching FETCH_HEAD or any caller-owned ref. The temporary ref is private to
-// this operation, allowing the caller to publish the verified object with its
-// own create-only or compare-and-swap policy.
 func FetchRemoteRef(ctx context.Context, dir, remote, remoteRef, expectedCommit string) error {
 	temporaryRef := fmt.Sprintf("refs/no-mistakes/fetch/%d-%d", os.Getpid(), time.Now().UnixNano())
 	defer func() {
@@ -600,40 +482,26 @@ func FetchRemoteRef(ctx context.Context, dir, remote, remoteRef, expectedCommit 
 	return nil
 }
 
-// Push pushes HEAD to a remote ref. If forceWithLease is true, it uses an
-// explicit expected remote SHA for safe force-push.
 func Push(ctx context.Context, dir, remote, ref, expectedSHA string, forceWithLease bool) error {
 	return PushWithOptions(ctx, dir, remote, ref, expectedSHA, forceWithLease, nil)
 }
 
-// PushCommit pushes one immutable commit object to a remote ref. Unlike Push,
-// a concurrent worktree HEAD move cannot change the source selected by git.
 func PushCommit(ctx context.Context, dir, remote, commitSHA, ref, expectedSHA string, forceWithLease bool) error {
 	return pushSourceWithOptions(ctx, dir, remote, commitSHA, ref, expectedSHA, forceWithLease, nil, false)
 }
 
-// PushCommitWithOptions pushes an immutable commit with hook-visible options.
-// It keeps proof launch identity attached to the commit sampled before pushing.
 func PushCommitWithOptions(ctx context.Context, dir, remote, commitSHA, ref, expectedSHA string, forceWithLease bool, pushOptions []string) error {
 	return pushSourceWithOptions(ctx, dir, remote, commitSHA, ref, expectedSHA, forceWithLease, pushOptions, false)
 }
 
-// PushCommitWithOptionsSkippingHooks is PushCommitWithOptions for an internal
-// control-plane push that must not invoke the repository's pre-push hook. Use
-// it only for a local no-mistakes gate trigger; delivery pushes keep the
-// repository hook.
 func PushCommitWithOptionsSkippingHooks(ctx context.Context, dir, remote, commitSHA, ref, expectedSHA string, forceWithLease bool, pushOptions []string) error {
 	return pushSourceWithOptions(ctx, dir, remote, commitSHA, ref, expectedSHA, forceWithLease, pushOptions, true)
 }
 
-// PushWithOptions pushes HEAD to a remote with per-push options.
 func PushWithOptions(ctx context.Context, dir, remote, ref, expectedSHA string, forceWithLease bool, pushOptions []string) error {
 	return pushSourceWithOptions(ctx, dir, remote, "HEAD", ref, expectedSHA, forceWithLease, pushOptions, false)
 }
 
-// PushWithOptionsSkippingHooks is PushWithOptions for an internal control-plane
-// push that must not invoke the repository's pre-push hook. Use it only for a
-// local no-mistakes gate trigger; delivery pushes keep the repository hook.
 func PushWithOptionsSkippingHooks(ctx context.Context, dir, remote, ref, expectedSHA string, forceWithLease bool, pushOptions []string) error {
 	return pushSourceWithOptions(ctx, dir, remote, "HEAD", ref, expectedSHA, forceWithLease, pushOptions, true)
 }
@@ -667,8 +535,6 @@ func pushSourceWithOptions(ctx context.Context, dir, remote, source, ref, expect
 	return err
 }
 
-// remoteRefAt reports whether remote's exact ref already points at source's
-// commit. Any lookup failure reports false so the caller pushes as usual.
 func remoteRefAt(ctx context.Context, dir, remote, ref, source string) bool {
 	commit, err := Run(ctx, dir, "rev-parse", "--verify", source+"^{commit}")
 	if err != nil {
@@ -686,7 +552,6 @@ func remoteRefAt(ctx context.Context, dir, remote, ref, source string) bool {
 	return false
 }
 
-// LsRemote returns the SHA of a ref on a remote. Returns empty string if the ref doesn't exist.
 func LsRemote(ctx context.Context, dir, remote, ref string) (string, error) {
 	out, err := Run(ctx, dir, "ls-remote", remote, ref)
 	if err != nil {
@@ -703,9 +568,6 @@ func LsRemote(ctx context.Context, dir, remote, ref string) (string, error) {
 	return parts[0], nil
 }
 
-// HasUncommittedChanges reports whether the working tree or index differs from HEAD.
-// Returns true if any tracked file is modified, staged, or deleted, or if there are
-// untracked files. Equivalent to a non-empty `git status --porcelain`.
 func HasUncommittedChanges(ctx context.Context, dir string) (bool, error) {
 	out, err := Run(ctx, dir, "status", "--porcelain")
 	if err != nil {
@@ -714,8 +576,6 @@ func HasUncommittedChanges(ctx context.Context, dir string) (bool, error) {
 	return out != "", nil
 }
 
-// UntrackedFiles returns each untracked path in git's order. Ignored files
-// are not included.
 func UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
 	out, err := RunRaw(ctx, dir, "status", "--porcelain", "-z", "--untracked-files=all")
 	if err != nil {
@@ -734,15 +594,11 @@ func UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
 	return files, nil
 }
 
-// CreateBranch creates a new branch with the given name and switches to it.
-// Fails if the branch already exists.
 func CreateBranch(ctx context.Context, dir, name string) error {
 	_, err := Run(ctx, dir, "checkout", "-b", name)
 	return err
 }
 
-// CommitAll stages every change in the working tree and creates a single commit
-// with the given message. Fails if there are no changes to commit.
 func CommitAll(ctx context.Context, dir, message string) error {
 	if _, err := Run(ctx, dir, "add", "-A"); err != nil {
 		return err
@@ -758,16 +614,6 @@ func CommitAll(ctx context.Context, dir, message string) error {
 	return err
 }
 
-// The write into dstDir uses per-worktree scope when
-// the repository has worktree config enabled. dstDir is typically a linked
-// worktree of the shared gate bare repo, where an unscoped `git config --local`
-// write lands in the bare's shared config and takes <bare>/config.lock. Two
-// runs starting concurrently on different branches of the same repo then race
-// on that single lock and one fails with "could not lock config file ...
-// config: File exists". Writing per-worktree puts each run's identity in its own
-// <bare>/worktrees/<id>/config.worktree, so concurrent startups never contend.
-// Resolve the config file directly: `git config --worktree` enumerates sibling
-// worktrees and can fail while another run removes its Git metadata.
 func CopyLocalUserIdentity(ctx context.Context, dstDir string, identity CommitIdentity) error {
 	if err := identity.Validate(); err != nil {
 		return err
@@ -798,23 +644,16 @@ func CopyLocalUserIdentity(ctx context.Context, dstDir string, identity CommitId
 	return nil
 }
 
-// WorktreeAdd creates a detached worktree at wtPath checked out to the given SHA.
 func WorktreeAdd(ctx context.Context, repoDir, wtPath, sha string) error {
 	_, err := Run(ctx, repoDir, "worktree", "add", "--detach", wtPath, sha)
 	return err
 }
 
-// WorktreeRemove removes a worktree at the given path.
 func WorktreeRemove(ctx context.Context, repoDir, wtPath string) error {
 	_, err := Run(ctx, repoDir, "worktree", "remove", "--force", wtPath)
 	return err
 }
 
-// ResolveRef returns the commit SHA that ref resolves to via
-// `git rev-parse --verify <ref>^{commit}`. Use it to pin an exact commit
-// (e.g. the default-branch tip just fetched) before reading a file from it,
-// so a shared-ref worktree cannot serve a stale remote-tracking ref. Returns
-// an error if the ref does not resolve to a commit.
 func ResolveRef(ctx context.Context, dir, ref string) (string, error) {
 	out, err := Run(ctx, dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	if err != nil {
@@ -866,9 +705,6 @@ func ExactRefTarget(ctx context.Context, dir, ref string) (string, bool, error) 
 	return "", false, nil
 }
 
-// RefExists reports whether the given ref resolves to a commit. It uses
-// `git rev-parse --verify --quiet` so a missing ref is a clean (nil, false)
-// result rather than a loud error.
 func RefExists(ctx context.Context, dir, ref string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	cmd.Env = nonInteractiveEnvForContext(ctx, dir)
@@ -883,11 +719,6 @@ func RefExists(ctx context.Context, dir, ref string) (bool, error) {
 	return true, nil
 }
 
-// ShowFile returns the content of path as stored at the given ref (e.g.
-// "HEAD", "origin/main", or a SHA) via `git show <ref>:<path>`. A failure
-// (e.g. the path is absent at the ref) is returned as the underlying git
-// error from Run; callers that need to distinguish "absent" from a real
-// failure should check RefExists first or inspect the error text.
 func ShowFile(ctx context.Context, dir, ref, path string) (string, error) {
 	out, err := Run(ctx, dir, "show", fmt.Sprintf("%s:%s", ref, path))
 	if err != nil {

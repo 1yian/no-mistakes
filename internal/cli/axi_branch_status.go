@@ -15,8 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// branchStepRow separates an unrecorded required step from a pending step.
-// The pinned plan, not current repository configuration, owns row membership.
 type branchStepRow struct {
 	Position int    `toon:"position"`
 	Step     string `toon:"step"`

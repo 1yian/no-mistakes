@@ -34,8 +34,6 @@ func (c *GlobalConfig) ResolveReviewerProfile(request *agentcfg.ReviewerProfile)
 	return &resolved, nil
 }
 
-// ApplyReviewerProfile copies the role map. Concurrent runs and the fixer keep
-// their own selections. The pin also removes later-round reviewer routing.
 func (c *Config) ApplyReviewerProfile(pin *agentcfg.ReviewerProfile) error {
 	if err := pin.Validate(); err != nil || pin == nil {
 		return err

@@ -15,15 +15,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// OpenCodeReaderName is the agent name used in cache keys and DB rows.
 const OpenCodeReaderName = "opencode"
 
-// opencodeReader reads OpenCode session/message/part rows from
-// $XDG_DATA_HOME/opencode/opencode.db, falling back to
-// ~/.local/share/opencode/opencode.db.
 type opencodeReader struct{}
 
-// NewOpenCodeReader returns a Reader for OpenCode transcripts.
 func NewOpenCodeReader() Reader { return &opencodeReader{} }
 
 func (r *opencodeReader) Name() string { return OpenCodeReaderName }
@@ -204,8 +199,6 @@ func (r *opencodeReader) Load(ctx context.Context, s *Session) error {
 	return nil
 }
 
-// resolveOpenCodeDB picks the path to opencode.db, honoring XDG_DATA_HOME
-// and falling back to ~/.local/share/opencode/opencode.db.
 func resolveOpenCodeDB(homeOverride string) (string, error) {
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
 		return filepath.Join(xdg, "opencode", "opencode.db"), nil

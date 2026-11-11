@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestNewPipelineAgent_ThreadsTheAgentProfile proves the pipeline half of the
-// unified tuning layer: agent_config reaches agent construction per agent, so a
-// knob the harness cannot express fails the run at setup instead of being
-// silently dropped into a review nobody can reproduce.
 func TestNewPipelineAgent_ThreadsTheAgentProfile(t *testing.T) {
 	cfg := &config.Config{
 		Agent:       types.AgentAntigravity,
@@ -41,9 +37,6 @@ func TestNewPipelineAgent_ProfileIsPerAgent(t *testing.T) {
 	_ = ag.Close()
 }
 
-// TestNewPipelineAgent_NoProfileIsUnchanged is the backwards-compatibility
-// floor at the daemon: a configuration that predates agent_config builds every
-// agent exactly as before.
 func TestNewPipelineAgent_NoProfileIsUnchanged(t *testing.T) {
 	cfg := &config.Config{
 		Agent:             types.AgentCodex,

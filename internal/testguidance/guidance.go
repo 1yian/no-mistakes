@@ -1,10 +1,5 @@
-// Package testguidance owns the default test-quality rule rendered into
-// no-mistakes agents that can write, repair, or review tests.
 package testguidance
 
-// Rule is the shared default for writing or repairing tests. It is deliberately
-// concrete about source-content-only assertions and circular oracles so agents
-// cannot mistake implementation restatements for evidence of correct behavior.
 const Rule = `
 ## Test-quality rule
 
@@ -43,7 +38,6 @@ For a regression, reproduce the reported failure when feasible: the test should
 fail before the fix and pass after it.
 `
 
-// ReviewerAction adds the review-only enforcement and scope boundary to Rule.
 const ReviewerAction = `
 Reviewer action: Flag every newly added source-content-only assertion. Require
 the author to remove or semantically refine a same-pattern test encountered
@@ -56,9 +50,6 @@ contract. Name the public behavior, the oracle's source, and a plausible wrong
 behavior an in-scope replacement would reject.
 `
 
-// LateRepairPrompt prepends Rule only to centrally classified late-repair
-// phases that may need to change tests. The caller supplies the phase's own
-// prompt so repair roles retain their focused task instructions.
 func LateRepairPrompt(phase, prompt string) string {
 	switch phase {
 	case "ci", "rebase":

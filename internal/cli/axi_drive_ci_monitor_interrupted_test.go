@@ -12,10 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestRenderDriveResult_CIMonitorInterrupted exercises the agent-facing
-// `axi drive` surface for a run recovered as RunCIMonitorInterrupted (issue
-// #361): the daemon restarted while monitoring CI for an already-open PR, so
-// the run is a distinct, non-failure terminal outcome that keeps the PR intact.
 func TestRenderDriveResult_CIMonitorInterrupted(t *testing.T) {
 	if got := outcomeFor(string(types.RunCIMonitorInterrupted)); got != "ci-monitor-interrupted" {
 		t.Fatalf("outcomeFor(%q) = %q, want %q", types.RunCIMonitorInterrupted, got, "ci-monitor-interrupted")

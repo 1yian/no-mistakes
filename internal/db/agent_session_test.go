@@ -72,8 +72,6 @@ func TestRunAgentSessions_UpsertGetDelete(t *testing.T) {
 	}
 }
 
-// TestRunAgentSessions_IsolatedPerRun verifies two runs never see each
-// other's session identities even for the same role and agent.
 func TestRunAgentSessions_IsolatedPerRun(t *testing.T) {
 	d, repo, run1 := openSessionTestDB(t)
 	run2, err := d.InsertRun(repo.ID, "feature/y", "head2", "base2")
@@ -97,8 +95,6 @@ func TestRunAgentSessions_IsolatedPerRun(t *testing.T) {
 	}
 }
 
-// TestOpenMigratesRunAgentSessionsTable proves a database created before the
-// run_agent_sessions table existed gains it on reopen.
 func TestOpenMigratesRunAgentSessionsTable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	d, err := Open(path)

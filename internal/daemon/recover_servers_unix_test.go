@@ -14,9 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// spawnSleepProcess launches `sleep 30` in its own process group so that a
-// reap test that kills the pgroup can't take out the go test runner. The
-// returned *exec.Cmd lets the caller clean up with killAndWait.
 func spawnSleepProcess(t *testing.T) (*exec.Cmd, int) {
 	t.Helper()
 	bin, err := exec.LookPath("sleep")
@@ -51,9 +48,6 @@ func waitForPIDExit(pid int, timeout time.Duration) bool {
 	return false
 }
 
-// TestReapOrphanedServers_KillsLiveMatchingProcess proves the full reap
-// flow: a PID file whose recorded StartedAt matches the subprocess's real
-// start time triggers a kill, and the PID file is removed.
 func TestReapOrphanedServers_KillsLiveMatchingProcess(t *testing.T) {
 	cmd, pid := spawnSleepProcess(t)
 	t.Cleanup(func() { killAndWait(cmd) })
@@ -84,9 +78,6 @@ func TestReapOrphanedServers_KillsLiveMatchingProcess(t *testing.T) {
 	}
 }
 
-// TestReapOrphanedServers_SkipsWhenDaemonAlive verifies that if the daemon
-// PID file points at a running process, reaping is skipped entirely -
-// protects a concurrently-running old daemon's legitimate servers.
 func TestReapOrphanedServers_SkipsWhenDaemonAlive(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -115,10 +106,6 @@ func TestReapOrphanedServers_SkipsWhenDaemonAlive(t *testing.T) {
 	}
 }
 
-// TestReapOrphanedServers_SkipsKillWhenStartTimeMismatched simulates PID
-// reuse: the PID file's StartedAt doesn't match the live process's actual
-// start time, so the reaper must NOT send signals - it just drops the
-// stale file.
 func TestReapOrphanedServers_SkipsKillWhenStartTimeMismatched(t *testing.T) {
 	cmd, pid := spawnSleepProcess(t)
 	t.Cleanup(func() { killAndWait(cmd) })

@@ -15,9 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The finding at the centre of the drift this channel prevents: a review asked
-// for a design change, the human declined it, and a later step re-applied it
-// anyway because the decision never reached that step.
 const declinedDedupFindings = `{"findings":[{"id":"journal-version-deduplication","severity":"error",` +
 	`"file":"tools/release_announcement_action.js","line":497,` +
 	`"description":"dedup checks only the last event; check all prior events instead","action":"ask-user"}]}`
@@ -57,9 +54,6 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	return &decisionFixture{db: database, repo: repo, run: run, reviewSR: reviewSR, testSR: testSR}
 }
 
-// declineReviewRound records the review raising findings and the human
-// resolving the gate without selecting any of them, exactly as the executor's
-// approve, skip, and abort paths do.
 func (f *decisionFixture) declineReviewRound(t *testing.T, findings string) {
 	t.Helper()
 	round, err := f.db.InsertStepRound(f.reviewSR.ID, 1, "initial", &findings, nil, 10)
@@ -80,10 +74,6 @@ func (f *decisionFixture) testStepContext() *pipeline.StepContext {
 	}
 }
 
-// The core regression: a finding the human declined in the review step must be
-// visible to a later step in the same run, so that step does not re-implement
-// it. Before this channel existed the test step's prompt carried no trace of
-// the decision at all.
 func TestDeclinedFindingReachesALaterStepInTheSameRun(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -111,9 +101,6 @@ func TestDeclinedFindingReachesALaterStepInTheSameRun(t *testing.T) {
 	}
 }
 
-// A decision made on this branch must still stand for a later run. The
-// uncertified-range channel could not do this because completing a review
-// deletes it; a decision has no such expiry.
 func TestDeclinedFindingReachesALaterRunOnTheSameBranch(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -261,9 +248,6 @@ func TestLaterChoiceToFixSupersedesEarlierDeclineWithoutHidingIt(t *testing.T) {
 	}
 }
 
-// Completing a review clears the uncertified pipeline range. It must not clear
-// a recorded decision: approving the gate IS the decision, so an approval that
-// erased it would be self-defeating.
 func TestCompletedReviewDoesNotClearBranchDecisions(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -289,8 +273,6 @@ func TestCompletedReviewDoesNotClearBranchDecisions(t *testing.T) {
 	}
 }
 
-// A partial selection is also a decision: the findings the user did not pick
-// are declined, and that half must travel too.
 func TestPartiallySelectedRoundCarriesItsDeclinedHalfAcrossSteps(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -321,9 +303,6 @@ func TestPartiallySelectedRoundCarriesItsDeclinedHalfAcrossSteps(t *testing.T) {
 	}
 }
 
-// An auto-fix selection is a filter's choice, not a human's. Its complement is
-// findings still awaiting a decision, so presenting them as declined would
-// suppress a finding nobody has ruled on.
 func TestAutoFixComplementIsNeverPresentedAsAUserDecision(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -360,8 +339,6 @@ func TestAutoFixComplementIsNeverPresentedAsAUserDecision(t *testing.T) {
 	}
 }
 
-// A declined round renders only the declined half: the selection is an
-// explicit empty set, so there is no "chose to fix" list to show.
 func TestDeclinedRoundRendersOnlyTheIgnoredHalfInItsOwnStep(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -377,8 +354,6 @@ func TestDeclinedRoundRendersOnlyTheIgnoredHalfInItsOwnStep(t *testing.T) {
 	}
 }
 
-// A round with no recorded decision must produce no decision section, so an
-// unresolved finding is never presented as settled.
 func TestUnresolvedRoundProducesNoDecisionSection(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -393,8 +368,6 @@ func TestUnresolvedRoundProducesNoDecisionSection(t *testing.T) {
 	}
 }
 
-// The sections must degrade to nothing when the context carries no run or
-// repo, so a step context built without them keeps working.
 func TestDecisionSectionsAreAbsentWithoutRunOrRepo(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -412,8 +385,6 @@ func TestDecisionSectionsAreAbsentWithoutRunOrRepo(t *testing.T) {
 	}
 }
 
-// Prompt budget: a long decision history renders its most recent entries and
-// says what it dropped, so a truncated history never reads as a complete one.
 func TestDecisionSectionBoundsALongHistory(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -497,12 +468,6 @@ func TestDecisionSectionBoundsOneOversizedFinding(t *testing.T) {
 	}
 }
 
-// The decision channel exists so the steps that run after a human rules on
-// review findings cannot silently undo or re-apply what was decided. These
-// tests exercise the real rendered step prompts - not just the section helper
-// - and pin both halves of the contract: the recorded decisions (which
-// findings the human chose to fix or declined, with their instructions) and
-// the explicit instruction to respect them and never revert or undo them.
 const stepDecisionsFindings = `{"findings":[` +
 	`{"id":"chosen-fix","severity":"error","file":"a.go","line":3,` +
 	`"description":"rename the journal field to entry","action":"ask-user",` +
@@ -511,9 +476,6 @@ const stepDecisionsFindings = `{"findings":[` +
 	`"description":"redesign the dedup loop entirely","action":"ask-user",` +
 	`"user_instructions":"too risky for this change"}]}`
 
-// recordHumanReviewDecision seeds a review round on the context's run that the
-// human resolved by selecting chosen-fix, leaving declined-redesign as the
-// declined half.
 func recordHumanReviewDecision(t *testing.T, sctx *pipeline.StepContext) {
 	t.Helper()
 	reviewSR, err := sctx.DB.InsertStepResult(sctx.Run.ID, types.StepReview)
@@ -531,9 +493,6 @@ func recordHumanReviewDecision(t *testing.T, sctx *pipeline.StepContext) {
 	}
 }
 
-// bindStepResult registers the step under test as its own step result so the
-// cross-step decision channel treats the seeded review decision as another
-// step's, exactly as the executor wires it.
 func bindStepResult(t *testing.T, sctx *pipeline.StepContext, stepName types.StepName) {
 	t.Helper()
 	sr, err := sctx.DB.InsertStepResult(sctx.Run.ID, stepName)
@@ -543,9 +502,6 @@ func bindStepResult(t *testing.T, sctx *pipeline.StepContext, stepName types.Ste
 	sctx.StepResultID = sr.ID
 }
 
-// requireRecordedDecisionsInPrompt asserts the rendered agent prompt carries
-// the seeded review decisions with their instructions and the
-// respect-and-never-revert instruction.
 func requireRecordedDecisionsInPrompt(t *testing.T, prompt string) {
 	t.Helper()
 	for _, want := range []string{
@@ -622,8 +578,6 @@ func TestLintFixPromptCarriesRecordedHumanDecisions(t *testing.T) {
 	requireRecordedDecisionsInPrompt(t, ag.calls[0].Prompt)
 }
 
-// Both Test agent turns - the repair turn and the evidence turn - must carry
-// the recorded decisions, since each can change the tree.
 func TestTestPromptsCarryRecordedHumanDecisions(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -651,9 +605,6 @@ func TestTestPromptsCarryRecordedHumanDecisions(t *testing.T) {
 	requireRecordedDecisionsInPrompt(t, ag.calls[1].Prompt)
 }
 
-// A step's own earlier gate decisions bind its later rounds just as another
-// step's do: a fix turn must not undo a fix the human chose at this step's
-// earlier gate.
 func TestOwnStepHistoryPromptCarriesNeverRevertClause(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -681,16 +632,11 @@ func TestOwnStepHistoryPromptCarriesNeverRevertClause(t *testing.T) {
 	}
 }
 
-// threeFindingsRound is a gate that shows three findings, so a round can fix
-// one, decline one, and leave one for a later decision.
 const threeFindingsRound = `{"findings":[` +
 	`{"id":"R1","severity":"error","description":"the fix the human asked for","action":"ask-user"},` +
 	`{"id":"R2","severity":"warning","description":"the finding the human declined","action":"auto-fix"},` +
 	`{"id":"R3","severity":"warning","description":"the finding nobody ruled on","action":"auto-fix"}]}`
 
-// The decline set is the complement of the selection (PR #790 decision B: no
-// decline list, no column), so a round that fixes R1 renders R2 and R3 as
-// declined - and a later round that fixes R1 again renders the same set.
 func TestRoundHistory_DeclinesRenderAsTheSelectionComplement(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -719,11 +665,6 @@ func TestRoundHistory_DeclinesRenderAsTheSelectionComplement(t *testing.T) {
 	}
 }
 
-// Approving, skipping, or aborting a later gate declines everything that gate
-// showed - except a finding an earlier round of the same step chose to fix,
-// which keeps that decision. A gate response cannot reverse an applied fix
-// (splitFixResponse refuses --ignore for it), so this is the only rendering
-// that later rounds and later runs can ever see.
 func TestRoundHistory_ApproveAfterAnEarlierFixDoesNotDeclineThatFix(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)
@@ -755,10 +696,6 @@ func TestRoundHistory_ApproveAfterAnEarlierFixDoesNotDeclineThatFix(t *testing.T
 	}
 }
 
-// A later fix selection that omits an earlier fix keeps it: the omission
-// records nothing, and rendering it as a decline would tell the reviewer to
-// undo work the same human asked for. This is the incident reproduction at
-// render level, with both rounds driven by a human selection.
 func TestRoundHistory_ALaterSelectionNeverRediscardsAnEarlierFix(t *testing.T) {
 	t.Parallel()
 	f := newDecisionFixture(t)

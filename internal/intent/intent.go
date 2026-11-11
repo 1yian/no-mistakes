@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// Result is what Extract returns when it successfully attaches an intent
-// to a run. AgentName/SessionID/Score are surfaced for telemetry and DB
-// persistence; callers store the Summary onto db.Run.Intent.
 type Result struct {
 	Summary   string
 	AgentName string
@@ -20,54 +17,25 @@ type Result struct {
 	Score     float64
 }
 
-// ExtractParams configures a single Extract call.
 type ExtractParams struct {
 	TranscriptHomes *runenv.TranscriptHomes
-	// HomeDir overrides the user's home directory. Empty means use os.UserHomeDir.
-	HomeDir string
-	// OriginCWD is the user's actual repo directory. The caller is responsible
-	// for passing the original working path, NOT the no-mistakes worktree.
-	OriginCWD string
-	// DiffFiles is the repo-relative file set used for matching and scoring.
-	DiffFiles []string
-	// Change is the exact Git range and diff under validation, for summarization.
-	Change ChangeContext
-	// BaseTime anchors session discovery before SlackDays is subtracted. It
-	// need not be the committer time of Change.Base, which scopes the branch diff.
-	BaseTime time.Time
-	// HeadTime is the committer time of the head SHA.
-	HeadTime time.Time
-	// SlackDays extends WindowStart backwards. The plan called for 3 days.
-	SlackDays int
-	// Threshold is the minimum raw file-overlap score required before applying
-	// stricter multi-file and stale-partial acceptance rules.
-	Threshold float64
-	// Readers are the per-agent transcript readers to consult. Order is
-	// insignificant; matching accepts plausible candidates, prefers a single
-	// decisive raw-score match, and otherwise ranks by confidence or an optional
-	// Disambiguator.
-	Readers []Reader
-	// Cache is consulted before summarization. Pass NewMemCache() if no DB.
-	Cache Cache
-	// Summarizer turns the chosen session's text into a short summary.
-	Summarizer Summarizer
-	// Disambiguator optionally chooses among multiple plausible sessions when
-	// file-overlap scoring is not decisive enough to pick one safely.
-	Disambiguator Disambiguator
-	// Logf receives best-effort accepted candidate diagnostics. Nil disables logging.
-	Logf func(format string, args ...any)
+	HomeDir         string
+	OriginCWD       string
+	DiffFiles       []string
+	Change          ChangeContext
+	BaseTime        time.Time
+	HeadTime        time.Time
+	SlackDays       int
+	Threshold       float64
+	Readers         []Reader
+	Cache           Cache
+	Summarizer      Summarizer
+	Disambiguator   Disambiguator
+	Logf            func(format string, args ...any)
 }
 
-// ErrNoMatch indicates no agent transcript matched the change. Callers
-// should treat this as a normal "no intent attached" outcome, not an error.
 var ErrNoMatch = errors.New("intent: no matching transcript")
 
-// Extract runs the discover -> match -> optional disambiguate -> cache ->
-// summarize pipeline and returns the final intent. It returns ErrNoMatch when
-// no session satisfies the matcher's threshold, overlap, and freshness
-// acceptance rules. Disambiguation failures fall back to the deterministic
-// match, except cleanup failures are returned because worktree side effects
-// may remain.
 func Extract(ctx context.Context, p ExtractParams) (*Result, error) {
 	if p.OriginCWD == "" {
 		return nil, fmt.Errorf("intent: OriginCWD is required")
@@ -114,10 +82,6 @@ func Extract(ctx context.Context, p ExtractParams) (*Result, error) {
 		return nil, ErrNoMatch
 	}
 
-	// Load message bodies only for sessions that look promising on metadata.
-	// At this stage we cannot score yet (need messages), so we load them all.
-	// Discover is supposed to keep the candidate set small via the time/cwd
-	// filter; if that's true, this is cheap.
 	var loaded []*Session
 	for _, s := range sessions {
 		var reader Reader

@@ -20,8 +20,6 @@ var dialNetworkWithTimeout = func(network, address string, timeout time.Duration
 	return (&net.Dialer{Timeout: timeout}).Dial(network, address)
 }
 
-// ConnectTimeoutError reports a daemon IPC connect attempt that exceeded the
-// bounded client timeout.
 type ConnectTimeoutError struct {
 	SocketPath      string
 	TimeoutDuration time.Duration
@@ -36,15 +34,11 @@ func (e *ConnectTimeoutError) Unwrap() error { return e.Err }
 
 func (e *ConnectTimeoutError) Timeout() bool { return true }
 
-// IsConnectTimeout reports whether err was caused by a bounded IPC connect
-// timeout.
 func IsConnectTimeout(err error) bool {
 	var timeoutErr *ConnectTimeoutError
 	return errors.As(err, &timeoutErr)
 }
 
-// SocketPathTooLongError reports a daemon socket path longer than the platform
-// accepts for a Unix socket (the size of sun_path, less its NUL terminator).
 type SocketPathTooLongError struct {
 	Path  string
 	Limit int
@@ -54,9 +48,6 @@ func (e *SocketPathTooLongError) Error() string {
 	return fmt.Sprintf("daemon socket path %s is %d bytes, over the %d-byte limit for Unix sockets on this platform; use a shorter NM_HOME (the resolved physical path counts, not a symbolic link to it)", e.Path, len(e.Path), e.Limit)
 }
 
-// CallTimeoutError reports an IPC method whose response did not arrive before
-// the caller-selected read deadline. The connection was accepted; this is a
-// slow or stuck reply, not a refused dial.
 type CallTimeoutError struct {
 	Method          string
 	TimeoutDuration time.Duration
@@ -71,8 +62,6 @@ func (e *CallTimeoutError) Unwrap() error { return e.Err }
 
 func (e *CallTimeoutError) Timeout() bool { return true }
 
-// IsCallTimeout reports whether err was caused by a bounded IPC call read
-// deadline. Connect timeouts are a different failure and do not match.
 func IsCallTimeout(err error) bool {
 	var timeoutErr *CallTimeoutError
 	return errors.As(err, &timeoutErr)
@@ -89,11 +78,6 @@ func isReadTimeout(err error) bool {
 	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
-// connectTimeout resolves the bounded connect timeout from the root that owns
-// socketPath, which always sits at <root>/socket. Reading the ambient NM_HOME
-// instead would mis-scope it: a receive hook resolves its root from the gate it
-// was handed and git sets no NM_HOME for a hook, so it would dial one root's
-// daemon under another root's timeout.
 func connectTimeout(socketPath string) time.Duration {
 	value := os.Getenv("NM_DAEMON_CONNECT_TIMEOUT")
 	if value == "" {
@@ -110,7 +94,6 @@ func connectTimeout(socketPath string) time.Duration {
 	return d
 }
 
-// Client connects to the IPC server over the platform transport.
 type Client struct {
 	conn    net.Conn
 	encoder *json.Encoder
@@ -119,13 +102,10 @@ type Client struct {
 }
 
 const (
-	// DefaultDialTimeout is the read deadline used for the daemon health check
-	// dial made by callers outside this package (see internal/daemon/selfexec.go).
 	DefaultDialTimeout = 250 * time.Millisecond
 	defaultCallTimeout = 30 * time.Second
 )
 
-// Dial connects to the IPC server at the given endpoint path.
 func Dial(socketPath string) (*Client, error) {
 	conn, err := dialEndpoint(socketPath)
 	if err != nil {
@@ -157,16 +137,10 @@ func dialEndpoint(socketPath string) (net.Conn, error) {
 	return conn, nil
 }
 
-// Call sends a JSON-RPC request and waits for the response.
-// The result is unmarshaled into the provided pointer.
-// If the server returns a JSON-RPC error, it is returned as *RPCError.
 func (c *Client) Call(method string, params interface{}, result interface{}) error {
 	return c.CallWithTimeout(method, params, result, defaultCallTimeout)
 }
 
-// RequireTranscriptHomes must succeed before a caller launches a run with
-// selected transcript homes, including before a push can trigger its hook.
-// The probe uses this connection so it confirms the daemon receiving the run.
 func (c *Client) RequireTranscriptHomes() error {
 	var result ProbeTranscriptHomesResult
 	err := c.Call(MethodProbeTranscriptHomes, nil, &result)
@@ -179,7 +153,6 @@ func (c *Client) RequireTranscriptHomes() error {
 	return nil
 }
 
-// RequireCommitIdentity refuses older daemons before a caller submits a run.
 func (c *Client) RequireCommitIdentity() error {
 	var result struct {
 		OK bool `json:"ok"`
@@ -190,12 +163,10 @@ func (c *Client) RequireCommitIdentity() error {
 	return nil
 }
 
-// CallWithTimeout is Call with a caller-selected read deadline.
 func (c *Client) CallWithTimeout(method string, params interface{}, result interface{}, timeout time.Duration) error {
 	return c.CallWithContext(context.Background(), method, params, result, timeout)
 }
 
-// CallWithContext is CallWithTimeout with cancellation support.
 func (c *Client) CallWithContext(ctx context.Context, method string, params interface{}, result interface{}, timeout time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -279,20 +250,14 @@ func (c *Client) CallWithContext(ctx context.Context, method string, params inte
 	return nil
 }
 
-// Close disconnects from the server.
 func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-// Subscribe opens a dedicated connection and subscribes to events for a run.
-// Returns an event channel, a cancel function (to stop and clean up), and an error.
-// The channel is closed when the run completes, the connection drops, or cancel is called.
 func Subscribe(socketPath string, params *SubscribeParams) (<-chan Event, func(), error) {
 	return SubscribeContext(context.Background(), socketPath, params)
 }
 
-// SubscribeContext is Subscribe with cancellation support while establishing
-// the subscription.
 func SubscribeContext(ctx context.Context, socketPath string, params *SubscribeParams) (<-chan Event, func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err

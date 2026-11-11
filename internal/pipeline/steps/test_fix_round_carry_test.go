@@ -24,8 +24,6 @@ const (
 	cleanTestEvidence = `{"summary":"fixed","findings":%s,"tested":["x"],"testing_summary":"ok","artifacts":[],"scenarios":[{"name":"user runs the command","result":"pass","live":true,"evidence":"x","reason":""}],"verdict":"go"}`
 )
 
-// fixRoundTestContext is a Test step on an automatic fix round whose
-// evidence turn comes back clean: verdict go, reporting only reported.
 func fixRoundTestContext(t *testing.T, deferred, reported string) *pipeline.StepContext {
 	t.Helper()
 	sctx := humanFixRoundTestContext(t, deferred, reported)
@@ -65,9 +63,6 @@ func descriptionCount(t *testing.T, raw, description string) int {
 	return count
 }
 
-// A finding the auto-fix round did not select records what an earlier turn
-// observed (here a write outside the workspace), so a clean fix round cannot
-// clear it: it must survive the round and keep the step parked.
 func TestTestStep_FixRoundKeepsUnselectedFindings(t *testing.T) {
 	t.Parallel()
 	sctx := fixRoundTestContext(t, `{"findings":[`+breachFinding+`],"summary":"no-go"}`, `[]`)
@@ -84,8 +79,6 @@ func TestTestStep_FixRoundKeepsUnselectedFindings(t *testing.T) {
 	}
 }
 
-// A human fix response accounts for every finding it leaves unselected as an
-// explicit decline, so a fix round a human started carries none of them.
 func TestTestStep_HumanFixRoundDoesNotCarryDeclinedFindings(t *testing.T) {
 	t.Parallel()
 	sctx := humanFixRoundTestContext(t, `{"findings":[`+breachFinding+`],"summary":"no-go"}`, `[]`)
@@ -146,8 +139,6 @@ func TestTestStep_FixRoundCarriedFindingGetsADistinctID(t *testing.T) {
 	}
 }
 
-// Every evidence turn derives its own verdict finding, so an earlier turn's
-// inconclusive verdict is superseded by this turn's go rather than carried.
 func TestTestStep_FixRoundDoesNotCarryAnEarlierVerdict(t *testing.T) {
 	t.Parallel()
 	sctx := fixRoundTestContext(t, `{"findings":[{"id":"test-3","severity":"warning","action":"ask-user","category":"test-verdict","description":"live validation verdict: inconclusive"}],"summary":"inconclusive"}`, `[]`)
@@ -205,10 +196,6 @@ func TestTestStep_AutoFixCarryPolicy(t *testing.T) {
 	}
 }
 
-// End to end through the executor: a no-go verdict starts an automatic fix
-// round, which defers the agent's ask-user finding. The fix round's clean
-// result must still park on that finding, and only a human decision on it
-// lets the step complete.
 func TestTestStep_DeferredAskUserFindingParksUntilAHumanDecidesIt(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

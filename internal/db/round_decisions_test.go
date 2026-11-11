@@ -50,9 +50,6 @@ func TestSetStepRoundDeclined_RecordsAnExplicitEmptySelection(t *testing.T) {
 	}
 }
 
-// A decline records that nothing was selected. It must never erase a selection
-// that was already recorded, or the decline would destroy the decision it is
-// meant to preserve.
 func TestSetStepRoundDeclined_NeverOverwritesARecordedSelection(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo(t.TempDir(), "https://example.invalid/repo", "main")
@@ -84,8 +81,6 @@ func TestSetStepRoundDeclined_NeverOverwritesARecordedSelection(t *testing.T) {
 	}
 }
 
-// An explicit empty JSON array is a recorded decision; an empty string is not.
-// Readers derive the declined set by subtraction, so the two must not collapse.
 func TestSetStepRoundSelection_DistinguishesEmptyArrayFromNoDecision(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo(t.TempDir(), "https://example.invalid/repo", "main")
@@ -160,8 +155,6 @@ func TestGetBranchDecisionRounds_ScopesToOtherRunsOnTheSameBranch(t *testing.T) 
 	}
 }
 
-// An auto-fix selection is a filter's choice, not a human's, so it must not be
-// served as a prior decision.
 func TestGetBranchDecisionRounds_ExcludesAutoFixSelections(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo(t.TempDir(), "https://example.invalid/repo", "main")

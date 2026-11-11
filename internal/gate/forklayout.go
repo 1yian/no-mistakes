@@ -13,9 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/winproc"
 )
 
-// resolveForkParent is github.RepoParent wired to a real gh invocation. It is
-// a package var so tests can substitute a fake without shelling out for real,
-// matching ensureGateHooksPathIsolation above.
 var resolveForkParent = func(ctx context.Context, remoteURL string) (parentSlug string, isFork bool, err error) {
 	host := scm.ResolveHost(ctx, remoteURL)
 	cmd := func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -26,30 +23,6 @@ var resolveForkParent = func(ctx context.Context, remoteURL string) (parentSlug 
 	return github.RepoParent(ctx, cmd, host, remoteURL)
 }
 
-// refuseForkOriginMisrouting detects the fork layout `gh repo fork --clone`
-// leaves behind - `origin` is the contributor's own fork and a separate
-// `upstream` remote already names the real parent repository - and refuses
-// loudly instead of letting a plain `no-mistakes init` (no --fork-url) treat
-// the fork as the parent (issue #1178). Left undetected, that layout opens
-// scratch PRs inside the contributor's fork and no attestation ever binds to
-// their real PR against the parent.
-//
-// Detection is best-effort and fails OPEN, never closed: it only refuses when
-// it has positive proof (a GitHub API "fork" + "parent" answer for origin that
-// matches the upstream remote's own repo), and skips silently whenever it
-// cannot get that proof - no "upstream" remote, either remote not on GitHub,
-// gh unavailable/unauthenticated, offline, or origin genuinely not a fork of
-// what upstream names. That mirrors every other init check: init has never
-// required gh or network access, and a repo with an unrelated "upstream"
-// remote (a template, not a fork parent) must keep initializing exactly as it
-// always has.
-//
-// It only runs when fork routing is not already configured (no --fork-url on
-// this call and no previously recorded fork), because a contributor who
-// already named their fork has already told no-mistakes which remote is
-// which; running it unconditionally would also refuse a deliberately
-// configured origin=parent, --fork-url=fork setup that happens to also carry
-// an unrelated "upstream" remote.
 func refuseForkOriginMisrouting(ctx context.Context, absRoot string) error {
 	// Read origin's literal configured URL rather than trusting a caller-
 	// supplied value: InitWithFork resolves url.*.insteadOf rewrites for the
@@ -117,8 +90,6 @@ func refuseForkOriginMisrouting(ctx context.Context, absRoot string) error {
 		safeurl.Redact(upstreamRemoteURL), safeurl.Redact(originURL))
 }
 
-// splitRepoSlug splits an "owner/name" slug, reporting ok=false for anything
-// else (including the empty string RepoSlug returns for an unparseable URL).
 func splitRepoSlug(slug string) (owner, name string, ok bool) {
 	owner, name, found := strings.Cut(slug, "/")
 	if !found || owner == "" || name == "" {

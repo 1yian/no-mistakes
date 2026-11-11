@@ -50,8 +50,6 @@ func liveValidatedPipelineBody(t *testing.T, scenarios []types.TestScenario, ver
 	return md
 }
 
-// attestationPayload extracts the live attestation JSON from a rendered body
-// the same way the gate does: first marker wins.
 func attestationPayload(t *testing.T, body string) map[string]any {
 	t.Helper()
 	const prefix = "<!-- no-mistakes-pipeline-attestation:v1 "
@@ -99,9 +97,6 @@ func TestRequireActionAcceptsAttestationCarryingLiveValidation(t *testing.T) {
 	}
 }
 
-// A pull request whose test step recorded no verdict - every run from before
-// the contract - must keep passing the gate, and must not claim a validation
-// state nobody established.
 func TestRequireActionAcceptsAttestationWithoutLiveValidation(t *testing.T) {
 	body := pipelineSummaryWithStatuses(t, types.StepStatusCompleted, types.StepStatusCompleted, types.StepStatusCompleted)
 	if _, present := attestationPayload(t, body)["live_validation"]; present {
@@ -113,10 +108,6 @@ func TestRequireActionAcceptsAttestationWithoutLiveValidation(t *testing.T) {
 	}
 }
 
-// The gate certifies step lifecycle, not product quality: a no-go verdict is
-// the Test step's own business (it parks the step, so the step never reaches
-// "completed" while it stands). The action must not start second-guessing a
-// verdict that reaches it.
 func TestRequireActionDoesNotAdjudicateTheVerdict(t *testing.T) {
 	body := liveValidatedPipelineBody(t, []types.TestScenario{
 		{Name: "user reaches the success screen", Result: types.ScenarioResultFail, Live: true},

@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// labRoot creates a mode-0700 isolation root under /private/tmp (or /tmp).
 func labRoot(t *testing.T) string {
 	t.Helper()
 	base := "/tmp"

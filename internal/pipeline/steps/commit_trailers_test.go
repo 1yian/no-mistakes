@@ -15,8 +15,6 @@ var attributionTrailers = []string{
 	"Assisted-by: no-mistakes:{{.Agent}}:{{.Model}}",
 }
 
-// gitTrailers reads trailers back through git's own parser, so the assertion
-// is that git recognises them as trailers, not that the text is present.
 func gitTrailers(t *testing.T, dir string) string {
 	t.Helper()
 	return gitCmd(t, dir, "log", "-1", "--format=%(trailers:only,unfold)")

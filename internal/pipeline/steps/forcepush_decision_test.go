@@ -9,9 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// newForcePushFixture builds a local repo whose "origin" points at a bare
-// remote, with main + a feature branch pushed to the remote. It returns the
-// local dir, a gitRunner bound to it, the remote URL, and the feature head SHA.
 func newForcePushFixture(t *testing.T) (dir string, gitRun gitRunner, remote, featureSHA string) {
 	t.Helper()
 	remote = t.TempDir()
@@ -64,9 +61,6 @@ func TestResolveForcePushDecision_UpToDate(t *testing.T) {
 	}
 }
 
-// An append-only update needs no force at all. The remote itself then enforces
-// the no-rewrite property an open PR's head and a SHA-bound review attestation
-// depend on, instead of our own lease bookkeeping.
 func TestResolveForcePushDecision_FastForwardNeedsNoForce(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)
@@ -87,7 +81,6 @@ func TestResolveForcePushDecision_FastForwardNeedsNoForce(t *testing.T) {
 	}
 }
 
-// A rewrite is not a fast-forward and must keep taking the guarded path.
 func TestResolveForcePushDecision_RewriteIsNotAFastForward(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)
@@ -158,9 +151,6 @@ func TestResolveForcePushDecision_RefusesUnincorporatedRemoteCommit(t *testing.T
 	}
 }
 
-// When the remote moved past lastSeen but its commits are already incorporated
-// (by content) into the head being pushed, the push is safe and must be allowed
-// even though the lease anchor differs from lastSeen.
 func TestResolveForcePushDecision_AllowsWhenRemoteContentIncorporated(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)
@@ -196,9 +186,6 @@ func TestResolveForcePushDecision_AllowsWhenRemoteContentIncorporated(t *testing
 	}
 }
 
-// A force push that rewrites history the run already knew (reachable from
-// baseSHA) - e.g. dropping a commit by amend/revert - must be allowed: the
-// dropped commit is not data loss, it is the deliberate rewrite.
 func TestResolveForcePushDecision_AllowsRewriteOfKnownBaseHistory(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)
@@ -223,8 +210,6 @@ func TestResolveForcePushDecision_AllowsRewriteOfKnownBaseHistory(t *testing.T) 
 	}
 }
 
-// Even with baseSHA set, a commit that reached the branch out of band (after the
-// run base, so not reachable from baseSHA) must still be refused.
 func TestResolveForcePushDecision_RefusesOutOfBandEvenWithBase(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)
@@ -260,10 +245,6 @@ func TestResolveForcePushDecision_RefusesOutOfBandEvenWithBase(t *testing.T) {
 	}
 }
 
-// Issue #837: When an earlier generation of the pipeline pushed generation N
-// (e.g. featureSHA), and a mid-run base advance triggers a conflict rebase that
-// drops or folds duplicate fix hunks, pushing the rewritten head must be allowed
-// because the remote still points at the run's own prior pushed generation (lastSeen).
 func TestResolveForcePushDecision_AllowsPushWhenRemoteEqualsPriorPipelinePushedGeneration(t *testing.T) {
 	t.Parallel()
 	dir, gitRun, remote, featureSHA := newForcePushFixture(t)

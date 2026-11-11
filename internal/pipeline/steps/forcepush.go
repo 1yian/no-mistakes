@@ -7,32 +7,15 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// gitRunner runs a git subcommand and returns trimmed stdout. Callers bind it
-// to the right working directory and environment (git.Run for the push step,
-// stepGitRun for the CI step so test env overrides apply).
 type gitRunner func(args ...string) (string, error)
 
-// forcePushDecision describes how to push a head to a remote branch safely.
-// Exactly one of newBranch / upToDate / fastForward is true, or none (a guarded
-// force-push anchored to remoteSHA is required).
 type forcePushDecision struct {
-	remoteSHA string // current remote head; the lease anchor for a force-push
-	newBranch bool   // the branch does not exist on the remote -> plain push
-	upToDate  bool   // the remote already points at the head -> no push needed
-	// fastForward means the remote head is already an ancestor of the head
-	// being pushed, so the update only appends: nothing on the remote can be
-	// discarded and no force is needed. Force-with-lease would also succeed
-	// here; a plain push is preferred because it is the remote, not our own
-	// lease bookkeeping, that then enforces the no-rewrite property - which is
-	// what an open PR's head, and a review attestation bound to an exact SHA,
-	// actually depend on.
+	remoteSHA   string // current remote head; the lease anchor for a force-push
+	newBranch   bool   // the branch does not exist on the remote -> plain push
+	upToDate    bool   // the remote already points at the head -> no push needed
 	fastForward bool
 }
 
-// forcePushWouldDiscardError reports that a force-push would discard commits
-// present on the remote branch that the pipeline never incorporated. Refusing
-// is the whole point: it is what keeps a stale-base rebase or an out-of-band
-// push from silently dropping work that already landed upstream.
 type forcePushWouldDiscardError struct {
 	ref       string
 	remoteSHA string
@@ -50,27 +33,6 @@ func (e *forcePushWouldDiscardError) Error() string {
 	)
 }
 
-// resolveForcePushDecision re-reads the current state of ref on the push remote
-// and decides whether force-pushing newHeadSHA would discard commits the
-// pipeline never saw. It returns a decision the caller acts on, or a non-nil
-// error when the push must NOT proceed (either git failed, in which case we
-// fail safe rather than degrade to a blind --force, or the push would discard
-// unseen upstream commits).
-//
-// lastSeenSHA is the remote head the pipeline last observed or produced for this branch:
-//   - push step: the run's recorded pushed head, a prior pipeline run's recorded
-//     pushed head for this branch, or the remote-tracking ref synced by the rebase
-//     step. On a normal push that tracking ref is the exact commit the branch was
-//     rebased against; on a force push or mid-run rebase over prior generations,
-//     provenance records keep it anchored to what the pipeline previously pushed or observed.
-//   - CI step: the run's last-recorded head, i.e. what the pipeline last pushed.
-//
-// When the remote still points there the push is safe (it only fast-forwards or
-// replays our own prior state). Otherwise the remote moved out of band and the
-// push is allowed only when every commit now on the remote is already
-// incorporated, by content (patch-id), into newHeadSHA, or is part of the
-// history the run already knew (reachable from baseSHA) and is thus a deliberate
-// rewrite rather than a clobber. Anything else is refused rather than discarded.
 func resolveForcePushDecision(gitRun gitRunner, pushURL, ref, newHeadSHA, lastSeenSHA, baseSHA string) (forcePushDecision, error) {
 	current, err := lsRemoteSHA(gitRun, pushURL, ref)
 	if err != nil {
@@ -108,8 +70,6 @@ func resolveForcePushDecision(gitRun gitRunner, pushURL, ref, newHeadSHA, lastSe
 	return forcePushDecision{}, &forcePushWouldDiscardError{ref: ref, remoteSHA: current, dropped: dropped}
 }
 
-// lsRemoteSHA returns the SHA a ref resolves to on a remote, or "" when the ref
-// does not exist there.
 func lsRemoteSHA(gitRun gitRunner, remote, ref string) (string, error) {
 	out, err := gitRun("ls-remote", remote, ref)
 	if err != nil {
@@ -122,25 +82,6 @@ func lsRemoteSHA(gitRun gitRunner, remote, ref string) (string, error) {
 	return fields[0], nil
 }
 
-// remoteCommitsNotIncorporated returns the commits reachable from remoteSHA
-// whose changes are not already present (by patch-id) in newHeadSHA and are not
-// part of the history the run already knew (reachable from baseSHA). It first
-// fetches the remote branch tip into FETCH_HEAD so the commits are available
-// locally for the comparison, without disturbing remote-tracking refs.
-//
-// Using --cherry-pick (patch-id equivalence) rather than a plain ancestry check
-// is what makes this correct across rebases: a clean rebase rewrites commit
-// SHAs but preserves patch-ids, so commits the pipeline genuinely replayed are
-// recognized as incorporated, while a commit that only ever existed on the
-// remote is reported as about-to-be-discarded.
-//
-// Excluding baseSHA's ancestors (^baseSHA) is what lets a force push legitimately
-// rewrite history the gate already knew - the common amend, or reverting the
-// pipeline's own prior autofix commit - without flagging it as data loss, while
-// still catching a commit that reached the branch out of band (which, having
-// arrived after the run's base, is never an ancestor of baseSHA). baseSHA is
-// omitted when empty/zero or not resolvable locally, which only makes the check
-// stricter (more likely to refuse), never laxer.
 func remoteCommitsNotIncorporated(gitRun gitRunner, pushURL, ref, newHeadSHA, remoteSHA, baseSHA string) ([]string, error) {
 	branch := strings.TrimPrefix(ref, "refs/heads/")
 	if _, err := gitRun("fetch", "--no-tags", pushURL, "refs/heads/"+branch); err != nil {

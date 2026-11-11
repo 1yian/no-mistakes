@@ -131,9 +131,6 @@ func TestEnsureDirs(t *testing.T) {
 	}
 }
 
-// TestForGate covers the routing contract the managed receive hooks depend on:
-// the daemon root that owns a gate is derivable from the gate's own path, so a
-// hook helper never has to trust an NM_HOME that git did not set.
 func TestForGate(t *testing.T) {
 	tests := []struct {
 		name string
@@ -164,9 +161,6 @@ func TestForGate(t *testing.T) {
 	}
 }
 
-// TestForGateRefusesPathsThatAreNotManagedGates: the helper must fail rather
-// than fall back to the default root, so a caller holding an unexpected path
-// refuses the push instead of routing it to a daemon that does not own it.
 func TestForGateRefusesPathsThatAreNotManagedGates(t *testing.T) {
 	for _, gate := range []string{
 		filepath.Join("/srv", "nm", "repos", "abc123"),
@@ -182,9 +176,6 @@ func TestForGateRefusesPathsThatAreNotManagedGates(t *testing.T) {
 	}
 }
 
-// TestForGateIgnoresAmbientNMHome is the regression proper: the hook helpers
-// resolve their root from the gate, so an NM_HOME naming a different root - the
-// state a push from an ordinary shell used to produce - cannot retarget them.
 func TestForGateIgnoresAmbientNMHome(t *testing.T) {
 	t.Setenv("NM_HOME", filepath.Join("/some", "other", "root"))
 	gate := filepath.Join("/srv", "nm", "repos", "abc123.git")

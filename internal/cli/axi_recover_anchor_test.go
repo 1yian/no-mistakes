@@ -18,13 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Issue #1233 at the surface an operator actually hits: `no-mistakes axi run`
-// refuses to reconcile a private mirror holding private-only commits, and the
-// sanctioned recovery path that declares that chain preserved writes an anchor
-// reconciliation never consulted - so every recover -> rerun -> push iteration
-// re-refused against the evidence the previous iteration had just written.
-// With the anchor in place the same command reconciles (archiving the exact
-// private head first), lands the submission on the mirror, and the run starts.
 func TestTriggerRunReconcilesPrivateMirrorPreservedByRecoveryAnchor(t *testing.T) {
 	dir := t.TempDir()
 	p := paths.WithRoot(makeSocketSafeTempDir(t))

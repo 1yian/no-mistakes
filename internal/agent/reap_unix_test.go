@@ -104,25 +104,6 @@ func TestNativeAgentEscapedPipeHelper(t *testing.T) {
 	}
 }
 
-// TestCodexAgent_Run_ReapsLeakedGrandchildOnCleanExit is the regression test for
-// the daemon-crash bug behind the agent-spawning test step.
-//
-// When a repo has no configured test command, the test step asks the agent to
-// run the tests itself. That agent (codex here) spawns a test runner whose
-// worker pool can outlive it. ConfigureShellCommand isolates the agent in its
-// own process group and installs a cmd.Cancel that SIGKILLs the group - but
-// cmd.Cancel only fires on context cancellation. On a clean exit (exit 0)
-// nothing reaped the group, so the worker grandchildren leaked. Across runs
-// those orphans accumulate (each a multi-hundred-MB worker pool) until the host
-// is out of memory and the OS OOM-killer SIGKILLs the daemon, which the next
-// daemon start reports as "daemon crashed during execution".
-//
-// The fake codex backgrounds a grandchild whose stdio is detached (so it does
-// not hold the agent's stdout pipe open, which would wedge the parser instead
-// of exercising the clean-exit leak path), records its pid, prints a valid
-// result, and exits 0. After the fix the deferred TerminateShellCommandGroup
-// reaps the group on this success path, so the grandchild is gone once Run
-// returns. Before the fix it survived.
 func TestCodexAgent_Run_ReapsLeakedGrandchildOnCleanExit(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
@@ -155,9 +136,6 @@ exit 0
 	}
 }
 
-// TestCodexAgent_Run_CancellationTerminatesProcessGroup proves an invocation
-// timeout retains the native command's process-group cleanup. A tool child
-// must not survive cancellation of its agent.
 func TestCodexAgent_Run_CancellationTerminatesProcessGroup(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
@@ -288,9 +266,6 @@ func waitForPidFile(t *testing.T, path string, timeout time.Duration) int {
 	return 0
 }
 
-// pidGoneWithin reports whether pid stops existing within the window. kill(pid,
-// 0) returns ESRCH once the process is gone (the grandchild reparents to init
-// after the leader exits, so init reaps it the moment it is SIGKILLed).
 func pidGoneWithin(pid int, window time.Duration) bool {
 	deadline := time.Now().Add(window)
 	for time.Now().Before(deadline) {
@@ -313,9 +288,6 @@ func waitForNativeAgentPipeHelperReady(path string, timeout time.Duration) bool 
 	return false
 }
 
-// escapedStdoutHolder is a script fragment that leaves a session-detached
-// process holding the agent's stdout open after the agent exits, so neither
-// the process-group kill nor EOF ends the drain and WaitDelay must.
 func escapedStdoutHolder(t *testing.T, dir string) string {
 	t.Helper()
 	if _, err := exec.LookPath("setsid"); err != nil {
@@ -335,13 +307,6 @@ func escapedStdoutHolder(t *testing.T, dir string) string {
 		"while [ \"$(ps -o sid= -p $holder)\" = \"$(ps -o sid= -p $$)\" ]; do sleep 0.02; done\n"
 }
 
-// The Test step runs its analyzer with RequireCompletedChildren and a result
-// schema (runTestAnalyzer). Under exactly those options a cleanly exited agent
-// whose result was fully written must finish even when an escaped descendant
-// keeps stdout open until WaitDelay force-closes it.
-// Keep these native-agent subtests sequential: they write executable fixtures,
-// and a concurrent fork can briefly inherit another fixture's writable fd,
-// causing exec to fail with ETXTBSY even after the writer closes its copy.
 func TestNativeAgents_FinishedResultSurvivesEscapedStdoutHolder(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`)
 	tests := []struct {
@@ -372,10 +337,6 @@ func TestNativeAgents_FinishedResultSurvivesEscapedStdoutHolder(t *testing.T) {
 	}
 }
 
-// RequireCompletedChildren must stay fail-closed on the WaitDelay path: an
-// agent that wrote its result but left a child in its own process group still
-// running is refused, because the owned-children probe runs before WaitDelay can
-// turn the run into a swallowable ErrWaitDelay.
 func TestNativeAgents_RequireCompletedChildrenRefusesActiveOwnedChild(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`)
 	tests := []struct {
@@ -414,11 +375,6 @@ func TestNativeAgents_RequireCompletedChildrenRefusesActiveOwnedChild(t *testing
 	}
 }
 
-// TestNativeAgents_RequireCompletedChildrenAcceptsFinishingOwnedChild is the
-// issue #1614 regression: a member of the agent's own process group that was
-// still finishing when the leader exited must not fail the run - the bounded
-// re-probe sees it leave inside the settle window. A single-shot probe (the
-// old behavior) refused this shape outright.
 func TestNativeAgents_RequireCompletedChildrenAcceptsFinishingOwnedChild(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`)
 	tests := []struct {
@@ -449,17 +405,11 @@ func TestNativeAgents_RequireCompletedChildrenAcceptsFinishingOwnedChild(t *test
 	}
 }
 
-// finishingOwnedChild leaves a member in the agent's own process group that
-// outlives the leader by well under the settle window, with its stdio detached
-// so it does not hold the agent's pipes - the shape a test runner's last
-// worker or a toolchain helper mid-shutdown takes (issue #1614).
 func finishingOwnedChild(t *testing.T, dir string) string {
 	t.Helper()
 	return "( sleep 0.4 ) >/dev/null 2>&1 &\n"
 }
 
-// ownedStdoutHolder leaves a child in the agent's own process group holding
-// stdout, so the owned-children probe sees it still running.
 func ownedStdoutHolder(t *testing.T, dir string) string {
 	t.Helper()
 	pidFile := filepath.Join(dir, "owned.pid")
@@ -499,8 +449,6 @@ func runFakePiResult(t *testing.T, dir, holder string) (*Result, error) {
 	return (&piAgent{bin: bin}).Run(context.Background(), RunOpts{Prompt: "p", CWD: dir, RequireCompletedChildren: true})
 }
 
-// Without a captured result, the real read failure is reported - not the
-// WaitDelay expiry that hid it - and the error says so.
 func TestNativeAgents_UnfinishedRunKeepsParseErrorOverWaitDelay(t *testing.T) {
 	dir := t.TempDir()
 	holder := escapedStdoutHolder(t, dir)

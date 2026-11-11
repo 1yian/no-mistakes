@@ -20,13 +20,6 @@ var (
 	runPreparationCleanup = cleanupPreparationChanges
 )
 
-// ensurePrepared runs the trusted preparation command before the first
-// configured Test, Lint, or Format command, or an opted-in agent-only Test.
-// Successful preparation is shared for the executor lifetime. Only ignored
-// materialization (for example node_modules) and submodules checked out at
-// their recorded commits survive preparation; its tracked and ordinary
-// untracked mutations are removed so setup cannot ride into a later pipeline
-// fix commit.
 func ensurePrepared(sctx *pipeline.StepContext, logStep types.StepName) error {
 	prepareCmd := strings.TrimSpace(sctx.Config.Commands.Prepare)
 	if prepareCmd == "" {
@@ -265,11 +258,6 @@ func initializePreparationSubmodules(ctx context.Context, submodules []preparati
 	return nil
 }
 
-// resetPreparedSubmodules returns every submodule checkout preparation left
-// behind, including one the command initialized itself, to its recorded
-// commit. A submodule checked out at its gitlink is the tracked tree the
-// configured commands build against, not a setup mutation, so it is kept
-// rather than deinitialized; a moved submodule HEAD is still undone here.
 func resetPreparedSubmodules(ctx context.Context, workDir string) error {
 	current, err := preparationSubmodules(ctx, workDir)
 	if err != nil {
@@ -313,11 +301,6 @@ func preparationRelativePath(path string) (string, error) {
 	return path, nil
 }
 
-// preparationPatchDiffArgs pin every diff option that user git config can
-// otherwise turn into output `git apply` rejects when the snapshot is
-// restored: diff.submodule=log renders a dirty submodule as prose instead of
-// a Subproject line, diff.noprefix drops the a/ and b/ prefixes apply strips,
-// color.ui=always embeds escape codes, and a textconv driver rewrites content.
 var preparationPatchDiffArgs = []string{
 	"--no-ext-diff", "--no-textconv", "--no-color", "--binary",
 	"--submodule=short", "--src-prefix=a/", "--dst-prefix=b/",

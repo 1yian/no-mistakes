@@ -11,14 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// setupForkLayoutRepo builds a working repo whose "origin" is the GitHub fork
-// URL originURL and, when upstreamURL is non-empty, an additional "upstream"
-// remote pointing at upstreamURL - the exact layout `gh repo fork --clone`
-// leaves behind (issue #1178). Both GitHub URLs are redirected via
-// url.insteadOf to local bare repos so init's git operations (adding the gate
-// origin remote, ls-remote for the default branch) resolve without touching
-// the network; only the literal configured URL - what our detection reads -
-// stays the GitHub one.
 func setupForkLayoutRepo(t *testing.T, originURL, upstreamURL string) string {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
@@ -172,10 +164,6 @@ func TestInitProceedsWhenUpstreamNamesAnUnrelatedRepo(t *testing.T) {
 	}
 }
 
-// writeGhHostsConfig writes a synthetic gh hosts.yml naming hosts and points
-// GH_CONFIG_DIR at it, so scm.DetectProviderContext recognizes each as GitHub
-// Enterprise Server via ghKnowsHost without depending on the real machine's gh
-// config. Mirrors internal/scm's own writeGhConfig test helper.
 func writeGhHostsConfig(t *testing.T, hosts ...string) {
 	t.Helper()
 	var body strings.Builder

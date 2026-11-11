@@ -877,10 +877,6 @@ func TestArtifactPathRelativeToRoot_AllowsSymlinkEquivalentPaths(t *testing.T) {
 	}
 }
 
-// writeTempEvidenceFile creates a file under the caller's evidence root, which
-// is the only absolute location outside the repository that artifact paths may
-// reference. The root is passed in rather than derived here so each test owns
-// one directory and can hand the same value to BuildTestingSummaryForPR.
 func writeTempEvidenceFile(t *testing.T, evidenceRoot, name string, content []byte) string {
 	t.Helper()
 	if err := os.MkdirAll(evidenceRoot, 0o755); err != nil {

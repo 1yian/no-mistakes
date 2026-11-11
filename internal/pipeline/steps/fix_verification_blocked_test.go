@@ -14,9 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// runReviewFixRound drives one Review fix round whose fixer returns fixOutput,
-// optionally writing a file first, and returns the fixer's RunOpts and the
-// step log.
 func runReviewFixRound(t *testing.T, fixOutput string, edit bool) (agent.RunOpts, []string) {
 	t.Helper()
 	if !edit {
@@ -27,9 +24,6 @@ func runReviewFixRound(t *testing.T, fixOutput string, edit bool) (agent.RunOpts
 	})
 }
 
-// runReviewFixRoundWith is runReviewFixRound with the fixer's worktree action
-// supplied by the caller, so a fixer that runs `git commit` itself can be
-// driven too. A nil action makes no edits.
 func runReviewFixRoundWith(t *testing.T, fixOutput string, fixerAction func(dir string) error) (agent.RunOpts, []string) {
 	t.Helper()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -84,9 +78,6 @@ func logsContain(logs []string, want string) bool {
 	return false
 }
 
-// A missing verification tool must not read as permission to skip the edits:
-// the Review fix prompt says so, and its result schema carries the field that
-// reports the blocked verification.
 func TestReviewFixPromptKeepsEditsWhenVerificationToolIsMissing(t *testing.T) {
 	t.Parallel()
 	opts, _ := runReviewFixRound(t, `{"summary":"address findings"}`, true)
@@ -137,8 +128,6 @@ func TestReviewFixLogsNoEditRoundThatCitesMissingTool(t *testing.T) {
 	}
 }
 
-// commitInWorktree makes a fixer-authored commit, as a fixer that runs
-// `git commit` itself does, leaving the worktree clean.
 func commitInWorktree(t *testing.T) func(dir string) error {
 	return func(dir string) error {
 		if err := os.WriteFile(filepath.Join(dir, "review-fix.txt"), []byte("fixed"), 0o644); err != nil {
@@ -150,9 +139,6 @@ func commitInWorktree(t *testing.T) func(dir string) error {
 	}
 }
 
-// A fixer that commits its own work leaves nothing for the pipeline to commit,
-// but the round did produce a fix commit: the log must not claim that the agent
-// made no edits.
 func TestReviewFixLogsUnverifiedCommitWhenFixerCommittedItself(t *testing.T) {
 	t.Parallel()
 	_, logs := runReviewFixRoundWith(t, `{"summary":"address findings","verification_blocked":"pytest missing"}`, commitInWorktree(t))

@@ -18,8 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// RebaseStep syncs the pushed branch with the configured push target and the
-// latest default branch from upstream.
 type RebaseStep struct{}
 
 func (s *RebaseStep) Name() types.StepName { return types.StepRebase }
@@ -134,7 +132,6 @@ func (s *RebaseStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome,
 		return outcome, err
 	}
 
-	// Normal mode: try all integrations, track which targets had conflicts
 	var conflictTargets []string
 	var conflictFindings []Finding
 	for _, target := range targets {
@@ -173,7 +170,6 @@ func (s *RebaseStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome,
 	return updateHeadSHA(ctx, sctx)
 }
 
-// rebaseTargets returns the ordered list of refs to rebase onto.
 func rebaseTargets(branch, defaultBranch string) []string {
 	return rebaseTargetsForBranch(branch, defaultBranch, "origin/"+branch)
 }
@@ -189,9 +185,6 @@ func rebaseTargetsForBranch(branch, defaultBranch, branchTarget string) []string
 	return targets
 }
 
-// forcePushRebaseTargets returns rebase targets for a force push. The pushed
-// branch target is skipped because it may contain autofix commits from prior
-// pipeline runs that the force push intended to discard.
 func forcePushRebaseTargets(branch, defaultBranch string) []string {
 	if branch == defaultBranch {
 		return nil
@@ -199,9 +192,6 @@ func forcePushRebaseTargets(branch, defaultBranch string) []string {
 	return []string{"origin/" + defaultBranch}
 }
 
-// effectivePRBaseBranch resolves the integration and change-scoping base for
-// pipeline steps. Per-run overrides win over repo config; the repository default
-// remains the fallback when neither selects a separate PR target branch.
 func effectivePRBaseBranch(sctx *pipeline.StepContext) string {
 	defaultBranch := strings.TrimSpace(sctx.Repo.DefaultBranch)
 	if runBase := runPRBaseBranch(sctx); runBase != "" {
@@ -215,21 +205,6 @@ func effectivePRBaseBranch(sctx *pipeline.StepContext) string {
 	return defaultBranch
 }
 
-// detectBundledLocalDefaultCommits returns a blocking finding when the gated
-// branch carries commits that exist on the contributor's local default branch
-// but were never pushed to origin/<default>. In multi-session / monorepo setups
-// the local default branch routinely carries another workstream's unpushed
-// work; branching a fix off that local tip silently drags it into the PR when
-// the branch is rebased onto the remote default. Returns nil when no such
-// divergence is detected so the run proceeds normally.
-//
-// It only flags commits the branch actually carries: it reads the local default
-// tip from the working repo, confirms that tip is ahead of origin/<default> and
-// is a strict ancestor of the branch HEAD, then enumerates the unpushed commits.
-// Equal tips are the common commit-on-main-then-name-a-branch workflow, not
-// evidence of an additional bundled workstream.
-// Detection is best-effort - if the local default tip advanced past the branch
-// point, or the working repo cannot be read, it returns nil rather than guess.
 func detectBundledLocalDefaultCommits(ctx context.Context, sctx *pipeline.StepContext, branch, defaultBranch string) *pipeline.StepOutcome {
 	if branch == "" || branch == defaultBranch {
 		return nil
@@ -341,9 +316,6 @@ func remoteDefaultBranchAdvanced(ctx context.Context, workDir, defaultBranch, ba
 	return strings.TrimSpace(remoteSHA) != baseSHA
 }
 
-// isForcePush returns true when the current push is non-fast-forward relative
-// to the previous push (baseSHA). This indicates the user explicitly rewrote
-// history and the pipeline should treat the new HEAD as authoritative.
 func isForcePush(ctx context.Context, workDir, branch, baseSHA string) bool {
 	localRef := ""
 	if branch != "" {
@@ -398,8 +370,6 @@ func isRemoteBranchRewritten(ctx context.Context, workDir, remoteRef string) boo
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }
 
-// tryRebase attempts a rebase onto targetRef. Returns conflicted files when the
-// rebase stops on merge conflicts. The rebase is aborted before returning.
 func tryRebase(ctx context.Context, sctx *pipeline.StepContext, targetRef string) ([]string, error) {
 	skip, err := shouldSkipRebase(ctx, sctx, targetRef)
 	if err != nil {
@@ -422,7 +392,6 @@ func tryRebase(ctx context.Context, sctx *pipeline.StepContext, targetRef string
 	return nil, nil
 }
 
-// rebaseWithAgent performs a rebase and uses the agent to resolve any conflicts.
 func rebaseWithAgent(ctx context.Context, sctx *pipeline.StepContext, targetRef string) error {
 	skip, err := shouldSkipRebase(ctx, sctx, targetRef)
 	if err != nil {
@@ -490,15 +459,10 @@ Instructions:
 	return nil
 }
 
-// mergesMovedBase reports whether this run integrates a moved base with a merge
-// commit instead of rebasing onto it. The value is resolved config
-// (rebase.strategy), trusted-only for a repository, and defaults to rebasing.
 func mergesMovedBase(sctx *pipeline.StepContext) bool {
 	return sctx.Config != nil && sctx.Config.Rebase.Strategy == config.RebaseStrategyMerge
 }
 
-// integrationVerb names the shape in log lines and findings, so a run reads as
-// what it actually did rather than as the step's historical name.
 func integrationVerb(merging bool) string {
 	if merging {
 		return "merging"
@@ -506,25 +470,10 @@ func integrationVerb(merging bool) string {
 	return "rebasing onto"
 }
 
-// mergeArgs builds the merge invocation. --no-ff is deliberate even though
-// shouldSkipRebase already fast-forwards the strictly-behind case separately:
-// the whole point of this strategy is that the integration leaves a commit with
-// TWO parents behind, so whether a conflict resolution dropped content one side
-// introduced stays decidable afterwards from outside the pipeline. A merge that
-// silently fast-forwarded would leave nothing to compare.
-// --no-edit keeps git's own "Merge remote-tracking branch 'origin/main' into
-// <branch>" subject rather than inventing a second convention for the same
-// commit.
-// rerere.enabled=false (also on both rebase calls) keeps an operator's global
-// rerere from pre-staging a saved resolution, which still exits 1 and would be
-// misreported as a failed non-conflict integration.
 func mergeArgs(targetRef string) []string {
 	return []string{"-c", "rerere.enabled=false", "merge", "--no-ff", "--no-edit", targetRef}
 }
 
-// tryMerge is merge mode's counterpart to tryRebase: it attempts to merge
-// targetRef into the branch and returns the conflicted files when the merge
-// stops on conflicts, aborting before returning.
 func tryMerge(ctx context.Context, sctx *pipeline.StepContext, targetRef string) ([]string, error) {
 	skip, err := shouldSkipRebase(ctx, sctx, targetRef)
 	if err != nil {
@@ -547,14 +496,6 @@ func tryMerge(ctx context.Context, sctx *pipeline.StepContext, targetRef string)
 	return nil, nil
 }
 
-// mergeWithAgent is merge mode's counterpart to rebaseWithAgent: it merges
-// targetRef into the branch and hands any conflicts to the agent.
-//
-// The resolution prompt differs from the rebase one in the constraint it
-// carries. "Minimal necessary changes" is satisfied by deleting whichever side
-// is in the way, and a rebase leaves no evidence that anything was deleted. A
-// merge commit does, so the prompt asks for the resolution that commit can
-// actually be audited against: keep what both sides introduced.
 func mergeWithAgent(ctx context.Context, sctx *pipeline.StepContext, targetRef string) error {
 	skip, err := shouldSkipRebase(ctx, sctx, targetRef)
 	if err != nil {
@@ -672,16 +613,6 @@ Instructions:
 	return nil
 }
 
-// restorePreMergeHead puts the worktree back on the reviewed head before a
-// shape guard's rejection is returned. Without it a rejected merge leaves the
-// branch on whatever the agent actually produced - a rebase of the reviewed
-// head, a reset onto the target, an unrelated commit - and the step fails while
-// the invalid head stays checked out, so any later hand-off, recovery, or
-// retry reads it as the branch's real state.
-//
-// It is fail-closed: a restore that does not land back exactly on
-// preMergeHead with a clean tree is reported as part of the returned error,
-// never swallowed, so nothing is described as recovered that was not.
 func restorePreMergeHead(ctx context.Context, sctx *pipeline.StepContext, preMergeHead string, cause error) error {
 	if _, err := git.Run(ctx, sctx.WorkDir, "reset", "--hard", preMergeHead); err != nil {
 		return fmt.Errorf("%w; restoring the branch to %s failed, the worktree is left at the rejected head: %v", cause, preMergeHead, err)
@@ -710,8 +641,6 @@ func restorePreMergeHead(ctx context.Context, sctx *pipeline.StepContext, preMer
 	return cause
 }
 
-// shouldSkipRebase checks whether a rebase onto targetRef can be skipped.
-// Returns true if targetRef doesn't exist, is already merged, or can be fast-forwarded.
 func shouldSkipRebase(ctx context.Context, sctx *pipeline.StepContext, targetRef string) (bool, error) {
 	if _, err := git.Run(ctx, sctx.WorkDir, "rev-parse", "--verify", targetRef); err != nil {
 		return true, nil
@@ -742,20 +671,14 @@ func shouldSkipRebase(ctx context.Context, sctx *pipeline.StepContext, targetRef
 	return false, nil
 }
 
-// rebaseInProgress returns true if a git rebase is currently in progress.
 func rebaseInProgress(ctx context.Context, workDir string) bool {
 	return gitPathExists(ctx, workDir, "rebase-merge", "rebase-apply")
 }
 
-// mergeInProgress returns true if a git merge is currently in progress -
-// started and not yet concluded by a commit or an abort.
 func mergeInProgress(ctx context.Context, workDir string) bool {
 	return gitPathExists(ctx, workDir, "MERGE_HEAD")
 }
 
-// gitPathExists reports whether any of the named paths exists inside the git
-// directory. It resolves them with git rev-parse --git-path, which works for
-// both regular repos and worktrees (where the git dir is not .git).
 func gitPathExists(ctx context.Context, workDir string, names ...string) bool {
 	for _, name := range names {
 		p, err := git.Run(ctx, workDir, "rev-parse", "--git-path", name)
@@ -805,8 +728,6 @@ func dedupeRebaseFindings(findings []Finding) []Finding {
 	return filtered
 }
 
-// updateHeadSHA syncs the run's head SHA after rebase and checks for an empty diff.
-// When the branch diff against the default branch is empty, SkipRemaining is set.
 func updateHeadSHA(ctx context.Context, sctx *pipeline.StepContext) (*pipeline.StepOutcome, error) {
 	headSHA, err := git.HeadSHA(ctx, sctx.WorkDir)
 	if err != nil {

@@ -15,7 +15,6 @@ func bindPiProfileFlags(cmd *cobra.Command, model, effort *string) {
 	cmd.Flags().Var(&piSelectionFlag{value: effort}, "effort", "Pi reasoning effort to pin: minimal, low, medium, high, xhigh, max (overrides agent_config.pi.effort)")
 }
 
-// Do not silently choose the last of two explicit dispatch selections.
 type piSelectionFlag struct {
 	value *string
 	set   bool

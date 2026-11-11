@@ -27,7 +27,6 @@ import (
 
 const gitlabUploadFormFlag = "--form"
 
-// ProjectUpload is the markdown GitLab returned for one uploaded file.
 type ProjectUpload struct {
 	Markdown string
 	URL      string
@@ -39,9 +38,6 @@ type gitlabUploadResponse struct {
 	Alt      string `json:"alt"`
 }
 
-// UploadProjectFile posts path to this host's project and returns the
-// markdown GitLab says to embed. The filename sent to GitLab is the base
-// name only, so the response cannot carry a local directory.
 func (h *Host) UploadProjectFile(ctx context.Context, path string) (ProjectUpload, error) {
 	if h == nil || h.cmd == nil {
 		return ProjectUpload{}, errors.New("gitlab upload: host is not configured")

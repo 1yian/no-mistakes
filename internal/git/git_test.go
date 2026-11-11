@@ -34,7 +34,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// helper: create a non-bare git repo with an initial commit
 func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -451,9 +450,6 @@ func TestIsDetachedHEADWhenDetached(t *testing.T) {
 	}
 }
 
-// setSafeBareRepositoryExplicit injects the git config used by agent
-// harnesses (e.g. Claude Code) and hardened CI environments, which forbids
-// cwd-based discovery of bare repositories (issue #362).
 func setSafeBareRepositoryExplicit(t *testing.T) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_COUNT", "1")

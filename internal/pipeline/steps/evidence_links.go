@@ -31,8 +31,6 @@ import (
 // inside it. Hosting, access control, and retention of the served copy are
 // the operator's; the pipeline never checks that a link resolves.
 
-// evidenceLinkBase returns the configured base with no trailing slash, or ""
-// when the setting is unset.
 func evidenceLinkBase(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
@@ -40,13 +38,6 @@ func evidenceLinkBase(cfg *config.Config) string {
 	return strings.TrimRight(strings.TrimSpace(cfg.Test.Evidence.LinkBaseURL), "/")
 }
 
-// evidenceFileURL returns <base>/<run-id>/<file> for a file under the run's
-// evidence directory, or "" when the base is unset, the directory is unknown,
-// or the file is not inside it. Containment is the same symlink-aware check
-// the artifact allowlist uses (artifactPathRelativeToRoot), so an artifact
-// that records the real path of a file under a symlinked evidence root is
-// still linked; the run segment keeps the configured directory's own name,
-// which is what the operator serves. Every path segment is percent-escaped.
 func evidenceFileURL(base, evidenceDir, path string) string {
 	if base == "" || evidenceDir == "" || path == "" {
 		return ""
@@ -70,9 +61,6 @@ func evidenceFileURL(base, evidenceDir, path string) string {
 	return base + "/" + strings.Join(segments, "/")
 }
 
-// renderEvidenceFileLink is the one rendering of an evidence file mention
-// when link_base_url is set: a markdown link whose text is the label. It
-// returns "" when the file gets no URL, and the caller keeps today's output.
 func renderEvidenceFileLink(base, evidenceDir, path, label string) string {
 	target := evidenceFileURL(base, evidenceDir, path)
 	if target == "" {
@@ -87,11 +75,6 @@ func renderEvidenceFileLink(base, evidenceDir, path, label string) string {
 	return fmt.Sprintf("[%s](%s)", html.EscapeString(markdownAltText(label)), target)
 }
 
-// evidenceFileNames lists the regular files under the run's evidence
-// directory as slash-separated paths relative to it, longest first, so a
-// scenario cell can be scanned for complete file references - names with
-// spaces and nested paths included - instead of whitespace tokens. The
-// review conversation directory is never listed: it is never published.
 func evidenceFileNames(root string) []string {
 	root = resolveArtifactPathSymlinks(filepath.Clean(root))
 	var names []string

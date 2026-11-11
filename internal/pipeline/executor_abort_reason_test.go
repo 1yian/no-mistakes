@@ -13,9 +13,6 @@ import (
 
 const abortReason = "unsafe to land"
 
-// parkReviewGate runs a review gate that parks on findings, followed by a test
-// step that must never run when the gate is rejected. executed counts how many
-// times the review step ran, so a rejection that started a fix round shows up.
 func parkReviewGate(t *testing.T) (exec *Executor, database *db.DB, run *db.Run, done chan error, executed, testRan *atomic.Int32) {
 	t.Helper()
 	database, p, run, repo := setupTest(t)
@@ -53,8 +50,6 @@ func waitDone(t *testing.T, done chan error) error {
 	}
 }
 
-// Rejecting a parked gate records the reason on the step and on the run, fails
-// the run, starts no fix round, and keeps the round's findings.
 func TestExecutor_AbortAtGateRecordsTheReasonAndStartsNoFixRound(t *testing.T) {
 	exec, database, run, done, executed, testRan := parkReviewGate(t)
 
@@ -110,7 +105,6 @@ func TestExecutor_AbortAtGateRecordsTheReasonAndStartsNoFixRound(t *testing.T) {
 	}
 }
 
-// An abort sent without a reason keeps the existing error text exactly.
 func TestExecutor_AbortAtGateWithoutAReasonKeepsTheExistingError(t *testing.T) {
 	exec, database, run, done, _, _ := parkReviewGate(t)
 	if err := exec.Respond(types.StepReview, types.ActionAbort, nil); err != nil {
@@ -128,8 +122,6 @@ func TestExecutor_AbortAtGateWithoutAReasonKeepsTheExistingError(t *testing.T) {
 	}
 }
 
-// A reason belongs to a Test approval exception or an abort, nothing else, and
-// a refused response leaves the gate parked for a valid one.
 func TestExecutor_ReasonIsRefusedForOtherResponsesAndLeavesTheGateParked(t *testing.T) {
 	exec, database, run, done, _, _ := parkReviewGate(t)
 
@@ -153,7 +145,6 @@ func TestExecutor_ReasonIsRefusedForOtherResponsesAndLeavesTheGateParked(t *test
 	waitDone(t, done)
 }
 
-// A rejection aimed at the wrong place has no effect: no gate, or another step.
 func TestExecutor_AbortIsRefusedWithoutAMatchingParkedGate(t *testing.T) {
 	database, p, _, _ := setupTest(t)
 	idle := NewExecutor(database, p, nil, nil, []Step{newPassStep(types.StepReview)}, nil)
@@ -174,7 +165,6 @@ func TestExecutor_AbortIsRefusedWithoutAMatchingParkedGate(t *testing.T) {
 	waitDone(t, done)
 }
 
-// A gate recovered after a daemon restart records the same rejection.
 func TestExecutor_RecoveredGateAbortRecordsTheReason(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {

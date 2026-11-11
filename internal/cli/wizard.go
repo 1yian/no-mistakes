@@ -25,9 +25,6 @@ var resolveWizardAgent = func(ctx context.Context, cfg *config.Config) error {
 	return cfg.ResolveAgent(ctx, exec.LookPath)
 }
 
-// waitForRunFunc blocks until the daemon-created run for branch is visible.
-// Wired by attach.go; passed into the wizard so the wait happens inside the
-// alt screen and the handoff to the attach TUI is seamless.
 type waitForRunFunc func(ctx context.Context, branch string) error
 
 var newWizardAgent = agent.NewWithOptions
@@ -50,9 +47,6 @@ type wizardAgentSuggester struct {
 	ag   agent.Agent
 	err  error
 
-	// cachedCommit holds a commit subject returned as a side-effect of the
-	// branch-name agent call, so the commit step can consume it without
-	// spending another full agent round-trip. Consumed on first read.
 	cacheMu      sync.Mutex
 	cachedCommit string
 }
@@ -129,8 +123,6 @@ func (s *wizardAgentSuggester) Close() error {
 	return s.ag.Close()
 }
 
-// repoState captures the git state the wizard routing and the wizard itself
-// both need to know about.
 type repoState struct {
 	workDir       string
 	currentBranch string
@@ -139,25 +131,14 @@ type repoState struct {
 	dirty         bool
 }
 
-// needsBranch reports whether the user has no feature branch to work on —
-// either they're on the default branch, or HEAD is detached.
 func (s *repoState) needsBranch() bool {
 	return s.detached || s.currentBranch == s.defaultBranch
 }
 
-// shouldRouteToWizard reports whether the active-run check should be
-// bypassed and the wizard invoked directly. Detached HEAD is the only such
-// case — pipelines need a real branch, and any "active run" matched here
-// couldn't be on our current ref anyway. On any real branch (default or
-// feature), we still fall through to strict branch-matched lookup and only
-// enter the wizard when no run exists for that branch.
 func (s *repoState) shouldRouteToWizard() bool {
 	return s.detached
 }
 
-// detectRepoState probes the git state for the working directory, falling
-// back to the repo's recorded default branch when the origin remote can't
-// answer.
 func detectRepoState(ctx context.Context, repo *db.Repo) (*repoState, error) {
 	workDir, err := git.FindGitRoot(".")
 	if err != nil {
@@ -188,8 +169,6 @@ func detectRepoState(ctx context.Context, repo *db.Repo) (*repoState, error) {
 	}, nil
 }
 
-// runWizard prepares optional suggestion hooks and runs the interactive
-// onboarding wizard against the supplied repo state.
 func runWizard(ctx context.Context, p *paths.Paths, state *repoState, wait waitForRunFunc) (wizard.Result, error) {
 	return runWizardWithSkip(ctx, p, state, nil, wait)
 }
@@ -288,10 +267,6 @@ func runWizardWithMode(ctx context.Context, p *paths.Paths, state *repoState, sk
 	return res, err
 }
 
-// captureAgentServerOutput routes managed-server logs to a file under
-// LogsDir for the duration of the wizard, restoring the previous writer on
-// cleanup. Failing to open the log file is not fatal — we fall back to
-// io.Discard to avoid corrupting the alt-screen.
 func captureAgentServerOutput(p *paths.Paths) func() {
 	_ = os.MkdirAll(p.LogsDir(), 0o755)
 	logPath := filepath.Join(p.LogsDir(), "wizard-agent.log")
@@ -311,12 +286,6 @@ type discardWriter struct{}
 
 func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 
-// awaitDaemonRunRegistration waits for the daemon to register a run for
-// the given branch. A missing run within the timeout is treated as a
-// failure: if the push completed but no run exists, the gate hook
-// probably didn't fire (e.g. core.hookspath poisoning from husky, see
-// issue #122) or the daemon isn't receiving events. Surfacing this as an
-// error prevents the wizard from silently declaring success.
 func awaitDaemonRunRegistration(ctx context.Context, client *ipc.Client, repoID, branch string, timeout time.Duration) error {
 	run, err := waitForActiveRun(ctx, client, repoID, branch, timeout)
 	if err != nil {
@@ -332,9 +301,6 @@ func awaitDaemonRunRegistration(ctx context.Context, client *ipc.Client, repoID,
 	return nil
 }
 
-// waitForActiveRun polls the daemon until an active run appears for the given
-// repo/branch, or the deadline elapses. The post-receive hook creates the run
-// asynchronously, so a short poll bridges the gap between push and attach.
 func waitForActiveRun(ctx context.Context, client *ipc.Client, repoID, branch string, timeout time.Duration) (*ipc.RunInfo, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()

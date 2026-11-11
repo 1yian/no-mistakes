@@ -1,5 +1,3 @@
-// Package runenv applies immutable, run-scoped changes to subprocess
-// environments without mutating the daemon process environment.
 package runenv
 
 import (
@@ -9,14 +7,11 @@ import (
 	"strings"
 )
 
-// Overlay describes environment variables to set and remove for one run.
-// Set values take precedence when a key also appears in Unset.
 type Overlay struct {
 	Set   map[string]string
 	Unset []string
 }
 
-// Clone returns an independent copy suitable for freezing into a run context.
 func (o Overlay) Clone() Overlay {
 	cloned := Overlay{Unset: append([]string(nil), o.Unset...)}
 	if o.Set != nil {
@@ -28,8 +23,6 @@ func (o Overlay) Clone() Overlay {
 	return cloned
 }
 
-// Apply returns base with the overlay applied. A nil base uses the current
-// process environment. The input slice is never modified.
 func (o Overlay) Apply(base []string) []string {
 	if base == nil {
 		base = os.Environ()
@@ -62,9 +55,6 @@ func (o Overlay) Apply(base []string) []string {
 	return result
 }
 
-// String prints the overlay's variable names only. A Set value can be a
-// credential (a forge profile's gh_user token), so formatting an overlay, or a
-// struct holding one, must never reveal values.
 func (o Overlay) String() string {
 	keys := make([]string, 0, len(o.Set))
 	for key := range o.Set {
@@ -74,12 +64,10 @@ func (o Overlay) String() string {
 	return "runenv.Overlay{Set: [" + strings.Join(keys, " ") + "], Unset: [" + strings.Join(o.Unset, " ") + "]}"
 }
 
-// GoString keeps %#v as redacted as %v.
 func (o Overlay) GoString() string {
 	return o.String()
 }
 
-// Empty reports whether the overlay changes no variables.
 func (o Overlay) Empty() bool {
 	return len(o.Set) == 0 && len(o.Unset) == 0
 }

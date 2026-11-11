@@ -17,8 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Exercise the public native invocation, including the CLI's successful exit,
-// output parsing, child settling, inspection deadlines and group cleanup.
 func TestNativeCompletionWithSlowHostInspection(t *testing.T) {
 	for _, mode := range []string{"clean", "finishing", "live", "slow-first", "slow-later"} {
 		t.Run(mode, func(t *testing.T) {

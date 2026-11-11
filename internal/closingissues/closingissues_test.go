@@ -25,9 +25,6 @@ func TestNormalizeRejectsMalformedReferences(t *testing.T) {
 	}
 }
 
-// A GitLab project path nests under subgroups, so a cross-project reference is
-// not limited to one slash; a GitHub owner/repository reference is the same
-// shape with exactly two segments.
 func TestNormalizeAcceptsSubgroupProjectPaths(t *testing.T) {
 	got, err := Normalize([]string{"Group/SubGroup/Project#7", "group/subgroup/project#7", "other.io/my_group#3"})
 	if err != nil {

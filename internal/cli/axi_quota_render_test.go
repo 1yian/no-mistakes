@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// quotaRoutingRenderRecord builds the record a run setup persists for a run
-// that ranked codex above claude, then switched once mid-run.
 func quotaRoutingRenderRecord(t *testing.T, withSwitch bool) *quotarouting.Record {
 	t.Helper()
 	remaining := 80.0
@@ -41,10 +39,6 @@ func quotaRoutingRenderRecord(t *testing.T, withSwitch bool) *quotarouting.Recor
 	return record
 }
 
-// TestAxiStatusRendersQuotaRouting pins the local-only run-stats surface: the
-// choice, the order, the per-candidate evidence, and any mid-run switches all
-// render under one quota_routing object, and a run without a record renders
-// none.
 func TestAxiStatusRendersQuotaRouting(t *testing.T) {
 	payload, err := json.Marshal(quotaRoutingRenderRecord(t, true))
 	if err != nil {
@@ -74,8 +68,6 @@ func TestAxiStatusRendersQuotaRouting(t *testing.T) {
 		}
 	}
 
-	// A run without a record (feature off or pre-feature) renders no
-	// quota_routing object at all.
 	var plain bytes.Buffer
 	plainRender := &cobra.Command{}
 	plainRender.SetOut(&plain)
@@ -85,9 +77,6 @@ func TestAxiStatusRendersQuotaRouting(t *testing.T) {
 	}
 }
 
-// TestAxiStatusUnreadableQuotaRoutingRecordIsWarnedNotFatal pins the recovery
-// posture for a corrupt stored payload: the render drops the field and the
-// rest of the status still renders.
 func TestAxiStatusUnreadableQuotaRoutingRecordIsWarnedNotFatal(t *testing.T) {
 	view := runViewFromIPC(&ipc.RunInfo{ID: "run-3", QuotaRouting: "{corrupt"})
 	var out bytes.Buffer

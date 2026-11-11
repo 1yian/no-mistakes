@@ -68,8 +68,6 @@ func (a *opencodeAgent) ensureServer(ctx context.Context, cwd string, env []stri
 
 var opencodeVersionPattern = regexp.MustCompile(`^(?:opencode\s+)?v?([12])\.[0-9]+\.[0-9]+(?:[-+][a-zA-Z0-9.+-]+)?$`)
 
-// Select a protocol before creating any session. Never discover a major-version
-// mismatch by retrying an admitted prompt against a different API.
 func (a *opencodeAgent) detectV2(ctx context.Context, cwd string, env []string) (bool, error) {
 	probe, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -88,8 +86,6 @@ func (a *opencodeAgent) detectV2(ctx context.Context, cwd string, env []string) 
 	return match[1] == "2", nil
 }
 
-// buildOpencodeServeArgs builds `opencode serve`'s argv with user-supplied
-// extras inserted after the "serve" subcommand and before the managed flags.
 func buildOpencodeServeArgs(extraArgs []string, port int) []string {
 	args := make([]string, 0, len(extraArgs)+6)
 	args = append(args, "serve")
@@ -153,14 +149,6 @@ func (a *opencodeAgent) sendMessage(ctx context.Context, baseURL, sessionID, pro
 	return &resp, nil
 }
 
-// messageBody builds the POST /session/{id}/message payload.
-//
-// Model and reasoning effort ride the body rather than argv because `opencode
-// serve` has no flag for either: it exits with usage on an unknown option, so an
-// argv-based pin would take the whole server down instead of tuning it. The
-// provider/model split is validated at construction by agentcfg, so a non-empty
-// model always yields the two fields opencode requires; opencode calls reasoning
-// effort a provider-specific "variant".
 func (a *opencodeAgent) messageBody(prompt string, schema json.RawMessage) map[string]any {
 	body := map[string]any{
 		"role":  "user",
@@ -202,7 +190,6 @@ func (a *opencodeAgent) deleteSession(baseURL, sessionID string) {
 	}
 }
 
-// buildOpencodePrompt appends schema instructions to the prompt.
 func buildOpencodePrompt(prompt string, schema json.RawMessage) string {
 	return strings.Join([]string{
 		prompt,

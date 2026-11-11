@@ -86,9 +86,6 @@ func TestFindPRReturnsBrowsableURL(t *testing.T) {
 	}
 }
 
-// reportedListPRJSON is the az repos pr list shape from issue #1042: webUrl,
-// remoteUrl, and sshUrl are null, while repository.url is the REST endpoint
-// and repository/project names identify the repo.
 const reportedListPRJSON = `[{"pullRequestId":42,"codeReviewId":42,"status":"active","title":"feature work","sourceRefName":"refs/heads/feature","targetRefName":"refs/heads/main","mergeStatus":"succeeded","url":"https://dev.azure.com/myorg/_apis/git/repositories/11111111-2222-3333-4444-555555555555/pullRequests/42","repository":{"id":"11111111-2222-3333-4444-555555555555","name":"myrepo","url":"https://dev.azure.com/myorg/_apis/git/repositories/11111111-2222-3333-4444-555555555555","project":{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","name":"myproject","state":"wellFormed","visibility":"private"},"size":12345,"remoteUrl":null,"sshUrl":null,"webUrl":null,"isDisabled":false}}]`
 
 func TestFindPRDiscoversExistingPRWithoutWebURL(t *testing.T) {
@@ -501,11 +498,6 @@ func TestCreatePRTruncatesOverlongDescription(t *testing.T) {
 	}
 }
 
-// multilineDescriptionBody is a realistic PR body that would break a naive
-// approach: a markdown heading, blank lines, prose, a bare horizontal rule
-// (`---`), and a diff-style line (`--- a/file.go`). Passed inline on Windows the
-// newlines truncate it; split per-line the `---`/`--- a/...` lines get misread
-// as az options.
 const multilineDescriptionBody = "## Intent\n" +
 	"\n" +
 	"Route the PR description through a temp file so multi-line bodies survive.\n" +
@@ -539,11 +531,6 @@ func TestUpdatePRWritesMultilineDescriptionToFile(t *testing.T) {
 	assertDescriptionRoundTrips(t, rec, multilineDescriptionBody)
 }
 
-// assertDescriptionRoundTrips verifies the recorded az command passed its PR
-// description through a temp file (not inline): the --description value is an
-// @<file> reference, the file held exactly body while the command ran, no
-// argument contained a newline (which cmd.exe would truncate) or the raw body,
-// and the temp file was cleaned up once the call returned.
 func assertDescriptionRoundTrips(t *testing.T, rec []capturedCmd, body string) {
 	t.Helper()
 	if len(rec) != 1 {
@@ -748,10 +735,6 @@ type azdoTestResponse struct {
 	code   int
 }
 
-// capturedCmd records one az invocation for tests that need to inspect how the
-// PR description was passed. descContent is read from the @<file> reference at
-// invocation time, while the temp file still exists (it is removed once the call
-// returns), so tests can assert the body round-tripped exactly.
 type capturedCmd struct {
 	name        string
 	args        []string
@@ -764,8 +747,6 @@ func newCapturingHost(rec *[]capturedCmd, response azdoTestResponse) *Host {
 	return New(capturingCmdFactory(rec, response), func() bool { return true }, testOrg, testProject, testRepo)
 }
 
-// capturingCmdFactory records every invocation (and the referenced description
-// file's contents) into rec, and answers each one with the same fixed response.
 func capturingCmdFactory(rec *[]capturedCmd, response azdoTestResponse) CmdFactory {
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		c := capturedCmd{name: name, args: append([]string(nil), args...)}

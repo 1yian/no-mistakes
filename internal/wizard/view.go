@@ -8,7 +8,6 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// ANSI-only palette, matching internal/tui/theme.go.
 const (
 	ansiRed         = "1"
 	ansiGreen       = "2"
@@ -24,7 +23,6 @@ func init() {
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// View renders the wizard.
 func (m Model) View() string {
 	width := m.width
 	if width < 60 {
@@ -247,8 +245,6 @@ func blueStyle() lipgloss.Style   { return lipgloss.NewStyle().Foreground(lipglo
 func cyanStyle() lipgloss.Style   { return lipgloss.NewStyle().Foreground(lipgloss.Color(ansiCyan)) }
 func boldStyle() lipgloss.Style   { return lipgloss.NewStyle().Bold(true) }
 
-// renderBox mirrors internal/tui/box.go: a rounded-border box with a cyan
-// bold title embedded in the top border.
 func renderBox(title, content string, width int) string {
 	if width < 6 {
 		width = 6

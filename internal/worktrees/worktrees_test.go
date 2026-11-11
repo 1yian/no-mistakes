@@ -11,16 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/worktrees"
 )
 
-// namesPath reports whether a refusal identifies path to the operator who has
-// to repair it. Two spellings of one directory both count, and so does the
-// quoted rendering:
-//
-// A refusal writes paths with %q, which escapes the separator, so a Windows
-// path appears as "C:\\src\\repo" and never contains its own raw spelling.
-// And a refusal names either the spelling the configuration carries or its
-// canonical form, which differ wherever the filesystem has a second name for a
-// directory - the macOS /var -> /private/var symlink, and the 8.3 short names
-// Windows keeps for the temporary directories these tests run in.
 func namesPath(err error, path string) bool {
 	msg := err.Error()
 	for _, spelling := range []string{path, worktrees.Canonical(path)} {
@@ -44,8 +34,6 @@ func TestLayout_DefaultPlacement(t *testing.T) {
 	}
 }
 
-// A repository with no entry keeps the default placement even when another
-// repository has one.
 func TestLayout_ConfiguredPlacement(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	dir := t.TempDir()
@@ -69,9 +57,6 @@ func TestLayout_ConfiguredPlacement(t *testing.T) {
 	}
 }
 
-// The config key and the recorded checkout path are written by different
-// people at different times, so they must match after normalization rather
-// than byte for byte.
 func TestLayout_MatchesUnnormalizedAndSymlinkedCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	dir := t.TempDir()
@@ -94,9 +79,6 @@ func TestLayout_MatchesUnnormalizedAndSymlinkedCheckout(t *testing.T) {
 	}
 }
 
-// RecordedDir is what makes a worktree_roots edit inert for runs that already
-// exist: the directory a run was created in is recorded with the run, so every
-// later consumer keeps addressing it, and no configuration is consulted at all.
 func TestRecordedDirReadsBackWhatTheRunRecorded(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	created := filepath.Join(t.TempDir(), "work", "repo1-runs", "run1")
@@ -106,11 +88,6 @@ func TestRecordedDirReadsBackWhatTheRunRecorded(t *testing.T) {
 	}
 }
 
-// A run that recorded nothing predates the column, and the column shipped with
-// worktree_roots, so such a run can only have run in the default tree. Resolving
-// it through a configured root would be resolving it to a directory it never
-// used - and adding an entry for the checkout is exactly what `init
-// --worktree-root` invites an operator to do right after upgrading.
 func TestRecordedDirResolvesUnrecordedRunsToTheDefaultTree(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 
@@ -121,12 +98,6 @@ func TestRecordedDirResolvesUnrecordedRunsToTheDefaultTree(t *testing.T) {
 	}
 }
 
-// Validate is the layer internal/config cannot be: it knows where NM_HOME is,
-// and every placement inside it collides with the daemon's own state. Under
-// worktrees a run worktree is indistinguishable from the per-repository
-// directories the default placement owns and sweeps; under logs a run's
-// worktree IS its log directory (paths.RunLogDir), so removing the worktree
-// would destroy the logs of the run that just finished.
 func TestLayout_ValidateRefusesRootInsideAppState(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	checkout := filepath.Join(t.TempDir(), "src", "repo1")
@@ -150,11 +121,6 @@ func TestLayout_ValidateRefusesRootInsideAppState(t *testing.T) {
 	}
 }
 
-// A root inside the checkout whose runs it holds is refused for a different
-// reason: the run worktree is then an untracked directory in that checkout, so
-// the checkout is dirty for as long as a run executes and guarded branch
-// synchronization refuses to move it. `init --worktree-root` already refuses
-// this; a hand-written config entry reaches the same rule here.
 func TestLayout_ValidateRefusesRootInsideItsCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	checkout := filepath.Join(t.TempDir(), "src", "repo1")
@@ -179,12 +145,6 @@ func TestLayout_ValidateRefusesRootInsideItsCheckout(t *testing.T) {
 	}
 }
 
-// The same dirty-checkout consequence applies to a checkout that is not the one
-// whose runs land there, so a root inside ANY known checkout is refused: every
-// run placed there would block that checkout's branch synchronization, with
-// nothing naming the cause. Known checkouts are the configured keys plus
-// whatever the caller supplies (the daemon supplies every registered
-// repository).
 func TestLayout_ValidateRefusesRootInsideAnotherKnownCheckout(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	dir := t.TempDir()
@@ -230,8 +190,6 @@ func TestLayout_ValidateAcceptsPlacementOutsideAppState(t *testing.T) {
 	}
 }
 
-// Contains is what recognizes the pathological placements: a root inside the
-// checkout it serves, or inside the directory no-mistakes already owns.
 func TestContains(t *testing.T) {
 	dir := t.TempDir()
 	inside := filepath.Join(dir, "runs")
@@ -247,11 +205,6 @@ func TestContains(t *testing.T) {
 	}
 }
 
-// Contains has to agree with the filesystem, not with spelling: on a
-// case-insensitive volume - the macOS and Windows default - a differently-cased
-// ancestor names the same directory, and a guard that compares names would wave
-// through a worktree root that then collides with the daemon's own state (a run
-// worktree that IS paths.RunLogDir, so removing it takes the run's logs).
 func TestContainsFollowsTheFilesystemAcrossCaseVariantSpellings(t *testing.T) {
 	base := t.TempDir()
 	home := filepath.Join(base, "nm-home")
@@ -280,8 +233,6 @@ func TestContainsFollowsTheFilesystemAcrossCaseVariantSpellings(t *testing.T) {
 	}
 }
 
-// The placement guard is what that agreement protects: a root under NM_HOME must
-// be refused however the operator spelled the path to it.
 func TestCheckPlacementRefusesCaseVariantAppStateRoot(t *testing.T) {
 	base := t.TempDir()
 	home := filepath.Join(base, "nm-home")

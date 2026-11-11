@@ -297,8 +297,6 @@ func TestClassifyTransient_NilAndContext(t *testing.T) {
 	}
 }
 
-// withFastBackoff swaps transientBackoff with a near-instant version that
-// preserves ctx-cancel semantics. Returns a restore func.
 func withFastBackoff(t *testing.T) func() {
 	t.Helper()
 	prev := transientBackoff

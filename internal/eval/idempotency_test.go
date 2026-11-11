@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Re-running eval capture for the same run must converge: the second pass
-// relabels the frozen case in place and leaves every corpus artifact exactly
-// as the first pass wrote it.
 func TestCaptureTwiceLeavesIdenticalCorpusState(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, _ := setupCapturedRun(t, ctx)
@@ -60,9 +57,6 @@ func TestCaptureTwiceLeavesIdenticalCorpusState(t *testing.T) {
 	}
 }
 
-// A gold finding without an ID can only dedupe by content; without that,
-// every recapture or relabel appended another copy (the mergeGold empty-ID
-// duplication).
 func TestCaptureTwiceDoesNotDuplicateUserAddedGoldWithoutID(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, reviewRound := setupCapturedRun(t, ctx)
@@ -164,9 +158,6 @@ func TestRelabelRunTwiceLeavesIdenticalLabels(t *testing.T) {
 	}
 }
 
-// Inspecting the sets materializes diversified pins, so the read must be
-// self-stabilizing: a second read returns the same summaries and repins
-// nothing.
 func TestInspectSetsTwiceIsStableAndKeepsDiversifiedPins(t *testing.T) {
 	store := openEvalStore(t)
 	store.SetDiversifiedSize(2)
@@ -205,10 +196,6 @@ func TestRefreshDiversifiedTwiceKeepsTheSamePins(t *testing.T) {
 	}
 }
 
-// Replaying the same set twice is additive by design (each run is a new
-// measurement sample), but it must be safely re-runnable: identical inputs
-// land in the same cohort, the scores are deterministic, and the frozen corpus
-// itself is untouched.
 func TestReplayTwiceKeepsCorpusUntouchedAndCohortStable(t *testing.T) {
 	ctx := context.Background()
 	p, sourceDB, run, _, _ := setupCapturedRun(t, ctx)
@@ -265,8 +252,6 @@ func TestReplayTwiceKeepsCorpusUntouchedAndCohortStable(t *testing.T) {
 	}
 }
 
-// Report is a pure read: two invocations over the same recorded evaluations
-// must render identically.
 func TestReportTwiceRendersIdentically(t *testing.T) {
 	store := openEvalStore(t)
 	c := writeSyntheticCase(t, store, syntheticCaseSpec{

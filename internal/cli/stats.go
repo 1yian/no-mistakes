@@ -61,10 +61,6 @@ func newStatsCmd() *cobra.Command {
 	return cmd
 }
 
-// renderAgentPerfReport prints the local performance telemetry: per-purpose
-// invocation aggregates, or one run's per-invocation detail with its
-// accumulated parked-at-gate time. This is read-only local evidence; none of
-// it is sent to remote analytics.
 func renderAgentPerfReport(w io.Writer, database *db.DB, runID string) error {
 	if runID != "" {
 		return renderRunAgentPerf(w, database, runID)
@@ -205,7 +201,6 @@ func formatMS(ms int64) string {
 	return time.Duration(ms * int64(time.Millisecond)).Round(100 * time.Millisecond).String()
 }
 
-// optInt renders a nullable count: "-" (unknown) when nil, else the number.
 func optInt(p *int) string {
 	if p == nil {
 		return "-"
@@ -220,7 +215,6 @@ func optInt64(p *int64) string {
 	return strconv.FormatInt(*p, 10)
 }
 
-// optMS renders a nullable duration: "-" when nil, else a rounded duration.
 func optMS(p *int64) string {
 	if p == nil {
 		return "-"
@@ -242,8 +236,6 @@ func orUnknown(s string) string {
 	return s
 }
 
-// formatModelTime shows model/reasoning wall-clock (duration minus subprocess
-// wait). It is unknown when the invocation reported no subprocess-wait split.
 func formatModelTime(inv db.AgentInvocation) string {
 	if inv.SubprocessWaitMS == nil {
 		return "-"
@@ -251,8 +243,6 @@ func formatModelTime(inv db.AgentInvocation) string {
 	return formatMS(agent.ModelTimeMS(inv.DurationMS, *inv.SubprocessWaitMS))
 }
 
-// formatToolHistogram renders "total w/t/e/r/g/o" or "-" when the invocation
-// reported no activity metrics.
 func formatToolHistogram(inv db.AgentInvocation) string {
 	if inv.ToolCalls == nil {
 		return "-"
@@ -262,7 +252,6 @@ func formatToolHistogram(inv db.AgentInvocation) string {
 		optInt(inv.ToolReadCalls), optInt(inv.ToolGitCalls), optInt(inv.ToolOtherCalls))
 }
 
-// formatWorkload renders "files/lines" or "-" when unknown.
 func formatWorkload(inv db.AgentInvocation) string {
 	if inv.WorkloadFiles == nil && inv.WorkloadLines == nil {
 		return "-"
@@ -327,10 +316,6 @@ func renderStatsBox(lines []string) string {
 	return renderTitledBox(" git push no-mistakes ", statsBoxWidth, lines)
 }
 
-// renderTitledBox draws the shared dashboard frame: a rounded box with an
-// eyebrow title in the top border, the idiom every static CLI dashboard
-// (stats, eval sets, eval run) renders with. Lines wider than the box are
-// truncated.
 func renderTitledBox(eyebrow string, boxWidth int, lines []string) string {
 	var b strings.Builder
 	b.WriteString("╭─" + eyebrow + strings.Repeat("─", boxWidth-3-lipgloss.Width(eyebrow)) + "╮\n")

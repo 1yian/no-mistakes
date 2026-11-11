@@ -1,15 +1,3 @@
-// fakeagent is a deterministic stand-in for the real Claude, Codex, Grok,
-// OpenCode, Pi, and Antigravity CLIs used by no-mistakes' e2e tests. One binary is
-// compiled and then symlinked under each agent's dispatch name; Antigravity
-// is linked as both `antigravity` and its probed binary name `agy`.
-// argv[0]'s basename selects which wire protocol to speak.
-//
-// All invocations are appended to $FAKEAGENT_LOG (one JSON object per line)
-// so tests can assert on exactly which prompts the pipeline issued.
-//
-// Behaviour is driven by $FAKEAGENT_SCENARIO (a YAML file). When unset the
-// agent returns an "all clean" canned response that satisfies every schema
-// no-mistakes asks of it.
 package main
 
 import (
@@ -66,10 +54,6 @@ func run(argv []string) int {
 	}
 }
 
-// runGhStub shadows any system-installed gh during e2e so a stray PR/CI
-// step can never reach github.com. It fails closed: `gh auth status`
-// returns non-zero (so SCM detection treats GitHub as unauthenticated)
-// and any other subcommand prints a clear error.
 func runGhStub(args []string) int {
 	switch os.Getenv("FAKEAGENT_GH_MODE") {
 	case "fork-pr":
@@ -191,16 +175,6 @@ func recordGhStubInvocation(args []string) {
 	_ = json.NewEncoder(f).Encode(inv)
 }
 
-// runTeaStub shadows any system-installed tea during the Gitea provider e2e
-// journey. It is a stateless canned-response stub, mirroring
-// runGhForkPRStub: `pulls list` always reports no existing PR (so the PR
-// step exercises CreatePR), `pulls create` fabricates a plausible PR URL
-// from its own human-readable output (real tea has no --output json on
-// create; the pipeline's CreatePR falls back to scanning that output because
-// this stub's stateless `pulls list` can never re-find the PR it just
-// created), and `pulls <idx>` (view) reports the PR as already merged so the
-// CI step's GetPRState short-circuits on the first poll without needing to
-// model Gitea Actions runs at all.
 func runTeaStub(args []string) int {
 	recordTeaStubInvocation(args)
 

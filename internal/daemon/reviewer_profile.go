@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// Validate availability and trusted instruction suppression before cancellation
-// or row creation. An unavailable explicit reviewer must never become a fallback.
 func (m *RunManager) validateReviewerBeforeCancel(ctx context.Context, repo *db.Repo, head string, global *config.GlobalConfig, pin *agentcfg.ReviewerProfile) error {
 	cfg, _, err := m.effectiveConfigBeforeRun(ctx, repo, head, global, "reviewer selection")
 	if err != nil {

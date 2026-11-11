@@ -21,7 +21,6 @@ func TestOpencodeAgent_CloseWithoutServer(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_FullFlow tests the full session lifecycle using a mock HTTP server.
 func TestOpencodeAgent_FullFlow(t *testing.T) {
 	prompt := ExecutionContextPromptSection(t.TempDir())
 	calledPaths := make(map[string]bool)
@@ -89,7 +88,6 @@ func TestOpencodeAgent_FullFlow(t *testing.T) {
 		t.Fatal("expected result")
 	}
 
-	// Verify structured output from response
 	var output map[string]any
 	if err := json.Unmarshal(result.Output, &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
@@ -377,7 +375,6 @@ func TestOpencodeAgent_DoesNotSeparateBackfillWhenToolStepPrecedesFirstText(t *t
 	}
 }
 
-// TestOpencodeAgent_NoSchema tests the flow without a JSON schema.
 func TestOpencodeAgent_NoSchema(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -425,7 +422,6 @@ func TestOpencodeAgent_NoSchema(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_FinalAnswerPreferred tests that final_answer phase text is preferred.
 func TestOpencodeAgent_FinalAnswerPreferred(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -471,12 +467,6 @@ func TestOpencodeAgent_FinalAnswerPreferred(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_StructuredOutputError asserts that when opencode returns
-// an info.error with name=StructuredOutputError, the agent surfaces a
-// precise error and does NOT fall through to text-parsing the streamed
-// reasoning prose. Regression: run 01KWDTFPNXTC94YEYCN23XFFG1 surfaced
-// "invalid character 'N' looking for beginning of value" instead of the
-// real cause.
 func TestOpencodeAgent_StructuredOutputError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -645,12 +635,6 @@ func TestOpencodeAgent_ThinkingToolChoiceConflictFallsBackToValidatedText(t *tes
 	t.Logf("native nested format=%v; native root format=%v; model/variant/retryCount preserved=%v; fallback format=%v; validated output=%s", nativeNestedFormatSeen.Load(), nativeRootFormatSeen.Load(), nativeProfileAndRetriesSeen.Load(), fallbackFormatSeen.Load(), result.Output)
 }
 
-// TestOpencodeAgent_ThinkingToolChoiceFallbackSumsBothTurnsUsage proves the
-// one row this invocation records carries both model turns. The native attempt
-// burns its input before the conflict and the prompt-only fallback burns its
-// own; reporting only the fallback would under-count the invocation by roughly
-// half. Each attempt is a fresh session and opencode never reports
-// cumulatively, so the two are independent deltas that add.
 func TestOpencodeAgent_ThinkingToolChoiceFallbackSumsBothTurnsUsage(t *testing.T) {
 	var sessions atomic.Int32
 
@@ -924,10 +908,6 @@ func TestForcedToolChoiceUnsupportedClassification(t *testing.T) {
 	}
 }
 
-// TestOpencodeFallbackTrigger_SentinelsStayDistinct pins the sentinel
-// contract the fallback relies on: each builder carries its own sentinel,
-// never the other's, and both open the same prompt-only fallback while an
-// unrelated error opens none.
 func TestOpencodeFallbackTrigger_SentinelsStayDistinct(t *testing.T) {
 	conflict := thinkingConflict(opencodeToolsNone, nil)
 	if !errors.Is(conflict, errOpencodeThinkingToolChoiceConflict) {
@@ -1067,10 +1047,6 @@ func TestOpencodeAgent_ForcedToolChoiceFromSSEFallsBackOnce(t *testing.T) {
 	t.Logf("SSE gateway only-auto rejection triggered one fallback; validated output=%s", result.Output)
 }
 
-// TestToolChoiceDetectorsPartitionRejections pins the invariant the two
-// sentinels exist for: every tool_choice rejection reaches the prompt-only
-// fallback, exactly one detector claims it, and an unrelated provider error
-// triggers no fallback at all.
 func TestToolChoiceDetectorsPartitionRejections(t *testing.T) {
 	tests := []struct {
 		name     string

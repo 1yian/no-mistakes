@@ -13,13 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline/steps/internal/stepstest"
 )
 
-// TestCIStep_GreenChecksReleaseWithoutWaitingForTheMerge proves the opt-in
-// ci.release_after_checks_pass: the green observation finishes the step there,
-// so it never waits another poll interval (the recorded step duration is the CI
-// window) and it leaves the checks verdict for the executor to complete
-// atomically. Reading the PR state exactly once pins the other half: with no
-// further poll, a merge that happens afterwards cannot be observed and cannot
-// change what this run records.
 func TestCIStep_GreenChecksReleaseWithoutWaitingForTheMerge(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -85,9 +78,6 @@ func TestCIStep_GreenChecksReleaseWithoutWaitingForTheMerge(t *testing.T) {
 	}
 }
 
-// TestCIStep_TrustedNoCIReleasesWithoutWaiting is the same opt-in release for
-// the other readiness path: a trusted default-branch no_ci declaration with zero
-// registered checks. The declaration stays inspectable on the release line.
 func TestCIStep_TrustedNoCIReleasesWithoutWaiting(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -138,10 +128,6 @@ func TestCIStep_TrustedNoCIReleasesWithoutWaiting(t *testing.T) {
 	}
 }
 
-// TestCIStep_DefaultKeepsMonitoringAfterGreenChecks pins the default the opt-in
-// leaves untouched: a green observation only clears the failure signal, the step
-// never declares the release verdict, and the monitor keeps polling until the PR
-// is merged, closed, or its idle timeout elapses.
 func TestCIStep_DefaultKeepsMonitoringAfterGreenChecks(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -188,8 +174,6 @@ func TestCIStep_DefaultKeepsMonitoringAfterGreenChecks(t *testing.T) {
 	}
 }
 
-// countGHStateReads counts the `gh pr view --json state` invocations the CI
-// step issued, which is its observation window over the PR's lifecycle.
 func countGHStateReads(t *testing.T, logFile string) int {
 	t.Helper()
 	count := 0

@@ -23,10 +23,6 @@ const claudeHOMEProbeReply = `{"type":"assistant","message":{"usage":{"input_tok
 
 const piHOMEProbeReply = `{"type":"agent_end","messages":[{"role":"assistant","stopReason":"toolUse","content":[{"type":"toolCall","id":"final-1","name":"no_mistakes_output","arguments":` + piReviewOutput + `}]}]}` + "\n" + piReviewToolResult
 
-// TestReplayUsesCallerHOMEAndKeepsIsolatedNMHOME is the behavioral half of
-// dropping eval's empty-HOME rewrite: candidates inherit the caller's HOME
-// (so Pi's ordinary ~/.pi/agent auth discovery works without an injected API
-// key) while NM_HOME stays a nested sandbox that cannot see production state.
 func TestReplayUsesCallerHOMEAndKeepsIsolatedNMHOME(t *testing.T) {
 	ctx := context.Background()
 	hideHarnessDirOverrides(t)

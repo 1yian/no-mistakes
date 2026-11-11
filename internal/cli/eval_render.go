@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/eval"
 )
 
-// The eval dashboards reuse the stats dashboard idioms (titled box, metric
-// lines, progress bars) but are wider: composition strata and warnings carry
-// more text than the stats counters do.
 const (
 	evalBoxWidth                = 79
 	evalBarWidth                = 20
@@ -22,11 +19,6 @@ const (
 	compositionSeparator        = " · "
 )
 
-// renderEvalSetsDashboard renders `eval sets` with the diversified holdout as
-// the headline: its size, gold composition, and the instant self-score of the
-// recorded reviews against their own gold. The other sets are a compact
-// footnote. Everything shown comes from InspectSets, which reads only local
-// registry rows and captured files - no replay, agent, or network.
 func renderEvalSetsDashboard(summaries []eval.SetSummary) string {
 	byName := map[string]eval.SetSummary{}
 	for _, summary := range summaries {
@@ -85,19 +77,6 @@ func renderEvalSetsDashboard(summaries []eval.SetSummary) string {
 	return renderTitledBox(" eval case sets ", evalBoxWidth, lines)
 }
 
-// compositionLines renders the stratum table. The repository column is sized
-// from whatever room the fixed strata leave and is resolved once for the whole
-// table, so every row shows the same kind of identity: full "owner/name" when
-// they all fit, otherwise the short repository name (the convention the stats
-// dashboard already uses) rather than a name cut mid-word.
-//
-// The table has three variable axes, and all have to fit. Sizing only the
-// repository column is not enough: a finding type carrying a non-canonical
-// severity or action can make the fixed strata wider than the room the box
-// has, and large case counts can expand their prefix. The strata are shortened
-// to the space that actually remains, so the composed line always fits the box
-// content width and the box renderer never silently cuts the finding type off
-// the end of a row.
 func compositionLines(rows []eval.CompositionRow) []string {
 	widest := 0
 	countPrefixWidth := 0
@@ -140,9 +119,6 @@ func compositionStrata(row eval.CompositionRow) string {
 	return strings.Join([]string{row.Language, row.Size, row.Severity, row.FindingType}, compositionSeparator)
 }
 
-// fitRepoNames renders every repository identity the same way: "owner/name"
-// while all of them fit the column, else the bare repository name, and only a
-// still-oversized name is cut.
 func fitRepoNames(rows []eval.CompositionRow, width int) []string {
 	names := make([]string, 0, len(rows))
 	shorten := false
@@ -163,12 +139,6 @@ func fitRepoNames(rows []eval.CompositionRow, width int) []string {
 	return names
 }
 
-// evalConfusionMatrixLines renders the finding-level gold as the confusion
-// matrix it actually is: what the recorded review did on the rows, what the
-// human decision proved on the columns. True negatives have no cell value
-// because silent agreement is never written as gold - a review that correctly
-// raises nothing leaves nothing to record - so the cell reads "-" rather than
-// inventing a count. A matrix of zeros still renders with its headers.
 func evalConfusionMatrixLines(truePositive, falseNegative, falsePositive int) []string {
 	const labelWidth = 18
 	const cellWidth = 14
@@ -187,10 +157,6 @@ func evalConfusionMatrixLines(truePositive, falseNegative, falsePositive int) []
 	}
 }
 
-// evalScoreLines renders one finding-level score summary with the eval
-// report's semantics: recall over true-issue gold, precision as bounds with
-// pending treated as FP for the lower bound, and F1 as a headline only when
-// false-positive gold makes precision real.
 func evalScoreLines(s eval.EvaluationSummary) []string {
 	var lines []string
 	trueIssues := s.TruePositive + s.FalseNegative
@@ -213,8 +179,6 @@ func evalScoreLines(s eval.EvaluationSummary) []string {
 	return lines
 }
 
-// evalRunProgress streams one line per persisted replay so a long candidate
-// comparison shows its work as it happens.
 func evalRunProgress(w io.Writer, evaluation eval.Evaluation, completed, total int) {
 	progress := fmt.Sprintf("%*d/%d", len(strconv.Itoa(total)), completed, total)
 	if evaluation.Status != "completed" {
@@ -228,8 +192,6 @@ func evalRunProgress(w io.Writer, evaluation eval.Evaluation, completed, total i
 		formatMS(evaluation.DurationMS))
 }
 
-// renderEvalRunSummary renders the finished (or partially finished) replay
-// session in the same dashboard frame as stats and eval sets.
 func renderEvalRunSummary(session eval.Session, evaluations []eval.Evaluation, caseCount int) string {
 	s := eval.SummarizeEvaluations(evaluations)
 	var lines []string

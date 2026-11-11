@@ -51,9 +51,6 @@ func TestAgentInvocations_InsertAndReadBack(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
-// TestAgentInvocations_NullableFidelityFieldsRoundTrip proves the session-
-// fidelity columns survive an insert/read cycle both when populated and when
-// left unknown (NULL), so missing data reads back as nil rather than zero.
 func TestAgentInvocations_NullableFidelityFieldsRoundTrip(t *testing.T) {
 	d, _, run := openSessionTestDB(t)
 
@@ -127,9 +124,6 @@ func TestAgentInvocations_NullableFidelityFieldsRoundTrip(t *testing.T) {
 func strPtr(s string) *string { return &s }
 func int64Ptr(v int64) *int64 { return &v }
 
-// TestAgentInvocations_PrivacySafeShape guards the privacy boundary: the
-// table has no column that could hold prompts, outputs, or diffs, and the
-// session identity is stored only as a fingerprint column.
 func TestAgentInvocations_PrivacySafeShape(t *testing.T) {
 	d, _, _ := openSessionTestDB(t)
 
@@ -283,10 +277,6 @@ func TestAgentInvocations_ZeroRawTokensAreDistinctFromUnknown(t *testing.T) {
 	}
 }
 
-// TestAgentInvocationAggregatesHidePartialRawTokens proves the raw token sums
-// follow the same all-or-nothing rule as every other nullable column here: a
-// group containing one usage-less invocation reads as unknown rather than
-// presenting a total that silently covers only some of its rows.
 func TestAgentInvocationAggregatesHidePartialRawTokens(t *testing.T) {
 	d, _, run := openSessionTestDB(t)
 	for _, inv := range []AgentInvocation{
@@ -373,9 +363,6 @@ func TestCompleteRunAwaitingAgentAccumulatesParkedDuration(t *testing.T) {
 	}
 }
 
-// TestRecoverStaleRunsAccumulatesParkedTime proves a crash while parked does
-// not lose the parked evidence: recovery folds the live awaiting marker into
-// the run's parked total.
 func TestRecoverStaleRunsAccumulatesParkedTime(t *testing.T) {
 	d, _, run := openSessionTestDB(t)
 
@@ -404,8 +391,6 @@ func TestRecoverStaleRunsAccumulatesParkedTime(t *testing.T) {
 	}
 }
 
-// TestOpenMigratesAgentInvocationsAndParkedMS proves databases created before
-// the performance-telemetry schema gain the table and column on reopen.
 func TestOpenMigratesAgentInvocationsAndParkedMS(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	d, err := Open(path)
@@ -445,10 +430,6 @@ func TestOpenMigratesAgentInvocationsAndParkedMS(t *testing.T) {
 	}
 }
 
-// TestOpenMigratesSessionFidelityColumns proves a database whose
-// agent_invocations table predates the session-fidelity columns gains them on
-// reopen, and that pre-existing rows read those columns back as unknown (nil)
-// rather than a fabricated zero.
 func TestOpenMigratesSessionFidelityColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.sqlite")
 	d, err := Open(path)

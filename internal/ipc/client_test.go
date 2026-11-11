@@ -60,10 +60,6 @@ func TestDialConnectTimeoutFailsFastAndNamesSocket(t *testing.T) {
 	}
 }
 
-// TestDialUsesTheConnectTimeoutOfTheRootItDials pins the timeout to the root
-// that owns the socket. A receive hook resolves its root from the gate it was
-// handed and runs with no NM_HOME, so reading the ambient root's config would
-// dial one daemon under another root's timeout.
 func TestDialUsesTheConnectTimeoutOfTheRootItDials(t *testing.T) {
 	writeRoot := func(root, timeout string) string {
 		t.Helper()

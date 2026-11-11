@@ -28,10 +28,6 @@ import (
 
 const fixRoundLimitFixerMarker = "Investigate previous review findings"
 
-// fixRoundLimitScenario returns a fake-agent scenario. The initial review
-// reports one finding; every fixer turn appends a line to service.txt (so
-// each fix commits a real change); every rereview either still reports a
-// finding (persistent) or comes back clean.
 func fixRoundLimitScenario(t *testing.T, persistent bool) string {
 	t.Helper()
 	rereview := "[]"
@@ -97,8 +93,6 @@ func fixRoundLimitScenario(t *testing.T, persistent bool) string {
 	return path
 }
 
-// newFixRoundLimitHarness commits trustedConfig to the default branch (the
-// only source review.max_fix_rounds is read from), pushes it, and inits.
 func newFixRoundLimitHarness(t *testing.T, persistent bool, trustedConfig string) *Harness {
 	t.Helper()
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: fixRoundLimitScenario(t, persistent)})
@@ -241,9 +235,6 @@ func explicitFixAll(t *testing.T, h *Harness, branch string) string {
 	return out
 }
 
-// An automatic fix alone can exhaust the budget (it caps auto_fix.review),
-// and `axi run --yes` - which would otherwise approve a fix_review gate -
-// stands aside on the exhausted gate instead of approving it.
 func TestReviewFixRoundLimit_AutomaticFixExhaustsAndYesStandsAside(t *testing.T) {
 	h := newFixRoundLimitHarness(t, true, "auto_fix:\n  review: 3\nreview:\n  max_fix_rounds: 1\n")
 	branch := "feature/round-limit-yes"
@@ -269,8 +260,6 @@ func TestReviewFixRoundLimit_AutomaticFixExhaustsAndYesStandsAside(t *testing.T)
 	}
 }
 
-// Automatic and explicit fixes spend one shared budget: auto_fix.review=1
-// plus one explicit fix exhausts max_fix_rounds=2.
 func TestReviewFixRoundLimit_AutomaticAndExplicitShareTheBudget(t *testing.T) {
 	h := newFixRoundLimitHarness(t, true, "auto_fix:\n  review: 1\nreview:\n  max_fix_rounds: 2\n")
 	branch := "feature/round-limit-shared"
@@ -307,7 +296,6 @@ func TestReviewFixRoundLimit_AutomaticAndExplicitShareTheBudget(t *testing.T) {
 	t.Logf("EVIDENCE third fix refused: err=%v\n%s", err, refused)
 }
 
-// Without review.max_fix_rounds, explicit fixes stay unlimited.
 func TestReviewFixRoundLimit_UnsetIsUnlimited(t *testing.T) {
 	h := newFixRoundLimitHarness(t, true, "")
 	branch := "feature/round-limit-unset"
@@ -331,7 +319,6 @@ func TestReviewFixRoundLimit_UnsetIsUnlimited(t *testing.T) {
 	t.Logf("EVIDENCE three explicit fixes accepted with max_fix_rounds unset; status:\n%s", status)
 }
 
-// The pushed branch cannot set the limit, even with allow_repo_commands.
 func TestReviewFixRoundLimit_PushedBranchCannotSetTheLimit(t *testing.T) {
 	h := newFixRoundLimitHarness(t, true, "allow_repo_commands: true\n")
 	branch := "feature/round-limit-untrusted"
@@ -356,7 +343,6 @@ func TestReviewFixRoundLimit_PushedBranchCannotSetTheLimit(t *testing.T) {
 	t.Logf("EVIDENCE branch-only max_fix_rounds: 1 ignored; two explicit fixes accepted; status:\n%s", status)
 }
 
-// A clean, fully covered final rereview passes normally at the limit.
 func TestReviewFixRoundLimit_CleanFinalRereviewPasses(t *testing.T) {
 	h := newFixRoundLimitHarness(t, false, "review:\n  max_fix_rounds: 1\n")
 	branch := "feature/round-limit-clean"
@@ -378,7 +364,6 @@ func TestReviewFixRoundLimit_CleanFinalRereviewPasses(t *testing.T) {
 	t.Logf("EVIDENCE 1/1 fix with clean rereview completes: status=%s\n%s", run.Status, out)
 }
 
-// Negative and non-integer values fail configuration loading.
 func TestReviewFixRoundLimit_InvalidValuesFailClosed(t *testing.T) {
 	for _, tc := range []struct{ name, value, want string }{
 		{"negative", "-1", "review.max_fix_rounds must be non-negative"},
@@ -401,8 +386,6 @@ func TestReviewFixRoundLimit_InvalidValuesFailClosed(t *testing.T) {
 	}
 }
 
-// The TUI's yolo resolver, like --yes, leaves the exhausted gate parked
-// instead of approving it (it would otherwise approve a fix_review gate).
 func TestReviewFixRoundLimit_TUIYoloStandsAside(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the TUI driver uses pty.fork(), which is Unix-only")
@@ -453,9 +436,6 @@ func TestReviewFixRoundLimit_TUIYoloStandsAside(t *testing.T) {
 	}
 }
 
-// protectedFixScenario is fixRoundLimitScenario's persistent reviewer with a
-// fixer that also edits a protected file, so the one allowed fix round's
-// commit is refused by protected_paths.
 func protectedFixScenario(t *testing.T) string {
 	t.Helper()
 	body := fmt.Sprintf(`actions:
@@ -508,11 +488,6 @@ func protectedFixScenario(t *testing.T) string {
 	return path
 }
 
-// When the last allowed fix round's commit is refused by protected_paths,
-// approve and fix are both refused, and each refusal and the gate help point
-// only at the responses that remain (skip or abort), never at each other.
-// Oracle: docs reference/repo-config.md#protected_paths ("When the refused
-// commit was Review's last allowed fix round ... only skip or abort remain").
 func TestReviewFixRoundLimit_ProtectedPathRefusalOnTheLastRoundOffersOnlySkipOrAbort(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: protectedFixScenario(t)})
 	h.CommitChange("main", "secret.txt", "token\n", "protected file")

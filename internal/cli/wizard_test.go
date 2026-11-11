@@ -494,11 +494,6 @@ func TestRunWizardReturnsTerminalWizardError(t *testing.T) {
 	}
 }
 
-// TestRunWizard_ConfiguresServerPIDsDir ensures the wizard points the
-// agent package at its PID tracking dir while running, so orphaned
-// opencode/rovodev processes left behind by a wizard crash can be reaped
-// by the next daemon startup. It also verifies the setting is cleared
-// afterwards.
 func TestRunWizard_ConfiguresServerPIDsDir(t *testing.T) {
 	prevRun := wizardRun
 	var observedDir string
@@ -552,12 +547,6 @@ func TestRunWizard_ConfiguresServerPIDsDir(t *testing.T) {
 	}
 }
 
-// TestAwaitDaemonRunRegistration_ErrorsWhenNoRunAppears covers issue #122
-// defect 3. When a push succeeds but the daemon never registers a run
-// (e.g. the gate hook was disabled by husky), the wait must surface an
-// error the caller can propagate. The previous implementation returned nil
-// on timeout, which let the wizard declare success and silently fall
-// through to "No active run".
 func TestAwaitDaemonRunRegistration_ErrorsWhenNoRunAppears(t *testing.T) {
 	nmHome := makeSocketSafeTempDir(t)
 	t.Setenv("NM_HOME", nmHome)

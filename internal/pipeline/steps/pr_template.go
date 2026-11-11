@@ -63,10 +63,6 @@ func configuredPRTemplate(sctx *pipeline.StepContext) string {
 	return sctx.Config.PR.Template
 }
 
-// loadPRTemplate never opens a worktree file. The daemon pins TrustedConfigSHA
-// after a fresh default-branch fetch, including on recovery. Resolve the literal
-// tree entry first (rejecting symlinks/submodules), then size-check and read that
-// immutable blob. Neither pushed paths nor allow_repo_commands choose its bytes.
 func loadPRTemplate(ctx context.Context, dir, sha, name string) (string, error) {
 	if name == "" {
 		return "", nil
@@ -175,10 +171,6 @@ Final diff paths and statuses:
 	return content, nil
 }
 
-// This is a structural guard, not a Markdown/template interpreter. A drafting
-// failure must not silently replace the team's H1 text/order. Subordinate
-// completion is best effort, not an enforced policy. No H1s means no structural
-// requirements. Existing published narrative never goes through this check again.
 func validateTemplateStructure(template, body string) error {
 	if _, missing := missingTemplateHeading(template, body); missing {
 		return fmt.Errorf("agent changed, omitted or reordered a pr.template top-level # heading; refusing publication")
@@ -186,8 +178,6 @@ func validateTemplateStructure(template, body string) error {
 	return nil
 }
 
-// missingTemplateHeading returns the first template H1 the body does not keep
-// in order.
 func missingTemplateHeading(template, body string) (string, bool) {
 	rest := templateStructureLines(body)
 	for _, line := range templateStructureLines(template) {
@@ -252,9 +242,6 @@ func (s *PRStep) recordedPREvidence(sctx *pipeline.StepContext, provider scm.Pro
 	return joinBlocks(appendixEvidence(appendixMode(sctx), prBodyFlavorFor(provider), risk, testing, pipelineMD, provider), neutralizeAttestationMarkers(provider, evidence)), nil
 }
 
-// publishKeptDraft stores the ordinary narrative above the full owned appendix
-// (Intent included), whichever drafting path produced the narrative.
-// A later update refreshes that appendix through the template preservation path.
 func (s *PRStep) publishKeptDraft(sctx *pipeline.StepContext, provider scm.Provider, title, narrative string, bodyLimit int) (prContent, error) {
 	evidence, err := s.buildPRAppendix(sctx, provider)
 	if err != nil {

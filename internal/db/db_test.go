@@ -64,7 +64,6 @@ func TestOpenReadOnlyRequiresExistingDBAndDoesNotMigrate(t *testing.T) {
 
 func TestOpenCreatesSchema(t *testing.T) {
 	d := openTestDB(t)
-	// verify tables exist by querying them
 	var count int
 	if err := d.sql.QueryRow("SELECT count(*) FROM repos").Scan(&count); err != nil {
 		t.Fatalf("repos table missing: %v", err)
@@ -150,8 +149,6 @@ func TestOpenMigratesRunSyncProvenanceWithoutBackfillingMutableHead(t *testing.T
 	}
 }
 
-// A run's worktree placement is durable because the configuration it comes from
-// can be edited while the run exists (see internal/worktrees).
 func TestSetRunWorktreeDirRecordsPlacementDurably(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepoWithID("repo-1", "/work/repo", "https://example.com/repo.git", "main")
@@ -178,11 +175,6 @@ func TestSetRunWorktreeDirRecordsPlacementDurably(t *testing.T) {
 	}
 }
 
-// RunWorktreesOutside is how startup recovery finds run worktrees placed
-// outside the tree it walks itself, without asking the configuration where they
-// might be. It answers from the records only: a run in the default tree is
-// found by walking, and a run that never recorded a placement predates the
-// column - and therefore predates any placement but the default one.
 func TestRunWorktreesOutsideReturnsOnlyRecordedPlacementsElsewhere(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepoWithID("repo-1", "/work/repo", "https://example.com/repo.git", "main")
@@ -234,10 +226,6 @@ func TestRunWorktreesOutsideReturnsOnlyRecordedPlacementsElsewhere(t *testing.T)
 	}
 }
 
-// ActiveRunWorktreesOutside is the bounded set the startup process sweep turns
-// into path matchers: it must hold the runs that were still executing when the
-// daemon started - whose worktrees may already be gone - and not the history of
-// every run ever placed outside the default tree.
 func TestActiveRunWorktreesOutsideReturnsOnlyRunsStillActive(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepoWithID("repo-1", "/work/repo", "https://example.com/repo.git", "main")

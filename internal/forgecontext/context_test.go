@@ -276,11 +276,6 @@ func TestResolveRejectsDifferentParentAndForkProfiles(t *testing.T) {
 	}
 }
 
-// TestResolveRejectsConflictingExpectedLoginsOnOneConfigDirectory reproduces
-// the parent/fork pair that shares a config directory but pins different
-// accounts. Selecting the upstream side would validate only its own pin and
-// run under an account the matched fork profile never expected, which is the
-// silent fallback expected_login exists to refuse.
 func TestResolveRejectsConflictingExpectedLoginsOnOneConfigDirectory(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte("github.com:\n    user: alice\n"), 0o644); err != nil {
@@ -299,8 +294,6 @@ func TestResolveRejectsConflictingExpectedLoginsOnOneConfigDirectory(t *testing.
 	}
 }
 
-// TestResolveAcceptsMatchingExpectedLoginOnOneConfigDirectory keeps the
-// legitimate alias case working: identical pins are the same selection.
 func TestResolveAcceptsMatchingExpectedLoginOnOneConfigDirectory(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte("github.com:\n    user: alice\n"), 0o644); err != nil {
@@ -391,10 +384,6 @@ func TestResolveExpectedLoginRequiresDeclaredActiveUser(t *testing.T) {
 	}
 }
 
-// TestRefuseProviderPluginOverlap covers the overlap config load cannot see:
-// forge profiles match the remote's literal host while plugins also match
-// its SSH HostName, so a profile keyed by an alias and a plugin claiming the
-// alias's target only collide once the run's remote is known.
 func TestRefuseProviderPluginOverlap(t *testing.T) {
 	plugins := config.ProviderPlugins{"ssm": {Command: "nm-ssm", Hosts: []string{"*.sourcemanager.dev"}}}
 	profile := &Context{Provider: scm.ProviderGitLab, ProfileHost: "work-alias"}

@@ -18,7 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// recordNativeClaude exercises the real stdin and stream-json adapter without a provider.
 func recordNativeClaude(t *testing.T, payload string) (agent.Agent, string) {
 	t.Helper()
 	dir := t.TempDir()

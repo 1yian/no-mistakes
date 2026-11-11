@@ -7,25 +7,11 @@ import (
 	"strings"
 )
 
-// The review step's question-channel instruction, verbatim enough to locate
-// the run's conversation directory in the prompt it hands the reviewer:
-//
-//   - You have a question channel: <dir>/questions.ndjson (you append) and ...
-//
-// The fake reviewer learns where to write the same way a real one does, from
-// the prompt itself, so a scenario can never write somewhere the product did
-// not name. That is also why this is not routed through the scenario `edits`
-// path, which deliberately refuses anything outside the worktree: the run's
-// evidence directory is outside it by design, and the protocol section calls
-// writing there an explicit, required exception.
 const (
 	questionChannelMarker  = "question channel: "
 	questionChannelTrailer = "/questions.ndjson"
 )
 
-// reviewConversationDirFromPrompt returns the run's review conversation
-// directory as named by the review prompt, or "" when the prompt carries no
-// question channel (the conversation is off, which is the default).
 func reviewConversationDirFromPrompt(prompt string) string {
 	i := strings.Index(prompt, questionChannelMarker)
 	if i < 0 {
@@ -39,11 +25,6 @@ func reviewConversationDirFromPrompt(prompt string) string {
 	return rest[:j]
 }
 
-// askQuestions appends each raw questions.ndjson line to the run's review
-// conversation, exactly as the agent's own file tools would. The lines are
-// written verbatim so a scenario controls which fields are present - above all
-// which are ABSENT, since the reader's absent-field branches are real
-// behaviour a helper that defaulted them could never exercise.
 func askQuestions(prompt string, lines []string) error {
 	if len(lines) == 0 {
 		return nil
@@ -71,12 +52,8 @@ func askQuestions(prompt string, lines []string) error {
 	return nil
 }
 
-// The test step's evidence-directory instruction, in both the plain and the
-// "published to the evidence branch" wordings. Both end the line with ": <dir>".
 const evidenceDirMarker = "evidence files into this evidence directory, never into the worktree"
 
-// evidenceDirFromPrompt returns the run's evidence directory as named by the
-// test prompt, or "" when the prompt does not name one.
 func evidenceDirFromPrompt(prompt string) string {
 	i := strings.Index(prompt, evidenceDirMarker)
 	if i < 0 {
@@ -93,10 +70,6 @@ func evidenceDirFromPrompt(prompt string) string {
 	return strings.TrimSpace(line[k+2:])
 }
 
-// writeEvidence drops scenario-supplied test evidence into the run's evidence
-// directory, which is where the steering preamble tells a real test agent to
-// put it and is outside the worktree by design. Like askQuestions, the
-// destination comes from the prompt rather than the scenario.
 func writeEvidence(prompt string, files []EvidenceFile) error {
 	if len(files) == 0 {
 		return nil

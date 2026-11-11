@@ -142,9 +142,6 @@ func TestResolveRemoteWithSSHDomainIgnoresUnusableDomains(t *testing.T) {
 
 func TestResolveRemoteWithSSHDomainKeepsRejectedDomainsOutOfTheError(t *testing.T) {
 	t.Parallel()
-	// buildHost turns this error into a step skip reason that is logged and
-	// persisted, so a credential pasted into FORGEJO_SSH_DOMAIN must not travel
-	// with it.
 	const credential = "PLACEHOLDER-CREDENTIAL"
 	for _, domain := range []string{
 		"git:" + credential + "@ssh.forge.example",

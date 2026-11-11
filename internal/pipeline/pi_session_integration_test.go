@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agent"
 )
 
-// writeFakePiExecutable materializes a fake `pi` binary for the pipeline
-// package's adapter-integration test. It mirrors the POSIX/Windows dual
-// fixture shape used by internal/agent's Pi tests.
 func writeFakePiExecutable(t *testing.T, dir, posixScript, windowsScript string) string {
 	t.Helper()
 
@@ -30,12 +27,6 @@ func writeFakePiExecutable(t *testing.T, dir, posixScript, windowsScript string)
 	return bin
 }
 
-// TestRunSessions_PiAdapterPersistsAndFallsBack drives the real piAgent
-// (backed by a fake pi executable) through RunSessions to prove the
-// adapter-specific contract the generic fake-based tests cannot: Pi's minted
-// UUID is persisted as run_agent_sessions metadata, a dead resumed session
-// triggers a marked fresh-session fallback that re-runs the same turn, and the
-// replacement identity replaces the stored row.
 func TestRunSessions_PiAdapterPersistsAndFallsBack(t *testing.T) {
 	const (
 		id1 = "019ff2f3-5f31-744b-90b8-679074ff7681"

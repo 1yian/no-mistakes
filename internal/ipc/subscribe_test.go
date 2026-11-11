@@ -72,7 +72,6 @@ func TestSubscribeMalformedEvent(t *testing.T) {
 		if !scanner.Scan() {
 			return
 		}
-		// Read the subscribe request, send OK response.
 		var req ipc.Request
 		json.Unmarshal(scanner.Bytes(), &req)
 
@@ -198,16 +197,6 @@ func TestSubscribeClient(t *testing.T) {
 	}
 }
 
-// The subscription transport frames one JSON document per line and caps a line
-// at 1 MiB. A frame past that limit does not merely fail to parse: it ends the
-// whole stream, so every event after it - including the run's terminal frame -
-// is never seen.
-//
-// This is why the fix-review working-tree diff is served by an on-demand RPC
-// instead of being attached to a step_completed event: the diff was the only
-// unbounded event payload, and a large change would take the subscription down
-// with it. This test is the standing guard on that reasoning - if a future
-// change puts an unbounded payload back on the stream, the hazard is here.
 func TestSubscribeOversizedFrameEndsTheStreamAndHidesLaterEvents(t *testing.T) {
 	sock := socketPath(t)
 	os.Remove(sock)
@@ -255,8 +244,6 @@ func TestSubscribeOversizedFrameEndsTheStreamAndHidesLaterEvents(t *testing.T) {
 	}
 }
 
-// Frames that stay within the limit deliver normally, including the terminal
-// one. Gate events must stay in this regime.
 func TestSubscribeBoundedFramesDeliverThroughTerminalEvent(t *testing.T) {
 	sock := socketPath(t)
 	os.Remove(sock)

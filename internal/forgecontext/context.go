@@ -1,5 +1,3 @@
-// Package forgecontext resolves machine-local provider profiles into an
-// immutable execution context for one repository run.
 package forgecontext
 
 import (
@@ -20,14 +18,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ghTokenTimeout bounds the one gh call a gh_user profile makes at run setup,
-// so a credential store that never answers fails the run instead of hanging it.
 const ghTokenTimeout = 30 * time.Second
 
-// Context is the resolved forge provider and subprocess environment for one
-// run. It holds configuration locations and, for a gh_user profile, that
-// login's token as an Environment value: it lives only in memory for the run,
-// is re-read on recovery, and runenv.Overlay never prints values.
 type Context struct {
 	Provider    scm.Provider
 	ProfileHost string
@@ -36,9 +28,6 @@ type Context struct {
 	Environment runenv.Overlay
 }
 
-// Resolve selects and validates the profile associated with a repository's
-// configured remotes. A nil result means profile routing is inactive for the
-// repository and callers must preserve ambient behavior.
 func Resolve(ctx context.Context, profiles config.ForgeProfiles, upstreamURL, forkURL string) (*Context, error) {
 	if len(profiles) == 0 {
 		return nil, nil
@@ -116,13 +105,6 @@ func Resolve(ctx context.Context, profiles config.ForgeProfiles, upstreamURL, fo
 	}, nil
 }
 
-// RefuseProviderPluginOverlap fails a run whose selected forge profile and a
-// provider plugin both claim its repository. Load-time validation compares
-// only literal host tokens, so it cannot see a profile keyed by an SSH alias
-// while a plugin claims the alias's resolved HostName (or the reverse); here
-// the run's remote is known, and the plugin is selected exactly as the PR and
-// CI steps select it. Letting either side win would split one repository
-// between two provider implementations.
 func RefuseProviderPluginOverlap(ctx context.Context, forge *Context, plugins config.ProviderPlugins, upstreamURL string) error {
 	upstreamURL = strings.TrimSpace(upstreamURL)
 	return refuseProviderPluginOverlap(forge, plugins, scm.ExtractHost(upstreamURL), func() string { return scm.ResolveHost(ctx, upstreamURL) })
@@ -183,10 +165,7 @@ func gitlabConfigContainsHost(dir, targetHost string) bool {
 }
 
 type githubHostEntry struct {
-	User string `yaml:"user"`
-	// Users decodes account keys only. gh nests each account's oauth_token
-	// under its login, and only the logins are ever read, so an empty-struct
-	// value keeps a live credential out of the process image entirely.
+	User  string              `yaml:"user"`
 	Users map[string]struct{} `yaml:"users"`
 }
 
@@ -243,8 +222,6 @@ func gitlabConfigHasHost(cfg gitlabConfig, targetHost string) bool {
 	return false
 }
 
-// remote is the part of a repository remote that selects a forge profile: its
-// raw host token and its repository owner, both lowercased.
 type remote struct {
 	host  string
 	owner string
@@ -259,11 +236,6 @@ func remoteFor(remoteURL string) remote {
 	return remote{host: host, owner: strings.ToLower(strings.TrimSpace(owner))}
 }
 
-// selectProfile picks the profile for a repository's parent and fork remotes.
-// An owner-scoped key ("host/owner") is more specific than its plain host key,
-// so it wins when the other side matched only a host key: that is how one
-// account on a shared host is chosen for the repositories its owner holds.
-// Two matches at the same specificity must still select the same account.
 func selectProfile(profiles config.ForgeProfiles, upstream, fork remote) (config.ForgeProfile, string, bool, error) {
 	upstreamProfile, upstreamName, upstreamScoped, upstreamOK := profileForRemote(profiles, upstream)
 	forkProfile, forkName, forkScoped, forkOK := profileForRemote(profiles, fork)
@@ -288,11 +260,6 @@ func selectProfile(profiles config.ForgeProfiles, upstream, fork remote) (config
 	}
 }
 
-// sameProfile reports whether two host tokens resolve to the same account
-// selection. The expected_login pin is part of that identity: two profiles
-// sharing a config directory but pinning different logins disagree about which
-// account the run must be signed in as, and silently taking either one is the
-// fallback expectLogin exists to refuse.
 func sameProfile(a, b config.ForgeProfile) bool {
 	return effectiveProfilePath(a.GHConfigDir) == effectiveProfilePath(b.GHConfigDir) &&
 		effectiveProfilePath(a.GLabConfigDir) == effectiveProfilePath(b.GLabConfigDir) &&
@@ -313,9 +280,6 @@ func effectiveProfilePath(path string) string {
 	return cleaned
 }
 
-// profilesActivateProvider reports whether a plain host profile makes routing
-// mandatory for provider. An owner-scoped key speaks only for its owner, so it
-// never forces a profile onto repositories other owners hold.
 func profilesActivateProvider(profiles config.ForgeProfiles, provider scm.Provider) bool {
 	for key, profile := range profiles {
 		if _, owner := config.SplitForgeProfileKey(key); owner != "" {
@@ -335,8 +299,6 @@ func profilesActivateProvider(profiles config.ForgeProfiles, provider scm.Provid
 	return false
 }
 
-// githubEnvironment pins GH_CONFIG_DIR when dir is set and removes every
-// ambient variable that would outrank the selected account.
 func githubEnvironment(dir string) runenv.Overlay {
 	set := map[string]string{}
 	if dir != "" {
@@ -376,8 +338,6 @@ func gitlabEnvironment(dir string) runenv.Overlay {
 	}
 }
 
-// profileForRemote looks up the owner-scoped key first and falls back to the
-// plain host key, so existing host-keyed configurations keep matching.
 func profileForRemote(profiles config.ForgeProfiles, r remote) (profile config.ForgeProfile, name string, scoped, ok bool) {
 	if r.host == "" {
 		return config.ForgeProfile{}, "", false, false
@@ -401,12 +361,6 @@ func profileForKey(profiles config.ForgeProfiles, key string) (config.ForgeProfi
 	return config.ForgeProfile{}, "", false
 }
 
-// githubUserEnvironment reads the stored token of one login signed in to the
-// ambient gh configuration and returns the
-// run environment that authenticates every gh and gh-credential-helper call as
-// that login. The token is read once, from gh's stdout only; it never reaches
-// an argument, a log line, a file, or an error. A login gh cannot produce a
-// token for refuses the run instead of falling back to the active account.
 func githubUserEnvironment(ctx context.Context, targetHost, login string) (runenv.Overlay, error) {
 	env := githubEnvironment("")
 	ctx, cancel := context.WithTimeout(ctx, ghTokenTimeout)
@@ -432,9 +386,6 @@ func githubUserEnvironment(ctx context.Context, targetHost, login string) (runen
 	return env, nil
 }
 
-// githubTokenVariable names the variable gh reads a token from for host:
-// GH_TOKEN for github.com and GHE.com tenancies, GH_ENTERPRISE_TOKEN for
-// GitHub Enterprise Server hosts.
 func githubTokenVariable(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "github.com" || strings.HasSuffix(host, ".ghe.com") {
@@ -443,7 +394,6 @@ func githubTokenVariable(host string) string {
 	return "GH_ENTERPRISE_TOKEN"
 }
 
-// firstLine bounds a subprocess diagnostic to one short line.
 func firstLine(text string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
 	line = strings.TrimSpace(line)
@@ -490,10 +440,6 @@ func validateGitHubProfile(dir, targetHost, expectedLogin string) error {
 	return expectLogin(expectedLogin, entry.User, "GitHub", targetHost)
 }
 
-// expectLogin fails closed when a profile pins expected_login and the
-// provider config's active account differs. An empty expectation keeps the
-// existing behavior; an empty active login under a pinned expectation is a
-// mismatch, never a fallback.
 func expectLogin(expected, active, provider, targetHost string) error {
 	expected = strings.TrimSpace(expected)
 	if expected == "" {

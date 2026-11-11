@@ -16,13 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestEjectSweepsRecordedWorktreesBeforeRemovingThem is eject's half of the
-// removal invariant, and it is the sharpest case of it: eject removes the
-// directory AND deletes the run rows, so outside the default worktrees tree it
-// destroys the last thing that could ever name that directory again. A process
-// that escaped its process group and is standing in there - the case
-// internal/procreap exists for - would then burn CPU holding a deleted cwd until
-// the machine is rebooted.
 func TestEjectSweepsRecordedWorktreesBeforeRemovingThem(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -66,9 +59,6 @@ func TestEjectSweepsRecordedWorktreesBeforeRemovingThem(t *testing.T) {
 	}
 }
 
-// startOrphanIn leaves a real long-lived process standing in dir whose parent has
-// already exited, which is the shape a leaked pipeline child has by the time
-// anyone notices it.
 func startOrphanIn(t *testing.T, dir string) int {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

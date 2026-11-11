@@ -7,9 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// A case identifies its repository only by the fingerprint of the redacted
-// upstream URL, so a dashboard resolves names by fingerprinting the locally
-// registered repositories the same way capture did.
 func TestRepoDisplayNamesKeyResolvedNamesByCaptureFingerprint(t *testing.T) {
 	repos := []*db.Repo{
 		{ID: "a", WorkingPath: filepath.Join("/tmp", "clone-a"), UpstreamURL: "https://github.com/kunchenguid/no-mistakes.git"},
@@ -38,8 +35,6 @@ func TestRepoDisplayNamesKeyResolvedNamesByCaptureFingerprint(t *testing.T) {
 	}
 }
 
-// A repository with a credentialled URL is fingerprinted from the redacted
-// form, exactly as capture stores it, so it still resolves.
 func TestRepoDisplayNamesResolveCredentialledUpstreamURL(t *testing.T) {
 	repo := &db.Repo{ID: "a", WorkingPath: "/tmp/clone", UpstreamURL: "https://user:token@github.com/kunchenguid/no-mistakes.git"}
 	names := RepoDisplayNames([]*db.Repo{repo})
@@ -101,8 +96,6 @@ func TestSortedCompositionRowsBreaksDisplayNameTiesDeterministically(t *testing.
 	}
 }
 
-// An unresolved fingerprint keeps its short opaque form: a dashboard never
-// blanks a repository it cannot name.
 func TestStoreRepoDisplayFallsBackToTheShortFingerprint(t *testing.T) {
 	store := &Store{}
 	unknown := fingerprint("https://example.test/org/repo")

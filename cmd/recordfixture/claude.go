@@ -8,11 +8,6 @@ import (
 	"path/filepath"
 )
 
-// recordClaude invokes the real claude CLI with the same flags
-// no-mistakes' agent uses, and saves the JSONL stdout to a fixture file.
-// We capture two flavours per session: with a JSON schema (review-style)
-// and without (commit-summary-style). Both are kept tiny by asking for
-// the smallest possible response.
 func recordClaude(ctx context.Context, out string, args []string) int {
 	bin, forward := splitBinArgs(args, "claude")
 

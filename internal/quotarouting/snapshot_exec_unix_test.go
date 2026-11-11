@@ -158,11 +158,6 @@ func TestReadSnapshotReapsDescendantsOnEveryExit(t *testing.T) {
 	}
 }
 
-// The reader's configured deadline must bound execution independently of parent
-// cancellation. The readiness-gated cases above separately prove descendant
-// cleanup even when shell startup itself takes longer than the operation budget.
-// Replacing ReadSnapshot's WithTimeout with WithCancel must fail this case at
-// the outer guard while leaving the parent-cancellation case passing.
 func TestReadSnapshotOwnTimeout(t *testing.T) {
 	const operationWindow = 200 * time.Millisecond
 	dir := t.TempDir()

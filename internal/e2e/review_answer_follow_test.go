@@ -12,8 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// cleanCatchAllAction is the "everything else is fine" tail every scenario in
-// this file ends with: the test, document, lint and push turns.
 const cleanCatchAllAction = `  - text: "no issues found"
     structured:
       findings: []
@@ -45,9 +43,6 @@ func writeScenario(t *testing.T, name, body string) string {
 	return path
 }
 
-// answerFollowHarness stands the product up with the review conversation turned
-// on in the trusted default-branch config and a short question-park grace, and
-// leaves a feature branch ready to run.
 func answerFollowHarness(t *testing.T, scenario string) (*Harness, string) {
 	t.Helper()
 	h := NewHarness(t, SetupOpts{
@@ -69,10 +64,6 @@ func question(id, text string) string {
 		`","options":["yes","no"],"weight":"major","file":"feature.txt","line":1,"area":"config loader"}'`
 }
 
-// An answer that leaves a question open must return at once, exactly as it
-// always did, and the answer that closes the last one must follow the run -
-// including when the finalize turn asks something new, which is the park the
-// grace has to tell apart from the one this answer just released.
 func TestAxiAnswerPartialReturnsAtOnceAndTheClosingAnswerReturnsAGenuineReAsk(t *testing.T) {
 	scenario := writeScenario(t, "two-questions.yaml", `actions:
   - match: "ccc-three"
@@ -164,9 +155,6 @@ func TestAxiAnswerPartialReturnsAtOnceAndTheClosingAnswerReturnsAGenuineReAsk(t 
 	}
 }
 
-// A question asked by the rereview inside a fix round parks as fix_review, not
-// awaiting_approval. That park must be recognised as the one the answer
-// released, or the answer hands it straight back as the next decision point.
 func TestAxiAnswerFollowsAQuestionParkedInsideAFixRound(t *testing.T) {
 	scenario := writeScenario(t, "fix-round-question.yaml", `actions:
   - match: "Answers to the questions you asked in this pass"
@@ -242,8 +230,6 @@ func TestAxiAnswerFollowsAQuestionParkedInsideAFixRound(t *testing.T) {
 	t.Logf("axi answer at a fix_review question park:\n%s", answerOut)
 }
 
-// A --wait that elapses after the answer is recorded must say so, and must send
-// the caller back with the non-mutating `axi run` rather than another answer.
 func TestAxiAnswerWaitElapsedReattachesWithAxiRun(t *testing.T) {
 	scenario := writeScenario(t, "slow-finalize.yaml", `actions:
   - match: "Answers to the questions you asked in this pass"

@@ -8,9 +8,6 @@ import (
 	"fmt"
 )
 
-// RunExport is an explicit allowlist of local delivery facts. Do not embed
-// storage records: they contain prompts, configuration, logs and private paths.
-// All timestamps are stored Unix seconds and all durations are milliseconds.
 type RunExport struct {
 	SchemaVersion int                `json:"schema_version"`
 	Run           ExportRun          `json:"run"`
@@ -49,8 +46,6 @@ type ExportStep struct {
 	Rounds         []ExportRound     `json:"rounds"`
 }
 
-// ExportStepSource identifies the stored source of reused work. RunID stays
-// unknown if the source row is unavailable; StepID is the recorded reference.
 type ExportStepSource struct {
 	RunID  *string `json:"run_id"`
 	StepID string  `json:"step_id"`
@@ -70,8 +65,6 @@ type ExportRound struct {
 	Gate               ExportGate `json:"gate"`
 }
 
-// ExportGate reserves unknown facts without asserting that a round parked.
-// Round creation, execution duration and selection source cannot supply them.
 type ExportGate struct {
 	FirstParkedAt      *int64  `json:"first_parked_at"`
 	Reason             *string `json:"reason"`
@@ -110,8 +103,6 @@ type ExportInvocation struct {
 	DeltaCacheReadTokens *int64  `json:"delta_cache_read_tokens"`
 }
 
-// ExportRunFacts reads one consistent SQLite snapshot. It neither migrates
-// storage nor contacts an agent, daemon, forge or telemetry endpoint.
 func (d *DB) ExportRunFacts(ctx context.Context, runID string) (*RunExport, error) {
 	tx, err := d.sql.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {

@@ -432,9 +432,6 @@ func TestPRStep_CreatesConfiguredDraftPR(t *testing.T) {
 	}
 }
 
-// Once the PR step has composed the body, a reattach `--closes` update can no
-// longer appear in it, so the DB must refuse the write instead of accepting one
-// the PR will never show. Regression for the reattach-vs-snapshot race.
 func TestPRStep_ComposedBodyLocksOutLateClosingIssueRefsUpdate(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -493,8 +490,6 @@ func TestPRStep_ClosesFailsWhenCreateReturnsNoVerifiableIdentity(t *testing.T) {
 	}
 }
 
-// An ordinary update regenerates the whole body; the requested references
-// render in the Issues section exactly once each.
 func TestPRStep_OrdinaryUpdateRendersRequestedIssuesOnce(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -551,8 +546,6 @@ func TestIssuesSectionRendersDeterministicQualifiedReferences(t *testing.T) {
 	}
 }
 
-// Author text kept verbatim around an owned appendix already closes #2, so
-// the appendix must not repeat it.
 func TestIssuesSectionSkipsReferencesTheAuthorTextAlreadyCloses(t *testing.T) {
 	t.Parallel()
 	sctx := &pipeline.StepContext{ClosingIssueRefs: []string{"2", "3"}}
@@ -565,8 +558,6 @@ func TestIssuesSectionSkipsReferencesTheAuthorTextAlreadyCloses(t *testing.T) {
 	}
 }
 
-// Without --closes nothing is added or inferred, even when the intent names
-// an issue.
 func TestIssuesSectionNeverInfersClosure(t *testing.T) {
 	t.Parallel()
 	sctx := &pipeline.StepContext{UserIntent: "Implement issue #95"}
@@ -594,8 +585,6 @@ func TestVerifyClosingIssuesDoesNotAcceptReferencePrefix(t *testing.T) {
 	}
 }
 
-// A bare mention is not a closing reference: verification requires a
-// closing keyword line for the requested target.
 func TestVerifyClosingIssuesRejectsBareMention(t *testing.T) {
 	t.Parallel()
 	sctx := &pipeline.StepContext{ClosingIssueRefs: []string{"95"}}
@@ -653,12 +642,6 @@ func TestPRStep_UsesConfiguredBaseBranch(t *testing.T) {
 	}
 }
 
-// TestPRStep_ExistingPRAgainstDifferentBaseIsUpdatedNotDuplicated reproduces
-// the bug where a maintainer changes pr.base_branch after a PR already exists
-// against the old base. A base-filtered `gh pr list` would then miss that
-// still-open PR (GitHub filters server-side), so the step fell through to
-// `gh pr create` and opened a second, duplicate PR against the new base while
-// orphaning the original.
 func TestPRStep_ExistingPRAgainstDifferentBaseIsUpdatedNotDuplicated(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -694,12 +677,6 @@ func TestPRStep_ExistingPRAgainstDifferentBaseIsUpdatedNotDuplicated(t *testing.
 	}
 }
 
-// TestPRStep_SkipsWhenBranchMatchesConfiguredBaseBranch reproduces the
-// 0530823 bug: with pr.base_branch configured to a branch other than the
-// repo's forge default, pushing directly to that configured base branch must
-// still skip PR creation instead of attempting a self-targeting PR. Before
-// that fix, the skip check compared only against sctx.Repo.DefaultBranch, so
-// a run on "develop" (configured base) would fall through to gh pr create.
 func TestPRStep_SkipsWhenBranchMatchesConfiguredBaseBranch(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -788,9 +765,6 @@ func TestPRStep_GitHubForkCreatesParentPRWithForkHead(t *testing.T) {
 	}
 }
 
-// A provider that does not close issues from the pull request body still fails
-// closed: publishing the reference would leave the requested issue open after
-// merge with nothing in the body to notice it.
 func TestPRStep_ClosesRefusedWhenTheProviderCannotCloseIssues(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1311,8 +1285,6 @@ func TestAssemblePRBody_ClampsWhenCoreAloneExceedsCap(t *testing.T) {
 	}
 }
 
-// The Issues section's room is reserved before the rest of the body is
-// fitted, so truncation sheds evidence rather than a closing reference.
 func TestAssembleDraftPRBody_ReservesRoomForIssuesUnderALimit(t *testing.T) {
 	t.Parallel()
 	limit := 400
@@ -1328,8 +1300,6 @@ func TestAssembleDraftPRBody_ReservesRoomForIssuesUnderALimit(t *testing.T) {
 	}
 }
 
-// A section that cannot fit at all is omitted (never an unlimited budget),
-// and the pre-publication check then refuses the body.
 func TestAssembleDraftPRBody_OmitsIssuesThatCannotFit(t *testing.T) {
 	t.Parallel()
 	limit := 10
@@ -2628,9 +2598,6 @@ func TestPRStep_PromptRequiresReleaseTypesForProductImpact(t *testing.T) {
 	}
 }
 
-// TestPRStep_PromptGuidesScopeToRealModule verifies the PR prompt instructs
-// the agent to pick a scope that is a real, primary, not-too-granular
-// module/package name in the codebase.
 func TestPRStep_PromptGuidesScopeToRealModule(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2715,16 +2682,6 @@ func TestPRStep_LateSuccessAfterTimeoutDoesNotUseAgentTitle(t *testing.T) {
 	}
 }
 
-// TestPRStep_EmbeddedAttestationDoesNotShadowTheRealOne guards the compliance
-// check against the PR body's own evidence.
-//
-// require-no-mistakes reads the FIRST attestation comment in the body and binds
-// its head_sha to the PR head. A step agent that captures a generated PR body
-// as evidence embeds that body's attestation comment verbatim, carrying the
-// evidence run's head_sha; because the Testing section precedes the Pipeline
-// section, the embedded copy wins and the check fails a PR the pipeline did
-// produce. Seen live on kunchenguid/no-mistakes#831, whose test evidence
-// embedded three.
 func TestPRStep_EmbeddedAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2778,10 +2735,6 @@ func TestPRStep_EmbeddedAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	}
 }
 
-// TestPRStep_EvidenceQuotingAnOwnedBodyStaysRestampable: Testing evidence that
-// quotes a templated PR body carries that body's appendix ownership markers.
-// Copied raw into an ordinary body, they made every later restamp refuse the
-// body as ambiguously owned, so the run could never publish again.
 func TestPRStep_EvidenceQuotingAnOwnedBodyStaysRestampable(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2820,9 +2773,6 @@ func TestPRStep_EvidenceQuotingAnOwnedBodyStaysRestampable(t *testing.T) {
 	assertFirstAttestationBindsHead(t, rebound, newHead)
 }
 
-// assertFirstAttestationBindsHead mirrors verify.py's parse: the FIRST
-// attestation comment in the body must be the pipeline-authored one carrying
-// the run head, and it must be the only parseable marker in the body.
 func assertFirstAttestationBindsHead(t *testing.T, body, headSHA string) {
 	t.Helper()
 	if n := strings.Count(body, pipelineAttestationCommentPrefix); n != 1 {
@@ -2843,11 +2793,6 @@ func assertFirstAttestationBindsHead(t *testing.T, body, headSHA string) {
 	}
 }
 
-// TestPRStep_AgentBodyAttestationDoesNotShadowTheRealOne extends the guard to
-// the PR-drafting agent's own prose. stripGeneratedSections drops an embedded
-// marker only when the agent wraps it in a "## Pipeline" section; one pasted
-// into the What Changed narrative survives verbatim, precedes the real
-// Pipeline section, and would win the compliance check's first-marker parse.
 func TestPRStep_AgentBodyAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2883,8 +2828,6 @@ func TestPRStep_AgentBodyAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	}
 }
 
-// TestFallbackPRBodyAttestationDoesNotShadowTheRealOne covers the fallback
-// body, whose What Changed section embeds the final diff verbatim.
 func TestFallbackPRBodyAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2908,19 +2851,6 @@ func TestFallbackPRBodyAttestationDoesNotShadowTheRealOne(t *testing.T) {
 	}
 }
 
-// TestPRStep_ForeignAttestationsInEveryComponentDoNotShadowTheRealOne is the
-// choke-point regression for the compliance marker.
-//
-// The earlier guards each cover one component. This plants a foreign marker in
-// every agent-derived component at once - agent body, extracted intent, review
-// finding, risk rationale, testing summary, tested detail, and artifact content
-// - because the first attempt at this fix neutralized the marker inside
-// escapePipelineFoldMarkers, which runs per render path: it covered the
-// artifact fence and tested details, missed another path, and PR #831 still
-// published three live foreign markers ahead of the real one.
-//
-// Fencing is not a defense. verify.py scans the raw body, so a marker inside a
-// ```text block counts exactly the same as one in prose.
 func TestPRStep_ForeignAttestationsInEveryComponentDoNotShadowTheRealOne(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

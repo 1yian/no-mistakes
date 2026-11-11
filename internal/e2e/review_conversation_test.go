@@ -16,24 +16,15 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The question the fake reviewer asks mid-pass, and the answer the operator
-// sends back with `no-mistakes axi answer`.
 const (
 	conversationQuestionText = "Should the new flag default to off for existing installations?"
 	conversationAnswerText   = "default off"
 	conversationAnsweredBy   = "captain"
 
-	// The finding the asking turn reported as contingent on the answer, and
-	// the reason the finalize turn gives for retracting it. An answer round
-	// retracts by NAMING the carried finding, never by falling silent about
-	// it, so a reviewer that means to drop one has to say so.
 	conversationPendingFindingID = "review-pending"
 	conversationRetractionReason = "the answer settles the default, so the finding it was contingent on no longer holds"
 )
 
-// trustedRepoConfigWithReviewConversation is the .no-mistakes.yaml a maintainer
-// commits to the default branch to turn the conversation on. It is trusted-only,
-// so this is the only place it can come from.
 const trustedRepoConfigWithReviewConversation = `ignore_patterns:
   - 'vendor/**'
 allow_repo_commands: true
@@ -41,19 +32,6 @@ review:
   conversation: true
 `
 
-// reviewConversationScenario drives a reviewer that ASKS while it works: the
-// first review turn appends one question to the run's own questions.ndjson
-// (through the channel the prompt names, exactly as a real reviewer would) and
-// returns a finding that depends on the answer. The finalize turn - recognised
-// by the answers section the step appends to the whole review prompt - returns
-// a clean pass and RETRACTS that contingent finding by name, so the run can
-// only finish if the answer really reached the reviewer and its retraction was
-// applied. Falling silent about the finding would keep it outstanding, which
-// is the whole point of retracting by name.
-//
-// The finalize action is listed FIRST because the scenario matcher takes the
-// first matching substring, and the finalize prompt contains the review
-// prompt's own marker too.
 func reviewConversationScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "review-conversation-scenario.yaml")
@@ -112,15 +90,6 @@ func reviewConversationScenario(t *testing.T) string {
 	return path
 }
 
-// TestReviewConversationJourney is the end-to-end proof of the review
-// conversation as an operator experiences it: a maintainer turns
-// `review.conversation` on in the trusted default-branch config, the reviewer
-// asks a question while it reviews, the run parks for a human answer,
-// `no-mistakes axi answer` settles it, and the same reviewer finishes its pass.
-//
-// It also drives the two boundaries the feature is only safe with. `--yes` must
-// stand aside at an open question instead of handing it to the fixer, and
-// `axi respond --action answer` must not exist - an answer is not a verdict.
 func TestReviewConversationJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: reviewConversationScenario(t)})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithReviewConversation)
@@ -273,11 +242,6 @@ func TestReviewConversationJourney(t *testing.T) {
 	}
 }
 
-// TestReviewConversationOffRefusesAnAnswer is the off-by-default half. A
-// repository that never asked for the conversation gets today's review: the
-// prompt carries no question channel, the run creates no conversation
-// directory, and `axi answer` refuses and names the setting that would accept
-// an answer.
 func TestReviewConversationOffRefusesAnAnswer(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 
@@ -334,10 +298,6 @@ func TestReviewConversationOffRefusesAnAnswer(t *testing.T) {
 
 }
 
-// trustedRepoConfigWithConversationAndEvidenceBranch turns both halves on: the
-// review conversation, and the opt-in that copies the run's evidence directory
-// onto the repository's orphan evidence branch. The conversation files live in
-// that same directory, which is exactly the collision under test.
 const trustedRepoConfigWithConversationAndEvidenceBranch = `ignore_patterns:
   - 'vendor/**'
 allow_repo_commands: true
@@ -349,9 +309,6 @@ test:
     attach_media: false
 `
 
-// evidenceBranchConversationScenario asks a question during review (so the run
-// really has a conversation on disk) and writes one ordinary test-evidence file
-// during the test step (so the evidence branch is really published).
 func evidenceBranchConversationScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "evidence-branch-conversation.yaml")
@@ -422,19 +379,9 @@ func evidenceBranchConversationScenario(t *testing.T) string {
 	return path
 }
 
-// TestReviewConversationNeverReachesTheEvidenceBranch is the disclosure guard,
-// driven through the real pipeline against a repository that has BOTH the
-// conversation and the orphan evidence branch turned on.
-//
-// The operator's question and answer - full text, and who answered - sit in the
-// run's evidence directory, which is the directory the evidence branch
-// publishes verbatim and permanently. The published branch must carry the test
-// evidence and nothing of the conversation.
 func TestReviewConversationNeverReachesTheEvidenceBranch(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: evidenceBranchConversationScenario(t)})
 
-	// A GitHub-shaped origin rewritten to the local bare repo: evidence links
-	// are only derivable for GitHub, and the rewrite keeps every push local.
 	const originURL = "https://github.com/owner/no-mistakes.git"
 	configureGitURLRewrite(t, h, originURL, h.UpstreamDir)
 	if out, err := h.runGit(t.Context(), h.WorkDir, "remote", "set-url", "origin", originURL); err != nil {
@@ -531,8 +478,6 @@ func TestReviewConversationNeverReachesTheEvidenceBranch(t *testing.T) {
 	}
 }
 
-// prConversationSection returns the PR body's review-conversation group, for a
-// reviewer reading the test log.
 func prConversationSection(body string) string {
 	i := strings.Index(body, "### Review conversation")
 	if i < 0 {
@@ -545,12 +490,6 @@ func prConversationSection(body string) string {
 	return rest
 }
 
-// TestReviewConversationTUIYoloLeavesTheQuestionOpen is the second auto-resolve
-// path. `axi --yes` and the TUI's yolo mode are the two places that answer a
-// gate without a human, and a carve-out on only one of them is what let the
-// fixer receive a question as work. This drives the real TUI through a
-// pseudo-terminal, turns yolo on at a gate carrying an open question, and
-// requires the gate to still be parked afterwards.
 func TestReviewConversationTUIYoloLeavesTheQuestionOpen(t *testing.T) {
 	// The driver needs a pty to make the TUI behave as it does for an
 	// operator, so it is a python3 script using pty.fork(): Unix-only, and on
@@ -639,8 +578,6 @@ func TestReviewConversationTUIYoloLeavesTheQuestionOpen(t *testing.T) {
 	}
 }
 
-// lastScreenFrame returns the tail of a pty transcript, which is the frame a
-// reviewer would have been looking at.
 func lastScreenFrame(raw string) string {
 	lines := strings.Split(strings.TrimRight(raw, "\n"), "\n")
 	if len(lines) > 60 {
@@ -649,9 +586,6 @@ func lastScreenFrame(raw string) string {
 	return strings.Join(lines, "\n")
 }
 
-// pushedRepoConfigEnablingTheConversation is the .no-mistakes.yaml a
-// contributor ships on their own branch to try to turn the conversation on for
-// the review that gates them.
 const pushedRepoConfigEnablingTheConversation = `ignore_patterns:
   - 'vendor/**'
 allow_repo_commands: true
@@ -659,10 +593,6 @@ review:
   conversation: true
 `
 
-// TestPushedBranchCannotEnableTheReviewConversation is the trust boundary.
-// review.conversation decides whether a review may park the run for a human
-// answer, so it is read from the trusted default branch only: a pushed branch
-// that asks for the conversation gets the review its maintainer configured.
 func TestPushedBranchCannotEnableTheReviewConversation(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 
@@ -704,12 +634,6 @@ func TestPushedBranchCannotEnableTheReviewConversation(t *testing.T) {
 	t.Logf("axi answer refusal for a pushed-branch opt-in:\n%s", out)
 }
 
-// unreadableQuestionHistoryScenario drives a reviewer whose question file
-// cannot be read to the end: it appends one ordinary question and then a line
-// past the reader's per-line budget, which stops the scan exactly as a torn or
-// runaway questions.ndjson does. q1 is still open in the part that was read,
-// which is the case the gate has to get right - an answerable-looking row whose
-// answer the daemon is guaranteed to refuse.
 func unreadableQuestionHistoryScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "unreadable-question-history.yaml")
@@ -759,16 +683,6 @@ func unreadableQuestionHistoryScenario(t *testing.T) string {
 	return path
 }
 
-// TestReviewConversationUnreadableQuestionHistoryNeedsAHuman drives the gate a
-// question history that could not be read in full produces, through every
-// surface that can resolve it.
-//
-// An answer cannot be bound to the ask it settles while the history is
-// incomplete, so the daemon refuses one. The gate must therefore not offer a
-// `question-<id>` row instructing that refused command, and neither automatic
-// resolver - `axi run --yes` nor the TUI's yolo - may resolve it, since one
-// would hand "decide this gate yourself" to a fixer. A human's own verdict is
-// still allowed, and is the way out.
 func TestReviewConversationUnreadableQuestionHistoryNeedsAHuman(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: unreadableQuestionHistoryScenario(t)})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithReviewConversation)
@@ -882,13 +796,6 @@ func TestReviewConversationUnreadableQuestionHistoryNeedsAHuman(t *testing.T) {
 	}
 }
 
-// TestReviewConversationSupersededRoundsReachTheNextReviewer is the supersede
-// channel as a reviewer sees it: a parked run's review rounds travel into the
-// run the next push starts, so the new reviewer is not blind to what was
-// already found - and it is told only what the selection proves. The section
-// must not characterise who wrote the previous run's commits, because the
-// selector is unfiltered by run status and those commits may be a pipeline fix
-// round's.
 func TestReviewConversationSupersededRoundsReachTheNextReviewer(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: axiScenario(t)})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithReviewConversation)
@@ -938,20 +845,11 @@ func TestReviewConversationSupersededRoundsReachTheNextReviewer(t *testing.T) {
 	}
 }
 
-// The finding the operator selects for a fix round, and the retraction the
-// rereview claims over it. Only an ANSWER round may retract a carried finding
-// by naming it: a fix round is held to the coverage rule, so a retraction it
-// declares must change nothing.
 const (
 	fixRoundCarriedFindingID  = "review-carried"
 	fixRoundClaimedRetraction = "the fix round settled it"
 )
 
-// reviewFixRoundRetractionScenario drives a reviewer that reports one ask-user
-// finding, a fixer that edits the file, and a rereview that reports nothing,
-// certifies NO path, and names the carried finding in withdrawn_findings. The
-// rereview is recognised by the fix-round provenance clause, which only a
-// rereview after a fix round carries.
 func reviewFixRoundRetractionScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fix-round-retraction-scenario.yaml")
@@ -1018,13 +916,6 @@ func reviewFixRoundRetractionScenario(t *testing.T) string {
 	return path
 }
 
-// TestReviewFixRoundCannotRetractACarriedFinding is the adversarial half of the
-// retraction protocol. Retracting by name is what an answer round does instead
-// of falling silent; a FIX round has no such licence, because the finding it
-// would retract is one no round positively verified. An agent that declares
-// withdrawn_findings on a rereview anyway must change nothing: the finding is
-// still outstanding at the gate that follows, and nothing is recorded as
-// retracted.
 func TestReviewFixRoundCannotRetractACarriedFinding(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: reviewFixRoundRetractionScenario(t)})
 	pushMainRepoConfig(t, h, trustedRepoConfigWithReviewConversation)

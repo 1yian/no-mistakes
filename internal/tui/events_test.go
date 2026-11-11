@@ -11,13 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestModel_ApplyEvent_RunCompletedCarriesCIOverride is the consumer half of
-// the "TUI hides persisted CI overrides" P1: renderOutcomeBanner reads the
-// override reason correctly (see TestOutcomeBanner_CIOverrideShowsReason), but
-// before the fix the live run_completed event never populated m.run
-// .CIOverrideReason, so the banner showed a plain "✓ Pipeline passed" for an
-// overridden run on the event path. Drive the real event (do NOT set the field
-// on the fixture) and assert it survives to the banner.
 func TestModel_ApplyEvent_RunCompletedCarriesCIOverride(t *testing.T) {
 	run := testRun()
 	m := NewModel("/tmp/sock", nil, run)

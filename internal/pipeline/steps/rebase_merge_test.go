@@ -16,11 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// mergeFixture builds a repository whose feature branch and origin/main have
-// both moved since they diverged, which is the only situation the rebase step
-// actually integrates anything in. sharedContent decides whether they collide:
-// give main and feature different content for the same file to force a
-// conflict, or touch separate files for a clean integration.
 type mergeFixture struct {
 	dir      string
 	upstream string
@@ -89,8 +84,6 @@ func (f mergeFixture) context(t *testing.T, ag agent.Agent, strategy string) *pi
 	return sctx
 }
 
-// parents returns a commit's parent SHAs in order. The FIRST one is what the
-// whole merge strategy turns on: it must stay the head the pipeline reviewed.
 func parents(t *testing.T, dir, rev string) []string {
 	t.Helper()
 	out := gitCmd(t, dir, "rev-list", "--parents", "-n", "1", rev)
@@ -101,11 +94,6 @@ func parents(t *testing.T, dir, rev string) []string {
 	return fields[1:]
 }
 
-// assertRestoredToReviewedHead is what every rejected merge shape owes the run:
-// the step fails, and the worktree is left back on the head the pipeline
-// reviewed with nothing of the rejected attempt staged, modified, or untracked
-// on top of it. Anything else leaves the invalid head checked out as if it were
-// the branch's real state.
 func assertRestoredToReviewedHead(t *testing.T, dir, reviewedHead string) {
 	t.Helper()
 	if head := gitCmd(t, dir, "rev-parse", "HEAD"); head != reviewedHead {
@@ -205,10 +193,6 @@ func TestRebaseStep_MergeStrategyResolvesConflictAdditively(t *testing.T) {
 	}
 }
 
-// An agent that resolves the files but never concludes the merge leaves
-// MERGE_HEAD set and the index conflicted. Carrying that forward would publish
-// the reviewed head as if the integration had happened, so the step aborts the
-// merge and fails instead.
 func TestRebaseStep_MergeStrategyUnconcludedMergeIsAbortedAndFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
@@ -239,10 +223,6 @@ func TestRebaseStep_MergeStrategyUnconcludedMergeIsAbortedAndFails(t *testing.T)
 	}
 }
 
-// The reviewed head staying an ancestor is the point of the merge shape: the CI
-// step's continuity rule then holds by ancestry, with no patch-id or
-// content-based guess, so a later repair can be published rather than paying a
-// full revalidation cycle.
 func TestRebaseStep_MergeStrategyKeepsReviewedHeadAncestorForCIRepairContinuity(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, false)
@@ -272,8 +252,6 @@ func TestRebaseStep_MergeStrategyKeepsReviewedHeadAncestorForCIRepairContinuity(
 	}
 }
 
-// Publication after a merge must append, never rewrite: an open PR's head and a
-// review attestation bound to an exact SHA both depend on it.
 func TestRebaseStep_MergeStrategyPublishesAsAFastForwardWithoutForce(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, false)
@@ -301,9 +279,6 @@ func TestRebaseStep_MergeStrategyPublishesAsAFastForwardWithoutForce(t *testing.
 	}
 }
 
-// The flag off must leave the step exactly as it was, so an existing
-// installation sees no change from a version bump. Unset and an explicit
-// "rebase" must also mean the same thing.
 func TestRebaseStep_DefaultStrategyStillRebasesUnchanged(t *testing.T) {
 	t.Parallel()
 	shape := func(strategy string) (tree string, subjects string, parentCount int, reviewedHeadKept bool) {
@@ -341,8 +316,6 @@ func fixtureGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// runFixtureGit owns the fixture git environment for both callers and returns
-// the failure rather than deciding what it means.
 func runFixtureGit(dir string, args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -357,11 +330,6 @@ func runFixtureGit(dir string, args ...string) error {
 	return nil
 }
 
-// An agent can also end the conflict by abandoning it: `git merge --abort`
-// clears MERGE_HEAD and restores the reviewed head, so the unconcluded-merge
-// guard above sees a clean worktree and passes. Nothing was integrated, so the
-// step must still fail rather than carry the un-integrated head forward as if
-// the base had been merged in.
 func TestRebaseStep_MergeStrategyAbortedMergeFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
@@ -388,18 +356,10 @@ func TestRebaseStep_MergeStrategyAbortedMergeFails(t *testing.T) {
 	assertRestoredToReviewedHead(t, f.dir, f.headSHA)
 }
 
-// Ending the conflict by rebasing onto the target instead satisfies ancestry -
-// the target is in HEAD - while producing exactly the linear history merge mode
-// exists to avoid: the reviewed head is gone from the branch, so CI repair
-// continuity falls back to a guess and publication rewrites the open PR's head.
-// The step must fail rather than log a merge that never happened.
 func TestRebaseStep_MergeStrategyRebasedInsteadOfMergedFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
 
-	// The head the agent actually left is captured inside the turn, because the
-	// step restores the worktree off it before returning; the fixture-integrity
-	// assertions still have to be made against that head, not the restored one.
 	var rebasedHead string
 	ag := &mockAgent{
 		name: "test",
@@ -431,9 +391,6 @@ func TestRebaseStep_MergeStrategyRebasedInsteadOfMergedFails(t *testing.T) {
 	assertRestoredToReviewedHead(t, f.dir, f.headSHA)
 }
 
-// Nothing forbids the agent from committing again after concluding the merge -
-// a textual resolution routinely leaves a semantic one behind. The merge shape
-// is intact at that head, so the step must accept it.
 func TestRebaseStep_MergeStrategyFollowUpCommitAfterTheMergeIsAccepted(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
@@ -468,11 +425,6 @@ func TestRebaseStep_MergeStrategyFollowUpCommitAfterTheMergeIsAccepted(t *testin
 	}
 }
 
-// An agent can also abandon the merge and then commit something else entirely.
-// That keeps the reviewed head in the history and does move HEAD, so both the
-// moved-head and reviewed-head-ancestor conditions pass; only the target's own
-// ancestry catches it. Without that check the run would carry on having never
-// integrated the moved base.
 func TestRebaseStep_MergeStrategyUnrelatedCommitInsteadOfMergeFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
@@ -517,10 +469,6 @@ func TestRebaseStep_MergeStrategyUnrelatedCommitInsteadOfMergeFails(t *testing.T
 	assertRestoredToReviewedHead(t, f.dir, f.headSHA)
 }
 
-// Resetting hard onto the target is the third way to end the conflict without
-// merging: the target is in HEAD and HEAD has moved, so only the reviewed-head
-// ancestry check rejects it. It is also the shape that loses the most if the
-// invalid head is retained - the reviewed commits are not in it at all.
 func TestRebaseStep_MergeStrategyResetOntoTargetFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)
@@ -556,20 +504,11 @@ func TestRebaseStep_MergeStrategyResetOntoTargetFails(t *testing.T) {
 	assertRestoredToReviewedHead(t, f.dir, f.headSHA)
 }
 
-// fixtureGitAllowFail runs a fixture git command that is EXPECTED to exit
-// non-zero, which a conflicted rebase does.
 func fixtureGitAllowFail(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	_ = runFixtureGit(dir, args...)
 }
 
-// Abandoning the merge and rebasing onto the same target hits the same
-// conflict, so the rebase stops with rebase state in place. Git sets no
-// MERGE_HEAD for that, so the unconcluded-merge guard passes, and a reset there
-// moves HEAD while the interrupted rebase survives underneath it - a restore
-// reported as successful on a worktree still mid-rebase. The step must abort
-// the rebase and report the un-integrated target with the worktree genuinely
-// restored.
 func TestRebaseStep_MergeStrategyConflictedRebaseLeftInProgressIsAbortedAndFails(t *testing.T) {
 	t.Parallel()
 	f := newMergeFixture(t, true)

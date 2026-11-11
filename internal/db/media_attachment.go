@@ -5,17 +5,12 @@ import (
 	"errors"
 )
 
-// RunMediaAttachment is a GitHub user-attachment uploaded for one run's local
-// evidence file. Digest identifies the file contents, not merely its path.
 type RunMediaAttachment struct {
 	Path   string
 	Digest string
 	URL    string
 }
 
-// GetRunMediaAttachment returns the cached attachment for path only when its
-// content digest still matches. A file overwritten during repair is therefore
-// uploaded again rather than being rendered with stale evidence.
 func (d *DB) GetRunMediaAttachment(runID, path, digest string) (RunMediaAttachment, bool, error) {
 	var attachment RunMediaAttachment
 	err := d.sql.QueryRow(`SELECT path, digest, url FROM run_media_attachments WHERE run_id = ? AND path = ? AND digest = ?`, runID, path, digest).
@@ -29,8 +24,6 @@ func (d *DB) GetRunMediaAttachment(runID, path, digest string) (RunMediaAttachme
 	return attachment, true, nil
 }
 
-// UpsertRunMediaAttachment records the URL returned for the current contents
-// of path. A changed file at the same path replaces the stale cache entry.
 func (d *DB) UpsertRunMediaAttachment(runID string, attachment RunMediaAttachment) error {
 	ts := now()
 	_, err := d.sql.Exec(`

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// IntentCacheEntry is a cached summarization for a known agent session.
 type IntentCacheEntry struct {
 	CacheKey  string
 	Summary   string
@@ -15,7 +14,6 @@ type IntentCacheEntry struct {
 	CreatedAt int64
 }
 
-// GetIntentCache returns the cached summary for a key, or nil if absent.
 func (d *DB) GetIntentCache(key string) (*IntentCacheEntry, error) {
 	e := &IntentCacheEntry{}
 	err := d.sql.QueryRow(
@@ -30,7 +28,6 @@ func (d *DB) GetIntentCache(key string) (*IntentCacheEntry, error) {
 	return e, nil
 }
 
-// PutIntentCache inserts or replaces an intent cache entry.
 func (d *DB) PutIntentCache(e IntentCacheEntry) error {
 	if e.CreatedAt == 0 {
 		e.CreatedAt = now()
@@ -45,7 +42,6 @@ func (d *DB) PutIntentCache(e IntentCacheEntry) error {
 	return nil
 }
 
-// CleanupOldIntentCache deletes entries older than maxAge. Returns rows deleted.
 func (d *DB) CleanupOldIntentCache(maxAge time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-maxAge).Unix()
 	result, err := d.sql.Exec(`DELETE FROM intent_cache WHERE created_at < ?`, cutoff)

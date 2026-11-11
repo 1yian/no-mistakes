@@ -13,10 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestAnalyzerEvidenceFailuresFailPipelineJourney exercises the real gate
-// transport, native-agent adapter, and persisted run state. A native response
-// that cannot certify a pipeline phase must terminate the run instead of
-// producing an approval that AXI --yes could accept.
 func TestAnalyzerEvidenceFailuresFailPipelineJourney(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "analyzer-failure-gate.yaml")
 	content := `actions:

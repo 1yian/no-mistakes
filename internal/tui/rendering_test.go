@@ -80,7 +80,6 @@ func TestRenderFindings_GutterFixedWidth(t *testing.T) {
 
 	lines := strings.Split(got, "\n")
 
-	// Find the first finding line (has a checkbox).
 	var findingLines []string
 	for _, line := range lines {
 		if strings.Contains(line, "[x]") || strings.Contains(line, "[ ]") {
@@ -133,7 +132,6 @@ func TestRenderFindings_DescriptionClearsGutter(t *testing.T) {
 	got := stripANSI(content)
 
 	lines := strings.Split(got, "\n")
-	// Find the description line (follows the finding line with checkbox).
 	var descLine string
 	for i, line := range lines {
 		if strings.Contains(line, "[x]") && i+1 < len(lines) {
@@ -280,7 +278,6 @@ func TestModel_View_CIViewInBox(t *testing.T) {
 	}
 }
 
-// Spacing Rules: 1 blank line between sections, never more than 1.
 func TestModel_View_OneBlankLineBetweenSections(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)
@@ -329,7 +326,6 @@ func TestModel_View_OneBlankLineBetweenSections(t *testing.T) {
 	}
 }
 
-// Spacing between Pipeline and CI boxes should also have 1 blank line.
 func TestModel_View_OneBlankLineBetweenPipelineAndCI(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)
@@ -374,7 +370,6 @@ func TestModel_View_OneBlankLineBetweenPipelineAndCI(t *testing.T) {
 	}
 }
 
-// Diff stats should match DESIGN.md: "3 files  +42  -17" not "3 file(s) changed"
 func TestRenderDiff_StatsPluralization(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(termenv.ANSI)
@@ -449,8 +444,6 @@ func TestRenderFindings_BlankLineBetweenItems(t *testing.T) {
 }
 
 func TestRenderDiff_ScrollUpIndicator(t *testing.T) {
-	// When scrolled down (offset > 0) with lines remaining below,
-	// the bottom border should show an up arrow indicating lines above.
 	var b strings.Builder
 	b.WriteString("diff --git a/main.go b/main.go\n")
 	b.WriteString("--- a/main.go\n")
@@ -479,7 +472,6 @@ func TestRenderDiff_ScrollUpIndicator(t *testing.T) {
 }
 
 func TestRenderDiff_ScrollUpOnlyAtBottom(t *testing.T) {
-	// When scrolled to the very end, should show ↑ but not ↓.
 	var b strings.Builder
 	b.WriteString("diff --git a/main.go b/main.go\n")
 	b.WriteString("--- a/main.go\n")

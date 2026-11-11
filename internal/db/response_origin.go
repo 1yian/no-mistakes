@@ -6,9 +6,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// SetStepResponseOrigin records caller-supplied provenance for a gate response
-// stored on the step. Fix selections store their origin atomically on the
-// answered round.
 func (d *DB) SetStepResponseOrigin(stepID string, origin types.ResponseOrigin) error {
 	result, err := d.sql.Exec(`UPDATE step_results SET response_origin = ? WHERE id = ?`, origin.OrUnknown(), stepID)
 	if err != nil {

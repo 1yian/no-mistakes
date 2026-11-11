@@ -81,12 +81,6 @@ func TestScoreCandidateDoesNotLetFuzzyEarlierGoldStealExactLaterMatch(t *testing
 	}
 }
 
-// Both gold items match candidate 1 exactly by id, and only the first also has
-// a fuzzy (nearby-line) match on candidate 2. The tiered matcher this replaced
-// resolved the exact tier on its own, handed candidate 1 to the first gold, and
-// then had nothing left for the second - one match where two exist. A globally
-// optimal assignment gives candidate 1 to the gold that has no alternative and
-// covers the other fuzzily, with the same number of exact matches.
 func TestScoreCandidateRecoversMatchTheTieredMatcherLost(t *testing.T) {
 	labels := Labels{Findings: []FindingGold{
 		{
@@ -121,9 +115,6 @@ func TestScoreCandidateRecoversMatchTheTieredMatcherLost(t *testing.T) {
 	}
 }
 
-// The assignment must be the exact optimum, not a good heuristic, so it is
-// checked against exhaustive enumeration on random small weight matrices of
-// both orientations.
 func TestMaxWeightAssignmentMatchesBruteForceOptimum(t *testing.T) {
 	rng := rand.New(rand.NewSource(20260816))
 	for trial := 0; trial < 400; trial++ {

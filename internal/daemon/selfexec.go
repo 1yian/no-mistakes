@@ -36,13 +36,6 @@ func daemonStartTimeout() time.Duration {
 	return durationFromEnv("NM_TEST_DAEMON_START_TIMEOUT", fallback)
 }
 
-// daemonStopTimeout bounds how long waitForDaemonStop polls for a graceful
-// shutdown before falling back to killing the daemon by PID.
-// Windows gets a longer window: closing the loopback TCP listener used for
-// its named-pipe-less IPC transport (transport_windows.go) does not make
-// pending/racing connections fail as immediately as a Unix domain socket
-// unlink does, so the health check can keep reporting an ambiguous error
-// for longer after a graceful shutdown request has already succeeded.
 func daemonStopTimeout() time.Duration {
 	fallback := 5 * time.Second
 	if runtimeGOOS == "windows" {
@@ -67,25 +60,10 @@ func durationFromEnv(name string, fallback time.Duration) time.Duration {
 	return d
 }
 
-// Start installs or refreshes the managed daemon service when supported and
-// starts it, falling back to a detached explicit `daemon run --root` re-exec
-// when managed startup is unavailable or fails. Launch and readiness are
-// distinct: readiness requires a real IPC health response within the bounded
-// production startup budget.
-//
-// When the daemon is already running, Start refreshes the installed service
-// definition and reloads the service manager if the on-disk definition is
-// stale (e.g., after a binary upgrade that changed the plist/unit). This is
-// what lets users pick up env-var changes (see #143 for the PATH fix) with
-// a plain `daemon start` instead of a manual stop + start.
 func Start(p *paths.Paths) error {
 	return StartGuarded(p, nil)
 }
 
-// StartGuarded is Start, except that when a running daemon must be restarted
-// to pick up a changed service definition, beforeRestart runs first; an error
-// from it aborts the start before the definition is rewritten or the daemon
-// is stopped.
 func StartGuarded(p *paths.Paths, beforeRestart func() error) error {
 	if err := p.EnsureDirs(); err != nil {
 		return err
@@ -143,13 +121,6 @@ func StartGuarded(p *paths.Paths, beforeRestart func() error) error {
 	return fallbackErr
 }
 
-// reinstallManagedServiceIfChanged refreshes the managed daemon service and
-// reloads it through launchctl/systemctl when the on-disk service definition
-// differs from what the current binary would generate. Returns true when a
-// reload actually happened. Called from Start() so that `daemon start` after
-// a binary upgrade re-applies the new service definition without forcing
-// users to run `daemon restart` explicitly. No-op on Windows and when the
-// service manager is bypassed (i.e., under `go test`).
 func reinstallManagedServiceIfChanged(p *paths.Paths, beforeRestart func() error) (bool, error) {
 	if serviceManagerBypassed() {
 		return false, nil
@@ -175,11 +146,6 @@ func reinstallManagedServiceIfChanged(p *paths.Paths, beforeRestart func() error
 	}
 
 	existing, readErr := os.ReadFile(installPath)
-	// Inherit proxy and telemetry values already baked into the definition so an
-	// env-less `daemon start` does not render a no-proxy target, falsely detect
-	// drift, and reinstall - which would strip the proxy and re-break the daemon
-	// with "403 Request not allowed". This mirrors the executable inheritance
-	// below: prefer the current environment, fall back to what is on disk.
 	var inheritedProxyEnv [][2]string
 	if readErr == nil {
 		switch runtimeGOOS {
@@ -305,10 +271,6 @@ func stopManagedFallback(p *paths.Paths) error {
 	return fmt.Errorf("stop managed daemon before detached fallback: %w", err)
 }
 
-// waitForManagedServiceExit closes the bootout/stop race before a detached
-// fallback is launched. Health cannot prove exit for a child that never became
-// ready, so inspect processes by canonical root and fail closed if the owned
-// managed child survives the cleanup budget.
 func waitForManagedServiceExit(p *paths.Paths, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	wantRoot := canonicalRoot(p.Root())
@@ -345,9 +307,6 @@ func startDetachedDaemon(p *paths.Paths) error {
 	return launchDetachedDaemon(p, cmd)
 }
 
-// launchDetachedDaemon starts cmd as a daemon detached from this process, its
-// output appended to the bootstrap log, and waits until that exact child
-// answers on the daemon socket.
 func launchDetachedDaemon(p *paths.Paths, cmd *exec.Cmd) error {
 	logFile, err := os.OpenFile(p.DaemonBootstrapLog(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -543,7 +502,6 @@ func waitForProcessExit(pid int, timeout time.Duration) {
 	}
 }
 
-// IsRunning checks if the daemon is alive by sending a health check via IPC.
 func IsRunning(p *paths.Paths) (bool, error) {
 	return daemonHealthCheck(p)
 }
@@ -575,7 +533,6 @@ func daemonIsRunningViaIPC(p *paths.Paths) (bool, error) {
 	return result.Status == "ok", nil
 }
 
-// Stop sends a shutdown request to the running daemon and waits for it to exit.
 func Stop(p *paths.Paths) error {
 	instance := captureRunningDaemon(p)
 	if managed, err := stopManagedService(p); managed {
@@ -638,20 +595,11 @@ func stopDetachedDaemon(p *paths.Paths) error {
 	return waitForDaemonStop(p, instance)
 }
 
-// daemonInstance names the exact daemon process a stop is responsible for.
-// A zero value means no provable external process was captured, so callers
-// fall back to health-only stop confirmation.
 type daemonInstance struct {
 	pid       int
 	startedAt time.Time
 }
 
-// captureRunningDaemon best-effort identifies the live daemon process for this
-// root from the PID file, validated against the process's real start time so a
-// recycled PID cannot be mistaken for the daemon. It must be called before a
-// shutdown request, while the record still exists. An in-process daemon (test
-// harnesses driving RunWithResources in a goroutine) reports our own PID and
-// is deliberately not captured: it never exits as a process.
 func captureRunningDaemon(p *paths.Paths) daemonInstance {
 	record, err := readDaemonPIDFile(p.PIDFile())
 	if err != nil || record.PID <= 0 {
@@ -674,9 +622,6 @@ func captureRunningDaemon(p *paths.Paths) daemonInstance {
 	return daemonInstance{pid: record.PID, startedAt: startedAt}
 }
 
-// exited reports whether this instance is gone. A PID now owned by a different
-// process is gone. A zero instance has no process identity to inspect, so the
-// caller relies on the independent health check.
 func (i daemonInstance) exited() (bool, error) {
 	if i.pid <= 0 {
 		return true, nil
@@ -816,20 +761,6 @@ func daemonSocketAcceptingConnections(path string) (bool, error) {
 	return true, nil
 }
 
-// waitForDaemonStop waits until the daemon instance this stop is responsible
-// for is really gone, then clears its artifacts.
-//
-// Losing IPC health is necessary but NOT sufficient proof of exit. The daemon
-// closes its IPC listener at the START of shutdown, and closing a Unix
-// listener unlinks the socket, so the health check reports "not running"
-// while the process is still draining runs, closing the database, flushing
-// logs, and reaping its bootstrap log-sink child. The NM_HOME singleton lock
-// is an OS file lock the kernel releases only when the owning process
-// actually dies, so a stop that returned at "socket gone" handed the caller a
-// root whose lock was still held - and the very next `daemon start` (that is,
-// `daemon restart`) launched a child that failed acquireSingletonLock and
-// exited before readiness with status 1. Waiting for the captured instance to
-// exit is what makes "daemon stopped" mean the daemon's resources are free.
 func waitForDaemonStop(p *paths.Paths, instance daemonInstance) error {
 	deadline := time.Now().Add(daemonStopTimeout())
 	for time.Now().Before(deadline) {
@@ -887,13 +818,6 @@ func waitForDaemonStop(p *paths.Paths, instance daemonInstance) error {
 	return fmt.Errorf("daemon pid %d still running after kill", pid)
 }
 
-// clearDeadDaemonArtifacts removes the socket and PID file of a daemon that
-// is provably gone: the PID file names a process that no longer exists or
-// whose start time no longer matches, and no process holds the NM_HOME
-// singleton lock. A live or unverifiable PID leaves everything in place. The
-// lock is held only to re-check the PID file and remove the artifacts, so a
-// daemon that is starting up is neither blocked by the inspection nor loses
-// the socket it just bound.
 func clearDeadDaemonArtifacts(p *paths.Paths) (bool, error) {
 	data, err := os.ReadFile(p.PIDFile())
 	if err != nil {
@@ -966,7 +890,6 @@ func upsertEnv(env []string, key, value string) []string {
 	return result
 }
 
-// EnsureDaemon starts the daemon if it's not already running.
 func EnsureDaemon(p *paths.Paths) error {
 	if err := ipc.CheckEndpointPath(p.Socket()); err != nil {
 		return err
@@ -981,7 +904,6 @@ func EnsureDaemon(p *paths.Paths) error {
 	return daemonStart(p)
 }
 
-// ReadPID reads the daemon PID from the PID file.
 func ReadPID(p *paths.Paths) (int, error) {
 	record, err := readDaemonPIDFile(p.PIDFile())
 	if err != nil {

@@ -34,10 +34,6 @@ func questionFindings(t *testing.T, findingsJSON string) []types.Finding {
 	return out
 }
 
-// enableReviewConversation turns review.conversation on. Every test below has
-// to call it, which is itself part of the contract: the setting is off by
-// default, and TestReviewStep_ConversationOffIsTodaysReview proves what a run
-// that never calls it gets.
 func enableReviewConversation(cfg *config.Config) {
 	cfg.Review.Conversation = true
 }
@@ -47,13 +43,6 @@ func withReviewConversation(sctx *pipeline.StepContext) *pipeline.StepContext {
 	return sctx
 }
 
-// appendAgentQuestionLine appends one verbatim questions.ndjson line, standing
-// in for the reviewer's own file tools. That is the only writer this file has
-// in production - internal/reviewqa deliberately owns no question writer - so a
-// fixture must supply the raw shape the agent emits, including the fields its
-// prompt's worked example leaves out. It returns an error rather than taking
-// *testing.T so it can be used inside a mock agent's own run function, which
-// signals failure by returning one.
 func appendAgentQuestionLine(dir, line string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -67,11 +56,6 @@ func appendAgentQuestionLine(dir, line string) error {
 	return err
 }
 
-// TestReviewStep_QuestionEmittedMidTurnParksInWaitingOnAnswers proves the
-// whole point of emitting questions while the reviewer works: the reviewer
-// finishes the pass it CAN do, the question it could not settle lands in the
-// run's conversation file, and the step parks on it as an ask-user finding
-// rather than approving the head with an open question.
 func TestReviewStep_QuestionEmittedMidTurnParksInWaitingOnAnswers(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -138,9 +122,6 @@ func TestReviewStep_QuestionEmittedMidTurnParksInWaitingOnAnswers(t *testing.T) 
 	}
 }
 
-// TestReviewStep_RetractedQuestionDoesNotPark covers the reviewer settling a
-// question itself after asking it. A withdrawal must cost nothing: no park, no
-// finding, no answer required.
 func TestReviewStep_RetractedQuestionDoesNotPark(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -172,10 +153,6 @@ func TestReviewStep_RetractedQuestionDoesNotPark(t *testing.T) {
 	}
 }
 
-// TestReviewStep_AnswersResumeTheSameSessionAndFinalize is the conversational
-// half of the contract: the answer reaches the SAME reviewer session, which
-// finishes the pass it paused instead of re-reading the diff from scratch, and
-// the answer is durably recorded for the next cold reviewer.
 func TestReviewStep_AnswersResumeTheSameSessionAndFinalize(t *testing.T) {
 	t.Parallel()
 	turn := 0
@@ -274,17 +251,9 @@ func TestReviewStep_AnswersResumeTheSameSessionAndFinalize(t *testing.T) {
 	}
 }
 
-// TestReviewStep_ParkedWaitDoesNotCountAgainstTheReviewAgentTimeout pins the
-// property that makes waiting-on-answers safe: the agent turn ENDS before the
-// step parks, so the finalize turn is a fresh invocation with a fresh
-// review_agent_timeout. A park longer than the whole budget must not expire
-// the review.
 func TestReviewStep_ParkedWaitDoesNotCountAgainstTheReviewAgentTimeout(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
-	// Each invocation's deadline is recorded against the real clock at call
-	// time: the budget starts when the turn starts, so a turn that sees its
-	// full silent budget ahead of it has not been charged for anything before it.
 	var remaining []time.Duration
 	var convDir string
 	turn := 0
@@ -338,10 +307,6 @@ func TestReviewStep_ParkedWaitDoesNotCountAgainstTheReviewAgentTimeout(t *testin
 	}
 }
 
-// TestReviewStep_SettledQuestionReachesTheNextColdReviewer covers item 4: a
-// mid-turn answer is not a gate response, so it has to be persisted somewhere
-// the next COLD reviewer reads - including a reviewer in a later run, which is
-// what an author's fix push produces.
 func TestReviewStep_SettledQuestionReachesTheNextColdReviewer(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -376,16 +341,6 @@ func TestReviewStep_SettledQuestionReachesTheNextColdReviewer(t *testing.T) {
 	}
 }
 
-// TestReviewStep_SupersedeCarriesThePreviousRunsReviewRounds covers item 7.
-// With the change author applying review fixes, the fix arrives as a push that
-// supersedes the parked run, so the new run's review step starts with no round
-// history at all - the previous run's findings and fix summaries have to travel
-// explicitly or the cold reviewer cannot tell a conversation ever happened.
-//
-// The channel exists for the conversation, so it is off with it: the off case
-// is asserted here rather than left implied, because this section reaches the
-// review prompt without any question being asked and would otherwise be the
-// one part of the feature a repository gets without opting in.
 func TestReviewStep_SupersedeCarriesThePreviousRunsReviewRounds(t *testing.T) {
 	t.Parallel()
 	t.Run("conversation on", func(t *testing.T) {
@@ -452,8 +407,6 @@ func assertSupersedeSection(t *testing.T, conversation bool) {
 	}
 }
 
-// TestBuildReviewConversationSection covers item 9: the PR body records what
-// was asked, what was answered, and by whom.
 func TestBuildReviewConversationSection(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -526,13 +479,8 @@ func TestPublishedConversationTextFlattensAndBounds(t *testing.T) {
 	}
 }
 
-// TestPublishedConversationTextBoundsRunesNotBytes puts a multi-byte rune
-// astride the bound, which is what ordinary prose does - a typographic quote,
-// an en dash, an ellipsis. A byte slice cuts that rune in half and publishes
-// invalid UTF-8 into the PR body, and reports a byte count as "chars".
 func TestPublishedConversationTextBoundsRunesNotBytes(t *testing.T) {
 	t.Parallel()
-	// One dash short of the bound, so the em dash itself straddles it.
 	const runeCount = maxPublishedConversationChars + 50
 	text := strings.Repeat("a", maxPublishedConversationChars-1) + strings.Repeat("—", runeCount-(maxPublishedConversationChars-1))
 
@@ -563,8 +511,6 @@ func mustParseFindings(t *testing.T, raw string) types.Findings {
 	return parsed
 }
 
-// deadlineRecordingAgent hands each invocation's context to the test so a
-// per-invocation deadline can be asserted.
 type deadlineRecordingAgent struct {
 	onRun func(context.Context, agent.RunOpts) (*agent.Result, error)
 }
@@ -575,8 +521,6 @@ func (a *deadlineRecordingAgent) Run(ctx context.Context, opts agent.RunOpts) (*
 	return a.onRun(ctx, opts)
 }
 
-// newStaticReviewAgent returns an agent that answers every review turn with
-// the same findings JSON and remembers the last prompt it was given.
 func newStaticReviewAgent(output string) *mockAgent {
 	m := &mockAgent{}
 	m.runFn = func(_ context.Context, _ agent.RunOpts) (*agent.Result, error) {
@@ -585,7 +529,6 @@ func newStaticReviewAgent(output string) *mockAgent {
 	return m
 }
 
-// lastReviewPrompt is the prompt of the agent's most recent invocation.
 func lastReviewPrompt(t *testing.T, m *mockAgent) string {
 	t.Helper()
 	if len(m.calls) == 0 {
@@ -594,11 +537,6 @@ func lastReviewPrompt(t *testing.T, m *mockAgent) string {
 	return m.calls[len(m.calls)-1].Prompt
 }
 
-// TestReviewStep_AnsweringARereviewQuestionDoesNotReRunTheFixer covers the
-// sharp case of a question asked by a rereview INSIDE a fix round: that
-// round's fixes are already applied and committed, so replaying the round to
-// deliver the answer must replay its review turn only. Running the fixer again
-// would re-apply the same findings to already-fixed code.
 func TestReviewStep_AnsweringARereviewQuestionDoesNotReRunTheFixer(t *testing.T) {
 	t.Parallel()
 	reviewTurn := 0
@@ -670,13 +608,6 @@ func TestReviewStep_AnsweringARereviewQuestionDoesNotReRunTheFixer(t *testing.T)
 	}
 }
 
-// TestReviewStep_OnlyAFinalizeTurnResumesTheReviewerSession pins the rule that
-// keeps the independence guarantee whole: a stored reviewer identity may be
-// resumed by the finalize turn of the pass that created it, and by nothing
-// else. The case that would otherwise violate it without any fix round is a
-// restart back to review inside the same run (a CI repair's RestartFrom), which
-// re-enters this step on a NEW head while RunSessions still holds the identity
-// of the session that reviewed the old one.
 func TestReviewStep_OnlyAFinalizeTurnResumesTheReviewerSession(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -729,17 +660,6 @@ func TestReviewStep_OnlyAFinalizeTurnResumesTheReviewerSession(t *testing.T) {
 	}
 }
 
-// TestReviewStep_ConversationOffIsTodaysReview is the opt-in contract: with
-// review.conversation unset - the default for every repository that has not
-// asked for the conversation - the review step must behave exactly as it did
-// before this feature existed.
-//
-// It is asserted as an equality against the same step run with the setting on,
-// not as a list of absent strings, so a future part of the protocol that
-// forgets its gate fails here rather than passing a substring check nobody
-// updated. The off prompt must be the on prompt with the protocol removed and
-// nothing else, and the off run must leave no conversation on disk, mint no
-// reviewer session, and produce no question findings.
 func TestReviewStep_ConversationOffIsTodaysReview(t *testing.T) {
 	t.Parallel()
 	run := func(t *testing.T, on bool) (*pipeline.StepContext, *mockAgent, *pipeline.StepOutcome) {
@@ -830,22 +750,6 @@ func TestReviewStep_ConversationOffIsTodaysReview(t *testing.T) {
 	}
 }
 
-// A conversation left on disk by a run made when the setting was on must not
-// reach a later run made with it off: the gate is the setting, not the absence
-// of files. Without this, turning the conversation back off would still park
-// the review on a stale question nobody can answer any more, because
-// `axi answer` refuses once the setting is off.
-// TestReviewStep_FinalizeTurnDeliversAnswersEvenWithTheSettingOff is the test an
-// earlier attempt at this did not have, and its absence is why that attempt
-// shipped broken: it asserted the answer was ACCEPTED, never that it ARRIVED.
-//
-// review.conversation is trusted-default-branch-only and is re-resolved on
-// recovery from the current default-branch tip, so a maintainer who turns it
-// off - or a trusted-config fetch that fails, which resolves the same way -
-// between the ask and the answer used to leave the finalize turn running a
-// plain review that had never heard of the question, while the CLI reported
-// the reviewer had resumed with the answer. Opening the write side alone is
-// worse than refusing; both sides key on the conversation being on disk.
 func TestReviewStep_FinalizeTurnDeliversAnswersEvenWithTheSettingOff(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -855,9 +759,6 @@ func TestReviewStep_FinalizeTurnDeliversAnswersEvenWithTheSettingOff(t *testing.
 	// Written exactly as the ENABLED path writes it, then the setting is off:
 	// the files on disk are the proof the channel was open when it was asked.
 	convDir := reviewqa.Dir(sctx.EvidenceDir)
-	// Sentinel tokens, not prose: the base review prompt template already
-	// contains "keeps the component and hardens it", so an assertion on a word
-	// like "keep" is true whether or not the answer reached the turn.
 	const (
 		questionSentinel = "q1-question-sentinel-v1"
 		answerSentinel   = "q1-answer-sentinel-keep-v1"
@@ -939,14 +840,6 @@ func TestReviewStep_ConversationOffIgnoresQuestionsAlreadyOnDisk(t *testing.T) {
 	}
 }
 
-// TestUnreadableQuestionHistoryParksEvenWithNothingOpen covers the door the
-// settle rule does not close. The reader refusing to settle anything keeps an
-// answer from certifying a question it cannot bind, but it does not make the
-// step park - and if the only real question is in the prefix the line cap
-// dropped while every surviving line is one the reader rejects, nothing is
-// open, no question finding is emitted, the omission marker is not emitted
-// either (its id list comes from the open set), and the review completes clean
-// with a major question silently discarded.
 func TestUnreadableQuestionHistoryParksEvenWithNothingOpen(t *testing.T) {
 	t.Parallel()
 	conv := reviewqa.Conversation{QuestionsIncomplete: true}
@@ -980,15 +873,6 @@ func TestUnreadableQuestionHistoryParksEvenWithNothingOpen(t *testing.T) {
 	}
 }
 
-// TestUnreadableQuestionHistoryReplacesTheAnswerableRows covers the other half
-// of that condition, and it is the one an appending reviewer actually reaches:
-// the line cap drops a question line while the retained window still holds open
-// questions. Every "question-<id>" row ends in "Answer it with: no-mistakes axi
-// answer --question <id>", and RunManager.HandleAnswerReviewQuestion refuses
-// every answer for a conversation whose history is incomplete, so each row
-// instructed a command guaranteed to fail. One marker replaces them all, and it
-// names the ids it is standing in for so the loss is bounded rather than
-// silent.
 func TestUnreadableQuestionHistoryReplacesTheAnswerableRows(t *testing.T) {
 	t.Parallel()
 	conv := reviewqa.Conversation{
@@ -1026,16 +910,6 @@ func TestUnreadableQuestionHistoryReplacesTheAnswerableRows(t *testing.T) {
 	}
 }
 
-// TestOpenReviewQuestionFindingsAreBounded covers the channel the questions
-// borrow rather than own. The findings payload rides the IPC event stream, and
-// one frame over the transport limit kills the whole subscription - so an
-// unbounded set of question findings could take out every attached TUI and axi
-// subscription mid-run, leaving the operator unable to see or answer the gate
-// that is blocking the run.
-//
-// reviewqa's own bounds do not contain this: 2000 accepted lines are still a
-// "bounded" conversation while being far over the frame once each becomes a
-// finding.
 func TestOpenReviewQuestionFindingsAreBounded(t *testing.T) {
 	t.Parallel()
 	var conv reviewqa.Conversation
@@ -1092,8 +966,6 @@ func TestOpenReviewQuestionFindingsAreBounded(t *testing.T) {
 	}
 }
 
-// The prompt sections carry the same set and had the same shape. Every sibling
-// prompt channel in this package is bounded, so these were the outliers.
 func TestReviewQuestionPromptSectionsAreBounded(t *testing.T) {
 	t.Parallel()
 	var conv reviewqa.Conversation
@@ -1131,17 +1003,6 @@ func TestReviewQuestionPromptSectionsAreBounded(t *testing.T) {
 	}
 }
 
-// TestRetractedQuestionIsNeitherPersistedNorRenderedTwice drives both consumers
-// of a settled ask for the sequence the reviewer's own protocol invites: it
-// emits q1, keeps working, settles q1 itself and withdraws it, and an operator
-// who saw q1 answers it in that window.
-//
-// The answer is stamped with q1's ask ordinal - a retraction adds no ask and
-// removes none - so the withdrawn question used to read as settled: it was
-// written to review_questions, where it reaches every later reviewer on this
-// branch as a decision not to re-raise and nothing deletes it, and the PR body
-// rendered the same question twice, once as an answered pair and once as
-// withdrawn.
 func TestRetractedQuestionIsNeitherPersistedNorRenderedTwice(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1190,12 +1051,6 @@ func TestRetractedQuestionIsNeitherPersistedNorRenderedTwice(t *testing.T) {
 	}
 }
 
-// TestSupersededSectionDoesNotClaimThePreviousRunParked covers the ordinary
-// second push: run 1 COMPLETED, and the author then pushed more commits. The
-// selector is deliberately unfiltered by status, so those rounds still travel -
-// they are what stops this reviewer re-raising a settled decision - but the
-// prefix must not tell it run 1 parked, that findings were fixed, or to judge
-// whether a claimed fix holds. None of that happened.
 func TestSupersededSectionDoesNotClaimThePreviousRunParked(t *testing.T) {
 	t.Parallel()
 	mock := &sessionMockAgent{}
@@ -1245,18 +1100,6 @@ func TestSupersededSectionDoesNotClaimThePreviousRunParked(t *testing.T) {
 	}
 }
 
-// TestReviewPromptNamesTheConversationDirectoryAsABoundaryException covers the
-// conflict inside the emitted prompt, which is the generated interface the
-// reviewer actually receives. agent.WithSteering prepends a workspace boundary
-// to every prompt whose only out-of-worktree allowance is test evidence files
-// asked for by a testing prompt - neither qualifier holds for an ndjson
-// question log in a review turn - and the protocol section then tells the
-// reviewer to create that directory and append to it.
-//
-// A reviewer resolving that toward the boundary creates nothing, and a missing
-// directory reads as an empty conversation by design: no question findings, no
-// park, and the feature degrades to the old monologue with nothing logged. So
-// the protocol section has to name the exception itself.
 func TestReviewPromptNamesTheConversationDirectoryAsABoundaryException(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1276,11 +1119,6 @@ func TestReviewPromptNamesTheConversationDirectoryAsABoundaryException(t *testin
 	if !strings.Contains(prompt, "EXPLICIT exception to the workspace boundary") {
 		t.Fatalf("the protocol section does not authorize the write the boundary forbids:\n%s", prompt)
 	}
-	// The exception has to name the directory it covers, or it reads as a
-	// general licence rather than one path. The assertion is against that
-	// SENTENCE: the channel bullet one line above names the directory too, so
-	// anything that looks at the surrounding prompt passes whether or not the
-	// exception itself is scoped to a path.
 	var exception string
 	for _, line := range strings.Split(prompt, "\n") {
 		if strings.Contains(line, "EXPLICIT exception to the workspace boundary") {
@@ -1293,12 +1131,6 @@ func TestReviewPromptNamesTheConversationDirectoryAsABoundaryException(t *testin
 	}
 }
 
-// TestReviewStep_UnreadableConversationFailsTheReview pins the read side of the
-// same fail-closed rule the answer path already has. Only the questions the
-// load returns become findings, so swallowing a read failure produced no open
-// question, no park, and a review that completed as if the reviewer had asked
-// nothing. Absence is still absence: a run whose reviewer asked nothing never
-// creates the directory and must complete normally.
 func TestReviewStep_UnreadableConversationFailsTheReview(t *testing.T) {
 	t.Parallel()
 	t.Run("unreadable", func(t *testing.T) {
@@ -1342,22 +1174,6 @@ func TestReviewStep_UnreadableConversationFailsTheReview(t *testing.T) {
 	})
 }
 
-// TestReviewStep_FinalizeTurnCanActuallyRetractWhatItCarried crosses the one
-// boundary the carry-forward regressions in internal/pipeline never touch:
-// they set StepOutcome.WithdrawnFindings on a fake step, so they pass just as
-// well when the review agent is never offered the field at all.
-//
-// The finalize prompt instructs the turn to name a disproved carried finding in
-// withdrawn_findings, and that retraction is the ONLY way such a finding leaves
-// the outstanding set. If the JSON schema handed to the same turn does not
-// declare the property, the instruction is unfollowable - decisively so under
-// the codex adapter, which injects additionalProperties:false into every object
-// of the review schema - and the carried set is re-injected verbatim on every
-// answer round, leaving the finding removable only by approving over it.
-//
-// So this drives a real finalize turn and asserts both halves: the schema the
-// step hands the agent declares the property, and a payload using it reaches
-// the outcome the executor reads.
 func TestReviewStep_FinalizeTurnCanActuallyRetractWhatItCarried(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1384,8 +1200,6 @@ func TestReviewStep_FinalizeTurnCanActuallyRetractWhatItCarried(t *testing.T) {
 		t.Fatalf("finalize turn: %v", err)
 	}
 
-	// The schema is a machine-consumed contract with the agent, so it is read
-	// as one: decoded and interrogated for meaning, never grepped.
 	var schema struct {
 		Properties map[string]struct {
 			Type  string `json:"type"`
@@ -1425,9 +1239,6 @@ func TestReviewStep_FinalizeTurnCanActuallyRetractWhatItCarried(t *testing.T) {
 	}
 }
 
-// schemaPropertyNames decodes the JSON schema a step handed the agent - the
-// generated contract that decides which fields the turn may emit at all - and
-// returns its declared top-level property names.
 func schemaPropertyNames(t *testing.T, raw json.RawMessage) map[string]struct{} {
 	t.Helper()
 	if len(raw) == 0 {
@@ -1446,12 +1257,6 @@ func schemaPropertyNames(t *testing.T, raw json.RawMessage) map[string]struct{} 
 	return names
 }
 
-// TestReviewStep_OnlyAFinalizeTurnIsOfferedTheRetractionProperty is the other
-// half of the off-state schema guarantee: withholding the property must not
-// withhold it from the one turn that needs it. The finalize prompt instructs
-// the turn to name a disproved carried finding in withdrawn_findings, and the
-// executor applies that list only on such a turn, so the contract and the
-// instruction have to arrive together or the retraction path is unreachable.
 func TestReviewStep_OnlyAFinalizeTurnIsOfferedTheRetractionProperty(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

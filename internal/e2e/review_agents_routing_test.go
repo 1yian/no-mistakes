@@ -12,21 +12,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// review-loop role markers. These substrings identify which pipeline duty a
-// captured agent invocation served, by matching the real prompt the running
-// binary issued (not by inspecting source): the initial review, the fixer's
-// review-fix turn, and the post-fix rereview.
 const (
 	reviewTurnMarker   = "Review the code changes and return structured findings"
 	fixTurnMarker      = "Previous review findings to address"
 	rereviewTurnMarker = "Previous rounds for this step"
 )
 
-// writeReviewAgentsRoutingScenario scripts the fake agent so the review loop
-// exercises all three roles in one run: the initial review reports a single
-// blocking finding (forcing a fix round when the operator responds "fix"), the
-// fixer turn resolves it, and the rereview comes back clean. Every other step
-// gets the clean catch-all so push completes.
 func writeReviewAgentsRoutingScenario(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "review-agents-routing-scenario.yaml")
@@ -91,18 +82,6 @@ func writeReviewAgentsRoutingScenario(t *testing.T) string {
 	return path
 }
 
-// TestReviewAgentsRouteIndependentProfilesOnRealBinary drives the real
-// no-mistakes binary end to end (init -> git push -> daemon pipeline) and
-// proves the review loop routes each role to its own operator-configured
-// harness profile, while every non-review step keeps the default profile.
-//
-// The three profiles are distinguished by unique --model argv values captured
-// from the real agent subprocess: the reviewer and the post-fix rereviewer both
-// carry the reviewer model, the fixer's review-fix turn carries the fixer
-// model, and document/test/lint carry the default model. Before the run-start
-// wiring fix, a normally-started (push-triggered) run built its agent inline and
-// never applied the review-role router, so every review-loop turn ran on the
-// default profile; this test fails in that world.
 func TestReviewAgentsRouteIndependentProfilesOnRealBinary(t *testing.T) {
 	const (
 		defaultModel  = "default-sonnet-e2e"
@@ -208,8 +187,6 @@ func TestReviewAgentsRouteIndependentProfilesOnRealBinary(t *testing.T) {
 	assertNoResume(t, "post-fix rereview", rereview.Args)
 }
 
-// assertNoResume fails if args carries a session-resume flag, proving the turn
-// ran session-free.
 func assertNoResume(t *testing.T, role string, args []string) {
 	t.Helper()
 	for _, arg := range args {
@@ -219,7 +196,6 @@ func assertNoResume(t *testing.T, role string, args []string) {
 	}
 }
 
-// modelArg returns the --model value from a captured argv, or "<none>".
 func modelArg(args []string) string {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == "--model" {
@@ -229,12 +205,6 @@ func modelArg(args []string) string {
 	return "<none>"
 }
 
-// TestPushedRepoConfigCannotSelectReviewAgent is the adversarial security case:
-// a contributor's pushed branch ships a .no-mistakes.yaml that tries to point
-// the reviewer at an attacker-chosen model. review_agents is global-only, so the
-// real binary must ignore the pushed selection and keep the operator's reviewer
-// model. Driven end to end against the launched daemon: the captured review
-// subprocess argv carries the operator model and never the attacker model.
 func TestPushedRepoConfigCannotSelectReviewAgent(t *testing.T) {
 	const (
 		operatorModel = "operator-reviewer-e2e"
@@ -283,8 +253,6 @@ func TestPushedRepoConfigCannotSelectReviewAgent(t *testing.T) {
 	assertNotModelArg(t, "reviewer", review.Args, attackerModel)
 }
 
-// firstInvocationMatching returns the first captured invocation whose prompt
-// satisfies pred, or nil.
 func firstInvocationMatching(invs []Invocation, pred func(prompt string) bool) *Invocation {
 	for i := range invs {
 		if pred(invs[i].Prompt) {
@@ -294,8 +262,6 @@ func firstInvocationMatching(invs []Invocation, pred func(prompt string) bool) *
 	return nil
 }
 
-// assertModelArg fails unless args contains "--model want" as an adjacent flag
-// and value pair, proving the running binary passed exactly that model.
 func assertModelArg(t *testing.T, role string, args []string, want string) {
 	t.Helper()
 	for i := 0; i+1 < len(args); i++ {
@@ -306,8 +272,6 @@ func assertModelArg(t *testing.T, role string, args []string, want string) {
 	t.Fatalf("%s: argv missing --model %q; args=%v", role, want, args)
 }
 
-// assertNotModelArg fails if any of the unwanted model values appears anywhere
-// in args, proving no other role's profile leaked into this turn.
 func assertNotModelArg(t *testing.T, role string, args []string, unwanted ...string) {
 	t.Helper()
 	for _, arg := range args {

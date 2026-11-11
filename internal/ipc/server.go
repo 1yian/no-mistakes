@@ -11,23 +11,12 @@ import (
 	"time"
 )
 
-// HandlerFunc processes a JSON-RPC request and returns a result or error.
 type HandlerFunc func(ctx context.Context, params json.RawMessage) (interface{}, error)
 
-// StreamFunc owns a prepared streaming connection. send writes a JSON object;
-// the function should block until streaming is complete and return when send
-// reports a disconnected client.
 type StreamFunc func(send func(interface{}) error) error
 
-// StreamHandlerFunc prepares a stream before the server acknowledges the
-// subscription. This closes the subscribe-then-reconcile race: callers cannot
-// perform their first reconciliation until the handler has registered its
-// event source. The returned StreamFunc runs after the acknowledgement;
-// preparation resources must also be released when ctx is cancelled because
-// an acknowledgement write can fail before StreamFunc starts.
 type StreamHandlerFunc func(ctx context.Context, params json.RawMessage) (StreamFunc, error)
 
-// Server listens on an IPC endpoint and dispatches JSON-RPC requests.
 type Server struct {
 	mu             sync.RWMutex
 	handlers       map[string]HandlerFunc
@@ -38,7 +27,6 @@ type Server struct {
 	closeOnce      sync.Once
 }
 
-// NewServer creates a new IPC server.
 func NewServer() *Server {
 	return &Server{
 		handlers:       make(map[string]HandlerFunc),
@@ -47,26 +35,18 @@ func NewServer() *Server {
 	}
 }
 
-// Handle registers a handler for a JSON-RPC method.
 func (s *Server) Handle(method string, fn HandlerFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers[method] = fn
 }
 
-// HandleStream registers a streaming handler for a JSON-RPC method.
-// When this method is called, the server sends an initial OK response,
-// then hands the connection to the handler for streaming. The connection
-// closes when the handler returns.
 func (s *Server) HandleStream(method string, fn StreamHandlerFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.streamHandlers[method] = fn
 }
 
-// Listen binds the IPC endpoint without starting the accept loop. It lets the
-// daemon measure bind separately, then start serving and prove real health
-// before announcing readiness.
 func (s *Server) Listen(socketPath string) error {
 	ln, err := listen(socketPath)
 	if err != nil {
@@ -88,8 +68,6 @@ func (s *Server) Listen(socketPath string) error {
 	return nil
 }
 
-// Serve starts listening on the given IPC endpoint path. It blocks until
-// Close is called, then returns nil.
 func (s *Server) Serve(socketPath string) error {
 	if err := s.Listen(socketPath); err != nil {
 		return err
@@ -97,7 +75,6 @@ func (s *Server) Serve(socketPath string) error {
 	return s.ServeReady()
 }
 
-// ServeReady accepts requests from an endpoint already bound by Listen.
 func (s *Server) ServeReady() error {
 	s.mu.RLock()
 	ln := s.listener
@@ -131,16 +108,12 @@ func (s *Server) ServeReady() error {
 	}
 }
 
-// Close gracefully shuts down the server.
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.done)
 	})
 }
 
-// CloseListener closes the underlying listener without signaling server
-// shutdown. This causes Accept to return net.ErrClosed, which the server
-// detects and exits cleanly.
 func (s *Server) CloseListener() {
 	s.mu.RLock()
 	ln := s.listener
@@ -237,10 +210,6 @@ func (s *Server) handleConn(conn net.Conn) {
 
 type requestDeadlineContextKey struct{}
 
-// RequestDeadline returns the client-side IPC deadline carried by a request.
-// It is metadata rather than the handler's cancellation deadline: an ordinary
-// slow RPC must still be classified by the client's read deadline, while a
-// state-changing operation may choose a shorter domain-specific bound.
 func RequestDeadline(ctx context.Context) (time.Time, bool) {
 	deadline, ok := ctx.Value(requestDeadlineContextKey{}).(time.Time)
 	return deadline, ok
@@ -285,10 +254,6 @@ func (s *Server) dispatch(ctx context.Context, req Request) *Response {
 	return resp
 }
 
-// readOnlyMethod is the single request-log policy for successful RPCs that
-// only inspect daemon state. They can be called by health checks, dashboards,
-// and recovery heartbeats without amplifying the lifecycle log. Failed reads
-// still take the WARN path above.
 func readOnlyMethod(method string) bool {
 	switch method {
 	case MethodHealth, MethodProbeOmitIntent, MethodProbeRunPRText, MethodGetRun, MethodGetStepDiff, MethodGetRuns, MethodGetRunsForHead, MethodGetActiveRun, MethodGateContext, MethodAdmitPush:

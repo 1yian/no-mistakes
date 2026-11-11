@@ -19,22 +19,15 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// driveCI executes the CI step the way the executor does: an observation,
-// then one fix round per auto-fix observation while auto_fix.ci allows.
 func driveCI(t *testing.T, step *CIStep, sctx *pipeline.StepContext) (*pipeline.StepOutcome, error) {
 	t.Helper()
 	return stepstest.ExecuteWithAutoFix(t, step, sctx, 0)
 }
 
-// ciGateFindingsJSON is the findings a human's fix selection hands back for
-// the named failing checks.
 func ciGateFindingsJSON(names ...string) string {
 	return stepstest.CIGateFindingsJSON(names...)
 }
 
-// ciTargetsFor builds the fix targets a CI fix round would receive for the
-// named failing checks and an optional merge conflict, the way the executor
-// hands them over as the previous observation's auto-fix findings.
 func ciTargetsFor(names []string, mergeConflict bool) ciFixTargets {
 	findings := Findings{Summary: "CI issues"}
 	for i, name := range names {
@@ -67,8 +60,6 @@ func ciTargetsFor(names []string, mergeConflict bool) ciFixTargets {
 	return targets
 }
 
-// The classifier reads provider structure only. Every row here is one kind of
-// settled issue and the action the executor's shared machinery must see.
 func TestCIObservationFindings_ClassifiesEachIssueByProviderStructure(t *testing.T) {
 	t.Parallel()
 	findings := ciObservationFindings(ciIssues{
@@ -174,8 +165,6 @@ func TestCIObservationFindings_PreservesSameNamedCheckIdentityAndClassification(
 	}
 }
 
-// A red review-bot check with no unresolved comment still needs a decision; a
-// bot that left more comments than one gate can carry is summarized.
 func TestReviewBotFindings_BoundsAndEmptyCase(t *testing.T) {
 	t.Parallel()
 	check := scm.Check{Name: "Greptile Review", Bucket: scm.CheckBucketFail, App: "greptile-apps", Link: "https://greptile.com/"}
@@ -300,9 +289,6 @@ func TestCIRepairParkOutcome_RelabelsEveryFindingAskUser(t *testing.T) {
 	}
 }
 
-// The first concrete case of the findings model: a red Greptile check is the
-// bot's opinion, not a verdict, so it parks as ask-user findings anchored to
-// each comment and never spends an auto_fix.ci round, even with budget left.
 func TestCIStep_GreptileOnlyRedParksAsAskUserAndSpendsNoAutoFixRound(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -371,9 +357,6 @@ func TestCIStep_GreptileOnlyRedParksAsAskUserAndSpendsNoAutoFixRound(t *testing.
 	}
 }
 
-// A real job failure next to a red review-bot check: only the job failure is
-// handed to the fix round, and the round still sees the bot's comments as
-// untrusted context, exactly as before.
 func TestCIStep_MixedGreptileAndTestFailureRoutesOnlyTheTestToAutoFix(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -463,9 +446,6 @@ func TestCIStep_MixedGreptileAndTestFailureRoutesOnlyTheTestToAutoFix(t *testing
 	}
 }
 
-// A published repair keeps every cost guardrail: one agent round, one push,
-// the step reports it is monitoring again, and the next poll that still
-// shows the repaired check waits for the provider instead of re-escalating.
 func TestCIResumedRepairSnapshotsSelectedCheckCompletion(t *testing.T) {
 	t.Parallel()
 
@@ -570,8 +550,6 @@ func TestCIResumedRepairStaleHeadErrorWaitsInsteadOfFailing(t *testing.T) {
 	}
 }
 
-// A merge conflict is observed from mergeability, not from checks, so an empty
-// check snapshot must not stop its repair.
 func TestCIResumedRepairRejectedChecksStillRepairsRebase(t *testing.T) {
 	t.Parallel()
 	for _, category := range []string{types.FindingCategoryCIMergeConflict, types.FindingCategoryCIBehindBase} {
@@ -729,8 +707,6 @@ func TestCIStep_PublishedRepairResumesMonitoringAndWaitsForTheRerun(t *testing.T
 	}
 }
 
-// A transient check parks as ask-user, and when the human selects it and
-// answers fix, the round is told about that check.
 func TestCIStep_UserFixOfTransientFindingIsHonored(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -866,9 +842,6 @@ func TestCIResumedRepairGitHubMovedHeadReadErrorWaits(t *testing.T) {
 	}
 }
 
-// A required external review that is not complete at the head must name its
-// completion state even when stale unresolved comments from the same bot
-// already fill the gate.
 func TestReviewBotFindings_IncompleteExternalReviewSurvivesStaleComments(t *testing.T) {
 	t.Parallel()
 	comments := []scm.ReviewComment{
@@ -900,10 +873,6 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// CodeRabbit is a review bot only when trusted ci.required_reviews opts in.
-// Without it, an installed CodeRabbit's red check is an ordinary failing
-// check and its unresolved threads are not findings, exactly as before
-// CodeRabbit support existed; Greptile is unaffected either way.
 func TestCIObservationFindings_CodeRabbitIsRecognizedOnlyWhenOptedIn(t *testing.T) {
 	t.Parallel()
 	comments := []scm.ReviewComment{
@@ -953,8 +922,6 @@ func TestCIObservationFindings_CodeRabbitIsRecognizedOnlyWhenOptedIn(t *testing.
 	}
 }
 
-// A selected check that failed, was re-run, and ended cancelled has no failure
-// left to repair: the pre-repair refresh must not hand it to the fixer.
 func TestCIResumedRepairFailRerunCancelledSkipsRepair(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {

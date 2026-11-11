@@ -23,9 +23,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// sourceRound is a portable, JSON-stable export of a review round. It keeps
-// the findings and human-decision evidence needed by the MVP but no logs,
-// prompts, remote URLs, or agent session identities.
 type sourceRound struct {
 	ID                 string  `json:"id"`
 	StepName           string  `json:"step_name,omitempty"`
@@ -91,19 +88,8 @@ type sourceInvocation struct {
 	FailureCategory      string `json:"failure_category,omitempty"`
 }
 
-// ErrNoCapturableReview marks the outcomes where a run simply holds nothing to
-// freeze - no review step, no finished pass, a decision the human has not made
-// yet, or rounds recorded before this machine started keeping replay
-// provenance. These are ordinary states of a healthy pipeline, not failures, so
-// automatic collection can pass over them silently while still surfacing a real
-// capture fault. Every one of them is a deliberate refusal to invent a case:
-// grading a candidate against a half-recorded review pass would be worse than
-// having no case at all.
 var ErrNoCapturableReview = errors.New("run has no capturable review pass")
 
-// Capture exports every persisted review pass from one real run. It reads the
-// production state only; it never starts the daemon, changes a gate, fetches,
-// or sends data anywhere.
 func Capture(ctx context.Context, store *Store, p *paths.Paths, database *db.DB, runID string) ([]Case, error) {
 	if store == nil || p == nil || database == nil {
 		return nil, fmt.Errorf("eval capture requires a store, paths, and database")
@@ -287,11 +273,6 @@ func Capture(ctx context.Context, store *Store, p *paths.Paths, database *db.DB,
 	return captured, nil
 }
 
-// effectiveReplayBase reproduces ReviewStep's branch-scoped base: the merge
-// base of the reviewed head and the pinned default branch. Run.BaseSHA is the
-// received-push old SHA, which may be a previous feature tip rather than the
-// review base. It is only a legacy fallback when the merge-base cannot be
-// recovered from an older gate.
 func effectiveReplayBase(ctx context.Context, gateDir, recordedBase, head, trustedSHA string) (string, error) {
 	if base, err := git.Run(ctx, gateDir, "merge-base", head, trustedSHA); err == nil && strings.TrimSpace(base) != "" {
 		return strings.TrimSpace(base), nil
@@ -474,9 +455,6 @@ func baselineForRound(invocations []db.AgentInvocation, round int) BaselineMetri
 	return baseline
 }
 
-// Recorded gate actions. These are the persisted spellings in decision.json;
-// decisionUnknown and decisionAbort record no fix-vs-skip choice, so they never
-// support a label.
 const (
 	decisionUnknown = "unknown"
 	decisionFix     = "fix"
@@ -522,30 +500,6 @@ func decisionForRound(round *db.StepRound, step *db.StepResult) Decision {
 	return decision
 }
 
-// goldFromRound writes the labels the recorded gate DECISION supports.
-//
-// The key is what the human decided about a finding, never whether some later
-// review round still happens to raise it. Round presence conflated the two
-// decisions that matter: a finding the human chose to fix and a finding they
-// chose to ship both disappear from a later round, and an intermediate re-raise
-// that the final round dropped stayed unlabeled even though the gate recorded
-// exactly what was decided about it.
-//
-//   - Selected for fix with a user source: true-positive gold. Merge is not
-//     required - the human called it a real issue.
-//   - Selected for fix with an auto-fix source on a merged source run:
-//     true-positive gold.
-//   - Not selected for fix on a merged source run: false-positive
-//     "shipped unfixed" gold. This deliberately reverses the earlier principle
-//     that a skip is too ambiguous to auto-label: in this operator's corpus a
-//     finding they approve and ship without fixing IS a false positive. It
-//     still needs the merge - skip or approve without one stays unlabeled - and
-//     informational no-op findings are never labeled this way.
-//   - No recorded decision for the round: unlabeled, whether or not the finding
-//     survives into a later round. Absence of evidence is never a label.
-//
-// A user-added finding is false-negative gold. Confirmed post-PR misses are
-// written later by IngestPostPRMiss, not here.
 func goldFromRound(round *db.StepRound, decision Decision, prState string) Labels {
 	labels := Labels{Version: labelsVersion}
 	byID := findingIndex(round)
@@ -632,11 +586,6 @@ func goldForRecordedFinding(finding types.Finding, source, kind string) FindingG
 	}
 }
 
-// hasRecordedDecision reports whether the gate resolution for this round was
-// actually persisted. Only then can an unselected finding be read as "the human
-// looked at this and chose not to fix it", which is what makes a shipped-unfixed
-// false-positive label evidence rather than a guess. A legacy or unresolved round
-// with no persisted decision records no such choice, so its findings stay unlabeled.
 func hasRecordedDecision(decision Decision) bool {
 	if strings.TrimSpace(decision.SelectionSource) != "" {
 		return true
@@ -710,12 +659,6 @@ func isDerivedMergeGold(source string) bool {
 	return source == goldSourceAutoFixMerged || source == goldSourceShippedUnfixed
 }
 
-// RelabelRun recomputes gold for every captured case of a run. It adds new
-// auto-fix-merged / shipped-unfixed labels onto previously unlabeled findings
-// and drops obsolete derived merge labels that the current rounds no longer
-// support. It never overwrites adjudicated, user-fix, or ingested post-PR-miss
-// labels. Missing cases are a no-op so a merge observed before the first
-// capture cannot fail the pipeline.
 func RelabelRun(ctx context.Context, store *Store, p *paths.Paths, database *db.DB, runID string) ([]Case, error) {
 	if store == nil || p == nil || database == nil {
 		return nil, fmt.Errorf("eval relabel requires a store, paths, and database")

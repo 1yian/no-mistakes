@@ -5,12 +5,6 @@ import (
 	"testing"
 )
 
-// resolveRevalidateRepairs runs one global YAML document and one repository
-// YAML document through the real loaders, the trusted/pushed effective-config
-// rule, and Merge, and reports the policy the pipeline would actually see.
-// Going through the loaders (rather than constructing structs) is what makes
-// these assertions cover YAML key naming, strict-field checking, and the
-// pointer semantics that let an explicit false override an inherited true.
 func resolveRevalidateRepairs(t *testing.T, globalYAML, trustedRepoYAML, pushedRepoYAML string) bool {
 	t.Helper()
 	global, err := LoadGlobalFromBytes([]byte(globalYAML))
@@ -77,11 +71,6 @@ func TestCIRevalidateRepairs_GlobalAndProjectPrecedence(t *testing.T) {
 	}
 }
 
-// A pushed branch must not be able to turn its maintainer's revalidation
-// requirement off for its own repairs, so the whole ci block is read from the
-// trusted default-branch copy. Both directions are pinned: a pushed false
-// cannot weaken a trusted true, and a pushed true cannot impose cost the
-// maintainer did not ask for either.
 func TestCIRevalidateRepairs_TrustedOnly(t *testing.T) {
 	t.Parallel()
 	const on = "ci:\n  revalidate_repairs: true\n"
@@ -99,9 +88,6 @@ func TestCIRevalidateRepairs_TrustedOnly(t *testing.T) {
 	}
 }
 
-// The opt-in is a security-relevant boundary, so it stays trusted-only even
-// when a repository has taken the allow_repo_commands opt-in that hands the
-// pushed branch control of what executes.
 func TestCIRevalidateRepairs_TrustedOnlyEvenWithRepoCommandsOptIn(t *testing.T) {
 	t.Parallel()
 	trusted, err := LoadRepoFromBytes([]byte("allow_repo_commands: true\nci:\n  revalidate_repairs: true\n"))
@@ -139,8 +125,6 @@ func TestCIRevalidateRepairs_RejectsNonBooleanRepoValue(t *testing.T) {
 	}
 }
 
-// The shipped default config must document the key it ships, and must show the
-// default rather than an aspirational value.
 func TestCIRevalidateRepairs_ShippedDefaultConfigParsesAndKeepsTheDefault(t *testing.T) {
 	t.Parallel()
 	cfg, err := LoadGlobalFromBytes([]byte(defaultConfigYAML))

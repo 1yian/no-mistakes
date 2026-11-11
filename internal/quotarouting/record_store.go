@@ -8,19 +8,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// SwitchStore is the persistence seam for mid-run switch records. *db.DB
-// satisfies it; the narrow interface keeps this package importable from the
-// pipeline executor without a daemon dependency.
 type SwitchStore interface {
 	GetRunQuotaRouting(id string) (string, error)
 	SetRunQuotaRouting(id, payload string) error
 }
 
-// RecordSwitch amends a run's stored record with one mid-run quota switch
-// (from the lifecycle event's agent to its NextAgent). The switch itself
-// already happened in the agent chain, so any failure here is a logged
-// observability gap, never a run failure: the run cannot be un-switched and
-// continues on the next agent regardless.
 func RecordSwitch(store SwitchStore, runID string, event SwitchEvent) {
 	payload, err := store.GetRunQuotaRouting(runID)
 	if err != nil {
@@ -50,7 +42,6 @@ func RecordSwitch(store SwitchStore, runID string, event SwitchEvent) {
 	}
 }
 
-// SwitchEvent is one mid-run move, as the executor observes it.
 type SwitchEvent struct {
 	From   string
 	To     string

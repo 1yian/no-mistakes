@@ -12,9 +12,6 @@ const (
 	sshDomainRemote = "git@ssh.forge.example:git/octo/widgets.git"
 )
 
-// isolateCLIConfigs points glab, gh, and tea configuration discovery at empty
-// temp dirs so a real CLI install on the developer's machine cannot answer for
-// one of the placeholder hosts below.
 func isolateCLIConfigs(t *testing.T) {
 	t.Helper()
 	t.Setenv("GLAB_CONFIG_DIR", t.TempDir())
@@ -110,9 +107,6 @@ func TestNormalizeForgejoSSHDomainRejectsNonHostnames(t *testing.T) {
 
 func TestNormalizeForgejoSSHDomainKeepsRejectedValuesOutOfTheError(t *testing.T) {
 	t.Parallel()
-	// A rejection reaches a step's skip reason, the step log, and the run
-	// database, and an operator can paste a clone URL carrying a credential into
-	// the setting, so no part of the value may appear in the error.
 	const credential = "PLACEHOLDER-CREDENTIAL"
 	for _, raw := range []string{
 		"git:" + credential + "@ssh.forge.example",
@@ -225,13 +219,10 @@ func TestDetectProvider_DeclaredForgejoSSHDomainAcceptsSSHRemotes(t *testing.T) 
 func TestDetectProvider_DeclaredForgejoSSHDomainFailsClosed(t *testing.T) {
 	isolateCLIConfigs(t)
 	for _, tt := range []struct {
-		name   string
-		base   string
-		remote string
-		domain string
-		// resolved overrides what the SSH lookup answers. An empty value puts
-		// the remote on the declared domain, so the case is rejected for the
-		// reason its name gives rather than for a host difference.
+		name     string
+		base     string
+		remote   string
+		domain   string
 		resolved string
 	}{
 		{name: "mismatched path prefix", base: sshDomainBase, remote: "git@ssh.forge.example:other/octo/widgets.git", domain: sshDomainHost},

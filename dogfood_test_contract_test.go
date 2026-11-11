@@ -9,10 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// Local Test is targeted validation of the requested intent. This repository
-// must not dogfood a complete-suite commands.test override (historically
-// go test -race ./...), which burned multi-hour local walks while remote CI
-// already owns the race-enabled full suite.
 func TestDogfoodConfig_NoBroadLocalTestCommand(t *testing.T) {
 	t.Parallel()
 
@@ -44,9 +40,6 @@ func TestDogfoodConfig_NoBroadLocalTestCommand(t *testing.T) {
 	}
 }
 
-// commands.test contract ownership lives in repo-config.md: targeted local
-// validation, not CI-parity complete-suite configuration, and no brittle
-// shell-heuristics claiming to detect "broad" commands.
 func TestRepoConfigDocs_CommandsTestIsTargetedContract(t *testing.T) {
 	t.Parallel()
 
@@ -68,8 +61,6 @@ func TestRepoConfigDocs_CommandsTestIsTargetedContract(t *testing.T) {
 	}
 }
 
-// Remote CI must keep the complete race-enabled Go suite as the broad
-// regression owner after local Test stops duplicating it.
 func TestCIWorkflow_RetainsFullRaceSuiteAsBroadRegressionOwner(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(".github", "workflows", "ci.yml"))
 	if err != nil {

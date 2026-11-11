@@ -6,10 +6,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// An agent driver's --instructions scope one fix round. They are recorded and
-// dispatched as driver_instructions, never as user_instructions, so no later
-// prompt can present them as the user's own decision - including when
-// recovery re-parks the round and a second response re-decides it.
 func TestExecutor_DriverInstructionsStayApartFromUserInstructions(t *testing.T) {
 	database, p, run, _ := setupTest(t)
 	sr, err := database.InsertStepResult(run.ID, types.StepReview)

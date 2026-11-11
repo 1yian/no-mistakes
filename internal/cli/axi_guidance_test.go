@@ -18,11 +18,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// canonicalStaleMonitorPhrases are the load-bearing claims of the corrected
-// "PR fell behind / conflicted after checks pass" guidance: the live CI monitor
-// auto-rebases and re-pushes such a PR, so the agent runs no command and never
-// hand-rebases, and `no-mistakes rerun` is only the dead-monitor recovery,
-// subject to its clean caller-head check.
 var canonicalStaleMonitorPhrases = []string{
 	"never hand-rebase",
 	"revalidates from Review",
@@ -51,11 +46,6 @@ const canonicalPipelineAgentPrerequisite = "a supported native agent binary, the
 
 const canonicalUnknownBranchRunRelationship = "An explicit `--run <id>` rendered under `run:` while the current branch is unknown (detached `HEAD` or a branch-lookup failure) encodes no branch relationship."
 
-// TestStaleMonitorGuidance_SyncedAcrossSurfaces guards the repo invariant that
-// agent-driving guidance stays in sync across its three surfaces: the skill
-// body, the published agents guide, and the live axi help string. The earlier
-// wrong wording (telling agents to re-run a stale PR with `axi run`) shipped to
-// only one surface; this keeps the corrected guidance present on all three.
 func TestStaleMonitorGuidance_SyncedAcrossSurfaces(t *testing.T) {
 	surfaces := map[string]string{
 		"skill body":      skill.Markdown(),
@@ -94,9 +84,6 @@ func TestStaleMonitorGuidance_SyncedAcrossSurfaces(t *testing.T) {
 	}
 }
 
-// TestStaleMonitorGuidance_InChecksPassedOutput ensures the guidance reaches the
-// agent at its point of use: the `checks-passed` axi output, where the agent
-// decides what to do about the still-monitored PR.
 func TestStaleMonitorGuidance_InChecksPassedOutput(t *testing.T) {
 	run := &ipc.RunInfo{
 		ID:      "run-1",

@@ -12,9 +12,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// buildCodexFixture writes a state_5.sqlite + a rollout JSONL referenced by
-// it, with the supplied cwd. The rollout has user, assistant, and tool-call
-// turns so we can verify they're all parsed correctly.
 func buildCodexFixture(t *testing.T, cwd string) (homeDir, rolloutPath string) {
 	t.Helper()
 	homeDir = t.TempDir()
@@ -191,9 +188,6 @@ func TestResolveCodexStateDB_PicksHighestVersion(t *testing.T) {
 	}
 }
 
-// Lexicographic sort would rank state_9 ahead of state_10 (because '9' > '1');
-// numeric sort must pick state_10. Once Codex bumps past state_9 this is the
-// difference between reading the live DB and reading a stale one.
 func TestResolveCodexStateDB_NumericSortPastNine(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"state_9.sqlite", "state_10.sqlite", "state_11.sqlite", "state_5.sqlite"} {
@@ -210,7 +204,6 @@ func TestResolveCodexStateDB_NumericSortPastNine(t *testing.T) {
 	}
 }
 
-// Non-numeric suffixes (e.g. backups) must not override a real numbered DB.
 func TestResolveCodexStateDB_IgnoresNonNumericSuffix(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"state_5.sqlite", "state_backup.sqlite"} {

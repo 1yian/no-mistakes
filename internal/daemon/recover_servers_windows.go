@@ -17,7 +17,6 @@ var taskkillProcessTree = func(pid int) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-// terminateOrphanProcessGroup forcibly terminates the orphaned process tree.
 func terminateOrphanProcessGroup(pid int) error {
 	out, err := taskkillProcessTree(pid)
 	if err != nil {

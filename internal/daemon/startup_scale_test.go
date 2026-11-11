@@ -15,12 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/testgit"
 )
 
-// TestColdDetachedStartupProductionGateCardinality reproduces the production
-// threshold crossing from the v1.41.0 incident with the same 70-gate shape.
-// The git shim adds one small cold-filesystem delay per gate so the old
-// six-command-per-gate recovery reliably exceeds its five-second startup
-// deadline on any CI host. The daemon must nevertheless become ready through a
-// real IPC health call under the production readiness budget.
 func TestColdDetachedStartupProductionGateCardinality(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture uses POSIX shell shims and Unix process cleanup")
@@ -120,9 +114,6 @@ func startColdDetachedFixture(t *testing.T, gateCount int, delayedGit bool) time
 			shutdownIsolatedDaemon(t, p, pid)
 		}
 	})
-	// The caller's health response can arrive just before the daemon appends
-	// its post-health phase and ready summaries. Wait for that explicit log
-	// contract instead of racing the final writes after readiness.
 	var logData []byte
 	logDeadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(logDeadline) {

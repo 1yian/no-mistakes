@@ -9,15 +9,11 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// RunSelection carries independent, opt-in launch selections. Only this package
-// defines selections, so callers cannot inject an unrecognized profile kind.
 type RunSelection interface{ runSelection() }
 
 func (*PiProfile) runSelection()       {}
 func (*ReviewerProfile) runSelection() {}
 
-// inheritedReviewer can only be constructed by an internal continuation path,
-// never by an IPC request. Its values already came from an immutable run row.
 type inheritedReviewer struct{ profile *ReviewerProfile }
 
 func (inheritedReviewer) runSelection() {}
@@ -35,8 +31,6 @@ func ReviewerProfileInherited(profiles []RunSelection) bool {
 	return false
 }
 
-// ReviewerProfile pins the reviewer only. A request may inherit tuning from
-// agent_config; persisted values always contain the resolved model and effort.
 type ReviewerProfile struct {
 	Agent  types.AgentName `json:"agent"`
 	Model  string          `json:"model"`

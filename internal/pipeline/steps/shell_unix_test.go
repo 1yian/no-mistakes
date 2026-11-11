@@ -13,17 +13,6 @@ import (
 	"time"
 )
 
-// TestRunShellCommandWithEnv_KillsGrandchildOnCancel is a regression test for
-// orphan subprocesses on cancellation. runShellCommandWithEnv must kill the
-// whole process group when its context is cancelled, not just the direct
-// shell child. Without Setpgid + cmd.Cancel, exec.CommandContext SIGKILLs only
-// the shell parent and a backgrounded grandchild (e.g. a test runner's worker
-// process) survives, keeps running, and holds the worktree locked so the next
-// run on the same branch cannot proceed.
-//
-// This test fails if shellenv.ConfigureShellCommand is removed from
-// runShellCommandWithEnv: the heartbeat keeps advancing and the PID is never
-// reaped within the window.
 func TestRunShellCommandWithEnv_KillsGrandchildOnCancel(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -71,17 +60,6 @@ func TestRunShellCommandWithEnv_KillsGrandchildOnCancel(t *testing.T) {
 	}
 }
 
-// TestRunShellCommandWithEnv_ReapsGrandchildOnCleanExit is the clean-exit
-// counterpart to the cancellation test above, and the configured-test-command
-// face of the daemon-crash bug. A `commands.test` like "npm test" shells out and
-// can leave a worker pool alive after the shell exits 0. cmd.Cancel only reaps
-// the group on cancellation, so on a normal exit those workers leaked; across
-// runs they accumulate until the host is out of memory and the OS SIGKILLs the
-// daemon. runShellCommandWithEnv now defers shellenv.TerminateShellCommandGroup,
-// so the group is reaped on the success path too.
-//
-// This test fails if that defer is removed: the heartbeat keeps advancing and
-// the grandchild is never reaped after the command returns.
 func TestRunShellCommandWithEnv_ReapsGrandchildOnCleanExit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -138,9 +116,6 @@ func waitForHeartbeatChange(t *testing.T, path string, timeout time.Duration) {
 	t.Fatalf("heartbeat at %s never advanced within %s", path, timeout)
 }
 
-// heartbeatHoldsWithin reports whether the value at path stops changing,
-// indicating the writing process was killed. It returns true as soon as two
-// samples separated by a grace period are equal.
 func heartbeatHoldsWithin(t *testing.T, path string, window time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(window)

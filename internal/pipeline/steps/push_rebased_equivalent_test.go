@@ -9,15 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// TestPushStep_PublishesRebasedEquivalentsOverAnEarlierRunsHead reproduces a
-// new run on a branch an earlier run already published. The new run's head
-// carries one more commit that edits the lines the published commits wrote,
-// and the rebase step moved it onto a newer main, so the private mirror still
-// holds the earlier run's pre-rebase copies of the same commits. That head is
-// not run-owned, so Decision 41-A does not apply and the preservation proof
-// must: the rebased copies survive in the live history, so the push goes
-// through, while a commit whose content the live head genuinely lacks still
-// refuses, naming the whole private-only range.
 func TestPushStep_PublishesRebasedEquivalentsOverAnEarlierRunsHead(t *testing.T) {
 	for _, variant := range []string{"rebased_equivalents", "dropped_commits", "mixed"} {
 		t.Run(variant, func(t *testing.T) {

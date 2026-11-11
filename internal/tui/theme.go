@@ -18,8 +18,6 @@ func init() {
 	configureTUIColors()
 }
 
-// configureTUIColors forces ANSI-profile colors so styling follows the user's
-// terminal theme instead of hard-coded 256-color palette values.
 func configureTUIColors() {
 	lipgloss.SetColorProfile(termenv.ANSI)
 }

@@ -193,10 +193,6 @@ func TestParsePostPRMissFindingRequiresIDAndDescription(t *testing.T) {
 	}
 }
 
-// An ingested miss's severity becomes gold and then a composition stratum, so
-// free text reaches the dashboards. Accept only the review vocabulary, and
-// reject an action the caller believes is meaningful rather than dropping an
-// unrecognized one silently.
 func TestParsePostPRMissFindingValidatesSeverityAndAction(t *testing.T) {
 	for _, severity := range []string{"error", "warning", "info", "  Warning  "} {
 		raw := `{"id":"fn-1","description":"a miss","severity":` + strconv.Quote(severity) + `}`

@@ -8,8 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestNativeArgsMapsEachHarnessToItsOwnSpelling pins the whole point of the
-// package: one common Profile, one native argv fragment per harness.
 func TestNativeArgsMapsEachHarnessToItsOwnSpelling(t *testing.T) {
 	profile := Profile{Model: "some-model", Effort: EffortLow}
 	tests := []struct {
@@ -32,9 +30,6 @@ func TestNativeArgsMapsEachHarnessToItsOwnSpelling(t *testing.T) {
 	}
 }
 
-// TestNativeArgsEmitsNothingForNonArgsHarnesses keeps a knob that rides another
-// mechanism (or none at all) out of argv, where it would either be rejected by
-// the CLI or silently ignored.
 func TestNativeArgsEmitsNothingForNonArgsHarnesses(t *testing.T) {
 	profile := Profile{Model: "openai/gpt-5", Effort: EffortHigh}
 	for _, name := range []types.AgentName{types.AgentOpenCode, types.AgentRovoDev, types.AgentAntigravity} {
@@ -52,9 +47,6 @@ func TestNativeArgsZeroProfileIsAlwaysEmpty(t *testing.T) {
 	}
 }
 
-// TestNativeArgsDefersToRawOverride is the backwards-compatibility contract:
-// an operator who already pinned a knob natively keeps that exact argv, and the
-// harness is never handed the same knob twice.
 func TestNativeArgsDefersToRawOverride(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -174,9 +166,6 @@ func TestNativeArgsDoesNotMutateRawArgs(t *testing.T) {
 	}
 }
 
-// TestACPModelIsMappedThroughAcpx closes the gap that made ACP targets
-// unpinnable: no-mistakes drives them through acpx, whose --model is a real
-// mechanism.
 func TestACPModelIsMappedThroughAcpx(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCursor, types.AgentDevin, "acp:gemini"} {
 		got := NativeArgs(name, Profile{Model: "gpt-5"}, nil)
@@ -190,8 +179,6 @@ func TestACPModelIsMappedThroughAcpx(t *testing.T) {
 	}
 }
 
-// TestACPEffortIsRefusedNotDropped records the deliberately unmappable half of
-// the ACP story: acpx has no reasoning-effort surface.
 func TestACPEffortIsRefusedNotDropped(t *testing.T) {
 	for _, name := range []types.AgentName{types.AgentCursor, types.AgentDevin, "acp:gemini"} {
 		if mech := MechanismFor(name, KnobEffort); mech != MechanismUnsupported {
@@ -332,8 +319,6 @@ func TestServedMatchesRequested(t *testing.T) {
 	}
 }
 
-// TestEverySupportedAgentHasAMapping keeps a newly added agent from silently
-// inheriting "unknown agent" behavior instead of a deliberate decision.
 func TestEverySupportedAgentHasAMapping(t *testing.T) {
 	for _, name := range []types.AgentName{
 		types.AgentClaude, types.AgentCodex, types.AgentGrok, types.AgentRovoDev,

@@ -101,9 +101,6 @@ func TestBuildTestingSummary_NoSurfaceVerdictIsVisible(t *testing.T) {
 	}
 }
 
-// A run recorded before the contract existed carries neither scenarios nor a
-// verdict. It must render exactly as it always did rather than growing an
-// empty table or claiming "no verdict recorded" where there is nothing to say.
 func TestBuildTestingSummary_PreContractRunRendersUnchanged(t *testing.T) {
 	t.Parallel()
 	legacy := `{"findings":[],"summary":"","tested":["` + "`go test ./...`" + `"],"testing_summary":"unit tests passed"}`
@@ -118,7 +115,6 @@ func TestBuildTestingSummary_PreContractRunRendersUnchanged(t *testing.T) {
 	}
 }
 
-// The Pipeline fold is the per-round story, so it carries the table too.
 func TestBuildPipelineSummary_OmitsLiveValidationAfterHeadChanges(t *testing.T) {
 	t.Parallel()
 	findingsJSON := liveValidatedFindingsJSON(t, []types.TestScenario{
@@ -148,8 +144,6 @@ func TestBuildPipelineSummary_StepFoldCarriesScenarioTable(t *testing.T) {
 	}
 }
 
-// A scenario name is agent-authored text landing inside a markdown table, so a
-// pipe in it must not invent a column and a newline must not end the row.
 func TestBuildTestingSummary_ScenarioCellsCannotBreakTheTable(t *testing.T) {
 	t.Parallel()
 	findingsJSON := liveValidatedFindingsJSON(t, []types.TestScenario{
@@ -172,8 +166,6 @@ func TestBuildTestingSummary_ScenarioCellsCannotBreakTheTable(t *testing.T) {
 	}
 }
 
-// Bitbucket Cloud PR descriptions carry no HTML; a markdown table is portable,
-// so the same contract renders there.
 func TestBuildPipelineSummary_ScenarioTableRendersOnBitbucket(t *testing.T) {
 	t.Parallel()
 	findingsJSON := liveValidatedFindingsJSON(t, []types.TestScenario{

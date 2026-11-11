@@ -8,63 +8,32 @@ import (
 )
 
 const (
-	RoundSelectionSourceUser    = "user"
-	RoundSelectionSourceAutoFix = "auto_fix"
-	// RoundSelectionSourceUserDeclined records that a caller resolved the
-	// round's approval gate without selecting any finding to fix: approve,
-	// skip, or abort, or a fix response that declined every finding the gate
-	// showed (--ignore with no --findings). Before this existed, those three resolutions wrote no
-	// finding-level state at all, so "the caller declined every finding" and
-	// "there were no findings" were the same row and no later step or run
-	// could tell them apart. The decline itself is still stored the way a
-	// partial selection stores one, as the complement of
-	// SelectedFindingIDs, so this source is written with an explicit empty
-	// JSON array rather than a NULL.
+	RoundSelectionSourceUser         = "user"
+	RoundSelectionSourceAutoFix      = "auto_fix"
 	RoundSelectionSourceUserDeclined = "user_declined"
 )
 
-// DeclinedSelectionJSON is the SelectedFindingIDs value written alongside
-// RoundSelectionSourceUserDeclined. It must be an empty JSON *array* and not
-// an empty string: readers derive the declined set as
-// findings_json minus selected_finding_ids, and a NULL column means "no
-// decision was recorded" rather than "nothing was selected".
 const DeclinedSelectionJSON = "[]"
 
-// StepRound represents one execution round within a pipeline step.
 type StepRound struct {
-	ID           string
-	StepResultID string
-	Round        int
-	// Trigger is "initial", "auto_fix", "coverage", or "answer" (a review turn resumed
-	// once every question it left open was answered - not a fix round, since
-	// no code changed). "coverage" starts another static review without a fix
-	// or verdict; legacy "user_fix" is treated as "auto_fix".
-	Trigger          string
-	FindingsJSON     *string // nullable - findings produced by this round
-	ReviewedHeadSHA  *string // non-authoritative commit candidate captured by a review round
-	StartingHeadSHA  *string
-	TrustedConfigSHA *string
-	GlobalConfigYAML []byte
-	RepoConfigYAML   []byte
-	// UserFindingsJSON, when non-nil, is the merged finding list that was
-	// dispatched to the fix agent after the user edited per-finding
-	// instructions or added their own findings. It includes both the
-	// selected agent-produced findings (with any attached user
-	// instructions) and the user-authored findings.
-	UserFindingsJSON *string
-	// SelectedFindingIDs, when non-nil, is a JSON array of finding IDs that
-	// were chosen (by the user or auto-fix filter) to be fixed AFTER this
-	// round. It is populated on the round whose findings triggered the next
-	// round, so that later rounds' prompts can tell which findings were
-	// deliberately left unselected.
+	ID                 string
+	StepResultID       string
+	Round              int
+	Trigger            string
+	FindingsJSON       *string // nullable - findings produced by this round
+	ReviewedHeadSHA    *string // non-authoritative commit candidate captured by a review round
+	StartingHeadSHA    *string
+	TrustedConfigSHA   *string
+	GlobalConfigYAML   []byte
+	RepoConfigYAML     []byte
+	UserFindingsJSON   *string
 	SelectedFindingIDs *string
 	ResponseOrigin     types.ResponseOrigin
 	SelectionSource    *string
-	// FixSummary, when non-nil, records a fix round's result.
-	FixSummary      *string
-	RepairPublished bool
-	DurationMS      int64
-	CreatedAt       int64
+	FixSummary         *string
+	RepairPublished    bool
+	DurationMS         int64
+	CreatedAt          int64
 }
 
 const roundReadColumns = "id, step_result_id, round, trigger_type, findings_json, reviewed_head_sha, starting_head_sha, trusted_config_sha, global_config_yaml, repo_config_yaml, user_findings_json, selected_finding_ids, selection_source, fix_summary, repair_published, duration_ms, created_at, response_origin"
@@ -73,9 +42,6 @@ func roundScanTargets(r *StepRound) []any {
 	return []any{&r.ID, &r.StepResultID, &r.Round, &r.Trigger, &r.FindingsJSON, &r.ReviewedHeadSHA, &r.StartingHeadSHA, &r.TrustedConfigSHA, &r.GlobalConfigYAML, &r.RepoConfigYAML, &r.UserFindingsJSON, &r.SelectedFindingIDs, &r.SelectionSource, &r.FixSummary, &r.RepairPublished, &r.DurationMS, &r.CreatedAt, &r.ResponseOrigin}
 }
 
-// StepRoundStats summarizes execution rounds for a step. It lets status
-// surfaces show whether a running/fixing step is in an initial pass or a fix
-// pass without reloading every round in callers.
 type StepRoundStats struct {
 	TotalRounds        int
 	FixRounds          int
@@ -90,13 +56,10 @@ type StepRoundStats struct {
 	PendingFixSource   string
 }
 
-// IsFixRound reports whether this round was a fix attempt. Legacy "user_fix"
-// rounds count: they were fix rounds dispatched by an explicit user selection.
 func (r *StepRound) IsFixRound() bool {
 	return r.Trigger == "auto_fix" || r.Trigger == "user_fix"
 }
 
-// StepFixSummaries returns one result per fix round for a step, in round order.
 func (d *DB) StepFixSummaries(stepResultID string) ([]string, error) {
 	rounds, err := d.GetRoundsByStep(stepResultID)
 	if err != nil {
@@ -116,7 +79,6 @@ func (d *DB) StepFixSummaries(stepResultID string) ([]string, error) {
 	return summaries, nil
 }
 
-// StepRoundStats returns aggregate round information for a step result.
 func (d *DB) StepRoundStats(stepResultID string) (StepRoundStats, error) {
 	rounds, err := d.GetRoundsByStep(stepResultID)
 	if err != nil {
@@ -167,8 +129,6 @@ func hasSelectedFinding(raw *string) bool {
 	return false
 }
 
-// InsertStepRound creates a new round record for a step result. fixSummary may
-// be nil for non-fix rounds or when the agent produced no summary.
 func (d *DB) InsertStepRound(stepResultID string, round int, trigger string, findingsJSON *string, fixSummary *string, durationMS int64) (*StepRound, error) {
 	return d.InsertStepRoundWithRepair(stepResultID, round, trigger, findingsJSON, fixSummary, false, durationMS)
 }
@@ -177,9 +137,6 @@ func (d *DB) InsertStepRoundWithRepair(stepResultID string, round int, trigger s
 	return d.insertStepRound(stepResultID, round, trigger, findingsJSON, fixSummary, nil, nil, nil, nil, nil, repairPublished, durationMS)
 }
 
-// InsertReviewStepRound persists a review round's examined commit as a
-// non-authoritative candidate. A recovered parked gate can promote this exact
-// candidate only after approval; merely storing it grants no push authority.
 func (d *DB) InsertReviewStepRound(stepResultID string, round int, trigger string, findingsJSON *string, fixSummary *string, reviewedHeadSHA string, durationMS int64) (*StepRound, error) {
 	return d.InsertReviewStepRoundWithProvenance(stepResultID, round, trigger, findingsJSON, fixSummary, reviewedHeadSHA, "", "", nil, nil, durationMS)
 }
@@ -226,14 +183,6 @@ func (d *DB) insertStepRound(stepResultID string, round int, trigger string, fin
 	return r, nil
 }
 
-// SetStepRoundSelection records which findings were selected for fix AFTER the
-// given round produced its findings, along with whether that selection came
-// from the user or auto-fix filtering.
-//
-// Passing nil or an empty *string* clears both columns, which means "no
-// decision was recorded". Passing DeclinedSelectionJSON ("[]") with a source
-// is different and deliberate: it records a real decision that selected
-// nothing, so readers can distinguish a decline from an unresolved round.
 func (d *DB) SetStepRoundSelection(id string, selectedFindingIDs *string, source string) error {
 	var selectionSource *string
 	if selectedFindingIDs != nil && *selectedFindingIDs != "" && source != "" {
@@ -248,13 +197,6 @@ func (d *DB) SetStepRoundSelection(id string, selectedFindingIDs *string, source
 	return nil
 }
 
-// SetStepRoundUserDecision records the caller's resolution of a round: which
-// findings were selected for fix, how the selection was made, and the merged
-// finding list dispatched to the fix agent. The same empty-string versus
-// DeclinedSelectionJSON distinction described on SetStepRoundSelection
-// applies here. The decline set is derived on read as the complement of the
-// selection (minus any finding an earlier user round of the same step chose to
-// fix), never stored, so there is no decline column to keep in step with it.
 func (d *DB) SetStepRoundUserDecision(id string, selectedFindingIDs *string, source string, userFindingsJSON *string, origins ...types.ResponseOrigin) error {
 	origin := types.ResponseOriginUnknown
 	if len(origins) > 0 {
@@ -273,15 +215,10 @@ func (d *DB) SetStepRoundUserDecision(id string, selectedFindingIDs *string, sou
 	return nil
 }
 
-// SetStepRoundSelectedFindingIDs preserves the old API for callers that do not
-// need to distinguish how the selection was made.
 func (d *DB) SetStepRoundSelectedFindingIDs(id string, selectedFindingIDs *string) error {
 	return d.SetStepRoundSelection(id, selectedFindingIDs, RoundSelectionSourceUser)
 }
 
-// SetStepRoundUserFindings records the merged finding list (with user
-// instructions attached and user-added findings appended) that was
-// dispatched to the fix agent for the round. Passing nil clears the column.
 func (d *DB) SetStepRoundUserFindings(id string, userFindingsJSON *string) error {
 	if _, err := d.sql.Exec(
 		`UPDATE step_rounds SET user_findings_json = ? WHERE id = ?`,
@@ -292,7 +229,6 @@ func (d *DB) SetStepRoundUserFindings(id string, userFindingsJSON *string) error
 	return nil
 }
 
-// GetRoundsByStep returns all rounds for a step result, ordered by round number.
 func (d *DB) GetRoundsByStep(stepResultID string) ([]*StepRound, error) {
 	columns, err := d.readProjection("step_rounds", roundReadColumns, roundScanTargets(&StepRound{})...)
 	if err != nil {

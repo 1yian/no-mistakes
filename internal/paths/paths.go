@@ -8,14 +8,10 @@ import (
 	"testing"
 )
 
-// Paths provides access to all no-mistakes filesystem locations.
-// The root defaults to ~/.no-mistakes but can be overridden via NM_HOME
-// or by using WithRoot (for testing).
 type Paths struct {
 	root string
 }
 
-// New returns Paths rooted at NM_HOME or ~/.no-mistakes.
 func New() (*Paths, error) {
 	if env := os.Getenv("NM_HOME"); env != "" {
 		return &Paths{root: env}, nil
@@ -30,23 +26,6 @@ func New() (*Paths, error) {
 	return &Paths{root: filepath.Join(home, ".no-mistakes")}, nil
 }
 
-// ForGate returns Paths rooted at the home that owns a managed gate.
-//
-// A gate always lives at <root>/repos/<id>.git, so the owning root is a
-// property of the gate's own location. Every caller that is handed a gate path
-// - the receive hooks' CLI helpers - must resolve its root this way rather than
-// with New: git does not set NM_HOME for a hook, so New would resolve whatever
-// the pushing shell happened to export, which is usually nothing and therefore
-// the default root. A gate under any other root would then be handled by a
-// daemon that does not own it, which keeps only the repo id from the gate path
-// and re-resolves it against its own tree.
-//
-// Deriving from the gate rather than the environment also keeps this correct on
-// Windows, where the hook's path crosses into the CLI as an argument that MSYS2
-// converts to native form; an environment variable would not be converted.
-//
-// It fails rather than guessing, so a caller holding a path that is not a
-// managed gate refuses instead of silently falling back to the default root.
 func ForGate(gatePath string) (*Paths, error) {
 	clean := filepath.Clean(gatePath)
 	if !strings.HasSuffix(clean, ".git") {
@@ -61,7 +40,6 @@ func ForGate(gatePath string) (*Paths, error) {
 	return &Paths{root: filepath.Dir(reposDir)}, nil
 }
 
-// WithRoot returns Paths rooted at a custom directory (for testing).
 func WithRoot(root string) *Paths {
 	return &Paths{root: root}
 }
@@ -72,51 +50,19 @@ func (p *Paths) Socket() string     { return filepath.Join(p.root, "socket") }
 func (p *Paths) PIDFile() string    { return filepath.Join(p.root, "daemon.pid") }
 func (p *Paths) ConfigFile() string { return filepath.Join(p.root, "config.yaml") }
 
-// HeldPushesFile records pushes received while a daemon waits to restart for
-// an update. The restarted daemon starts them and removes the file.
 func (p *Paths) HeldPushesFile() string { return filepath.Join(p.root, "held-pushes.jsonl") }
 
-// RunInputsDir holds private immutable input snapshots, separate from publishable evidence.
 func (p *Paths) RunInputsDir() string { return filepath.Join(p.root, "run-inputs") }
 
-// LockFile is the OS-level advisory lock used to enforce a single live daemon
-// per NM_HOME (see the singleton lock in internal/daemon). Distinct from
-// PIDFile, which is an informational record a live daemon writes for
-// CLI/status consumers: LockFile is what actually prevents two daemons from
-// ever running startup recovery or binding the socket concurrently for the
-// same root.
 func (p *Paths) LockFile() string { return filepath.Join(p.root, "daemon.lock") }
 func (p *Paths) UpdateCheckFile() string {
 	return filepath.Join(p.root, "update-check.json")
 }
 
-// EvalDir holds automatically collected local evaluation cases, shared object
-// pools, and their separate registry. EnsureDirs leaves creation to collection
-// and eval commands so disabling provenance and auto-capture creates no state.
 func (p *Paths) EvalDir() string { return filepath.Join(p.root, "eval") }
 
-// EvidenceDir is the default root for test-evidence artifacts, keyed by run ID
-// underneath it.
-//
-// Evidence lives under the app root rather than the system temp directory on
-// purpose. The daemon runs from a service unit that exports only HOME, PATH,
-// and proxy variables, so TMPDIR is unset and os.TempDir() resolves to the
-// shared /tmp - which current Ubuntu mounts as a systemd tmpfs, putting every
-// screenshot and rendered-HTML artifact in RAM. The app root is disk backed on
-// macOS, Linux, and Windows alike, so this needs no per-OS branch, and it is
-// the directory no-mistakes already reaps for itself (see the daemon's
-// evidence reaper) instead of waiting on an OS timer that may never run.
-//
-// EnsureDirs deliberately leaves creation to the test step, so a machine that
-// never gathers evidence never grows the directory.
 func (p *Paths) EvidenceDir() string { return filepath.Join(p.root, "evidence") }
 
-// EvidenceRoot resolves where run evidence is written, honoring a configured
-// test.evidence.local_root. A relative override is ignored rather than
-// resolved: the daemon's working directory is a bare gate repository, so a
-// relative path would land somewhere the operator never named. Config parsing
-// rejects a relative value outright (see config.validateTestRaw); this check
-// is the second layer that keeps a bad value from escaping into the filesystem.
 func (p *Paths) EvidenceRoot(configured string) string {
 	if c := strings.TrimSpace(configured); c != "" && filepath.IsAbs(c) {
 		return filepath.Clean(c)
@@ -124,7 +70,6 @@ func (p *Paths) EvidenceRoot(configured string) string {
 	return p.EvidenceDir()
 }
 
-// ValidateEvidenceRoot rejects configured evidence roots inside managed worktrees.
 func (p *Paths) ValidateEvidenceRoot(configured string) error {
 	root := p.EvidenceRoot(configured)
 	worktrees := filepath.Clean(p.WorktreesDir())
@@ -135,18 +80,10 @@ func (p *Paths) ValidateEvidenceRoot(configured string) error {
 	return nil
 }
 
-// RunEvidenceDir is the evidence directory for a single run.
 func (p *Paths) RunEvidenceDir(configured, runID string) string {
 	return filepath.Join(p.EvidenceRoot(configured), runID)
 }
 
-// ResolveEvidenceRoot picks the directory new runs write evidence under.
-// evidenceDir is the global evidence_dir setting. When it is set, a usable
-// absolute directory wins over localRoot. A missing, relative, or unwritable
-// evidence_dir falls back to the app-root default (not localRoot) so a bad
-// value cannot silently land on a different custom root. An empty evidenceDir
-// keeps today's local_root behavior. This does not move directories that
-// already exist; callers pin the result onto the run.
 func (p *Paths) ResolveEvidenceRoot(evidenceDir, localRoot string) (root, warning string) {
 	defaultRoot := p.EvidenceDir()
 	configured := strings.TrimSpace(evidenceDir)
@@ -227,24 +164,17 @@ func (p *Paths) RunLogDir(runID string) string {
 }
 func (p *Paths) DaemonLog() string { return filepath.Join(p.root, "logs", "daemon.log") }
 
-// DaemonBootstrapLog captures service-manager output before the daemon logger
-// is ready, plus crash diagnostics written directly to stdout or stderr.
 func (p *Paths) DaemonBootstrapLog() string {
 	return filepath.Join(p.root, "logs", "daemon-bootstrap.log")
 }
 
-// ManagedServerLog holds raw output from daemon-managed agent servers.
 func (p *Paths) ManagedServerLog() string {
 	return filepath.Join(p.root, "logs", "managed-server.log")
 }
 func (p *Paths) CLILog() string { return filepath.Join(p.root, "logs", "cli.log") }
 
-// ServerPIDsDir holds PID-tracking files for managed agent servers
-// (opencode, rovodev) so a freshly started daemon can reap orphans left
-// behind by a crashed predecessor.
 func (p *Paths) ServerPIDsDir() string { return filepath.Join(p.root, "servers") }
 
-// EnsureDirs creates all required directories under root.
 func (p *Paths) EnsureDirs() error {
 	dirs := []string{
 		p.root,

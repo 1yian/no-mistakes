@@ -287,9 +287,6 @@ func TestGitlabEvidenceIndependentOfTestingInEveryAppendixMode(t *testing.T) {
 	}
 }
 
-// TestGitlabEvidenceLinkBaseListsImagesAsLinksWithoutUploading: with uploads
-// off and test.evidence.link_base_url set, the Evidence section is still
-// written, every image is a link under the base, and nothing is uploaded.
 func TestGitlabEvidenceLinkBaseListsImagesAsLinksWithoutUploading(t *testing.T) {
 	t.Parallel()
 	runDir := filepath.Join(t.TempDir(), "01RUN")
@@ -323,9 +320,6 @@ func TestGitlabEvidenceLinkBaseListsImagesAsLinksWithoutUploading(t *testing.T) 
 	}
 }
 
-// TestGitlabEvidenceLinkBaseWithUploadsLinksThePathMention: with uploads on,
-// the base does not change what is uploaded; it turns each entry's path
-// mention into the link, including an entry whose upload was rejected.
 func TestGitlabEvidenceLinkBaseWithUploadsLinksThePathMention(t *testing.T) {
 	t.Parallel()
 	runDir := filepath.Join(t.TempDir(), "01RUN")
@@ -362,9 +356,6 @@ func TestGitlabEvidenceLinkBaseWithUploadsLinksThePathMention(t *testing.T) {
 	}
 }
 
-// TestGitlabEvidenceLinkOnlyModeReadsNoImageBytes: listing links needs file
-// names only, so an image the step cannot read is still listed as a link and
-// the walk records no digest; the upload walk still reports the same file.
 func TestGitlabEvidenceLinkOnlyModeReadsNoImageBytes(t *testing.T) {
 	t.Parallel()
 	runDir := filepath.Join(t.TempDir(), "01RUN")

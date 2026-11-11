@@ -6,15 +6,11 @@ import (
 	"strings"
 )
 
-// sseEvent represents a parsed Server-Sent Event.
 type sseEvent struct {
 	Name string // event: field (empty if not specified)
 	Data string // concatenated data: fields
 }
 
-// parseSSE reads SSE events from a reader and sends them to the handler.
-// It handles multi-line data fields and both \n\n and \r\n\r\n separators.
-// Stops when the reader is exhausted or the handler returns false.
 func parseSSE(r io.Reader, handler func(sseEvent) bool) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024*1024)

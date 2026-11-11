@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// ServerPIDInfo records a managed server's identity on disk so that a
-// freshly started daemon can reap orphaned subprocesses left behind by a
-// crashed predecessor. The file is written after the subprocess starts
-// and deleted after it shuts down cleanly.
 type ServerPIDInfo struct {
 	PID            int       `json:"pid"`
 	Owner          string    `json:"owner,omitempty"`
@@ -41,10 +37,6 @@ var (
 	isTransientPIDRenameError = isTransientPIDReplaceError
 )
 
-// SetServerPIDsDir configures where managed-server PID files are written.
-// Callers (typically the daemon at startup) should point this at
-// paths.ServerPIDsDir(). Empty string disables PID tracking, which is the
-// default for processes that don't own a long-running daemon identity.
 func SetServerPIDsDir(dir string) {
 	owner := ""
 	if dir != "" {
@@ -72,19 +64,12 @@ func currentServerPIDOwner() string {
 	return serverPIDOwner
 }
 
-// CurrentServerPIDsDir returns the configured directory for PID tracking
-// files, or "" if tracking is disabled.
 func CurrentServerPIDsDir() string { return currentServerPIDsDir() }
 
 func CurrentServerPIDOwner() string { return currentServerPIDOwner() }
 
 func CurrentProcessStartedAt() time.Time { return processStartedAt }
 
-// writeServerPIDFile serializes info into a uniquely named file under dir
-// and returns the file path. When dir is empty the call is a no-op and the
-// empty string is returned so callers can treat "no tracking" uniformly.
-// Failures are logged but not surfaced because PID tracking is best-effort
-// and shouldn't block a server from starting.
 func writeServerPIDFile(dir string, info ServerPIDInfo) string {
 	if dir == "" {
 		return ""
@@ -143,7 +128,6 @@ func replaceServerPIDFile(tmpPath, path string) error {
 	}
 }
 
-// removeServerPIDFile deletes path, silently ignoring missing files.
 func removeServerPIDFile(path string) {
 	if path == "" {
 		return

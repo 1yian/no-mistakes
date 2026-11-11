@@ -17,8 +17,6 @@ import (
 // fix.txt="pipeline fix 2". Each case commits a different "repair" in the
 // worktree that is never pushed to the gate.
 
-// repairFixture returns a cancelled-run fixture whose run recovery ref is
-// pinned in the gate, so the preserved head is gate-only.
 func repairFixture(t *testing.T) *recoverFixture {
 	t.Helper()
 	f := newRecoverFixture(t, types.RunCancelled)
@@ -51,9 +49,6 @@ func objectCount(t *testing.T, dir string) string {
 	return mustRun(t, dir, "count-objects", "-v")
 }
 
-// The repair already carries everything the preserved head changed (it re-did
-// the pipeline fix and added more), so returning custody at the repair loses
-// nothing while the preserved commits stay anchored.
 func TestRecoverLocalOnlyHeadCarryingPreservedWorkReturnsCustodyAtLocalHead(t *testing.T) {
 	for _, availability := range []struct {
 		name         string
@@ -123,9 +118,6 @@ func checkRecoverHeadCarryingPreservedWork(t *testing.T, localHasBoth, gateHasBo
 	}
 }
 
-// A repair that does NOT carry the preserved work is a genuine divergence: the
-// relationship is proven and reported, both copies stay preserved, and custody
-// is not returned.
 func TestRecoverLocalOnlyHeadDivergingFromPreservedStaysRefusedAndPreservesBoth(t *testing.T) {
 	t.Parallel()
 
@@ -153,10 +145,6 @@ func TestRecoverLocalOnlyHeadDivergingFromPreservedStaysRefusedAndPreservesBoth(
 	}
 }
 
-// The preserved head strictly contains the local-only repair (the pipeline
-// kept the repair's change and added more). Ordinary recovery already adopts
-// this when the gate holds the local head; the same relation must be proven
-// when it does not, with the pre-recovery head anchored.
 func TestRecoverPreservedHeadContainingLocalOnlyWorkIsAdoptedWithoutLocalHeadInGate(t *testing.T) {
 	t.Parallel()
 

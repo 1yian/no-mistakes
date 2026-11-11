@@ -8,7 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// GetPRContent uses az's raw description, preserving whitespace and Unicode.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	got, err := h.showPR(ctx, pr)
 	if err != nil {

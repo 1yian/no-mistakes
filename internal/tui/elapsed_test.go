@@ -130,8 +130,6 @@ func TestOutcomeBanner_CancelledInView(t *testing.T) {
 	}
 }
 
-// Test: When a step completes via EventStepCompleted and we had a start time
-// recorded for it, the completed step should show its final duration in the view.
 func TestModel_View_CompletedStepPreservesDuration(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -170,8 +168,6 @@ func TestModel_View_CompletedStepPreservesDuration(t *testing.T) {
 	}
 }
 
-// Test: When EventStepCompleted arrives with a tracked start time, the DurationMS
-// on the step is populated from the elapsed time.
 func TestModel_ApplyEvent_StepCompletedSetsDuration(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -207,8 +203,6 @@ func TestModel_ApplyEvent_StepCompletedSetsDuration(t *testing.T) {
 	t.Fatal("Review step not found in model steps")
 }
 
-// Test: When EventStepCompleted arrives without a tracked start time, DurationMS
-// remains nil (no crash, no bogus data).
 func TestModel_ApplyEvent_StepCompletedNoDurationWithoutStartTime(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -236,8 +230,6 @@ func TestModel_ApplyEvent_StepCompletedNoDurationWithoutStartTime(t *testing.T) 
 	t.Fatal("Review step not found in model steps")
 }
 
-// Test: When re-attaching, steps with StartedAt but no DurationMS get their
-// start times seeded into stepStartTimes so elapsed time can be computed.
 func TestNewModel_SeedsStartTimesFromStartedAt(t *testing.T) {
 	configureTUIColors()
 	startedAt := time.Now().Add(-10 * time.Second).Unix()
@@ -258,7 +250,6 @@ func TestNewModel_SeedsStartTimesFromStartedAt(t *testing.T) {
 	}
 }
 
-// Test: stepsWithRunningElapsed computes elapsed time for AwaitingApproval steps.
 func TestModel_View_AwaitingApprovalShowsElapsedTime(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -276,7 +267,6 @@ func TestModel_View_AwaitingApprovalShowsElapsedTime(t *testing.T) {
 	}
 }
 
-// Test: stepsWithRunningElapsed computes elapsed time for FixReview steps.
 func TestModel_View_FixReviewShowsElapsedTime(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -294,8 +284,6 @@ func TestModel_View_FixReviewShowsElapsedTime(t *testing.T) {
 	}
 }
 
-// Test: Re-attach scenario - step is awaiting approval, TUI connects and shows duration
-// computed from StartedAt in the initial run data.
 func TestModel_View_ReattachAwaitingApprovalShowsDuration(t *testing.T) {
 	configureTUIColors()
 	startedAt := time.Now().Add(-15 * time.Second).Unix()
@@ -316,8 +304,6 @@ func TestModel_View_ReattachAwaitingApprovalShowsDuration(t *testing.T) {
 	}
 }
 
-// Test: When EventStepCompleted carries DurationMS, it takes precedence over
-// the computed elapsed time from stepStartTimes.
 func TestModel_ApplyEvent_StepCompletedPrefersEventDuration(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -380,8 +366,6 @@ func TestModel_FixingEventDoesNotFreezeDuration(t *testing.T) {
 	t.Fatal("Review step not found")
 }
 
-// Test: When a running step auto-fixes (no approval in between), the live timer
-// must continue accumulating from the original start time, not reset to 0.
 func TestModel_AutoFixPreservesAccumulatedElapsed(t *testing.T) {
 	configureTUIColors()
 	run := testRun()
@@ -414,9 +398,6 @@ func TestModel_AutoFixPreservesAccumulatedElapsed(t *testing.T) {
 	t.Fatal("Review step not found")
 }
 
-// Test: When a step already has DurationMS persisted (e.g. from AwaitingApproval)
-// and then transitions to Fixing, the stale DurationMS must be cleared and the
-// live timer must accumulate from the previous execution time.
 func TestModel_FixingEventClearsStaleDuration(t *testing.T) {
 	configureTUIColors()
 	run := testRun()

@@ -409,9 +409,6 @@ func TestAntigravityParser_ExplicitNullStructuredOutputFallsThroughToResponse(t 
 	}
 }
 
-// writeFakeAgy writes a fake agy binary that emits the given JSONL
-// lines on stdout (one echo per line) and exits with exitCode. It returns the
-// path to the fake binary.
 func writeFakeAgy(t *testing.T, dir string, jsonlLines []string, exitCode int) string {
 	t.Helper()
 
@@ -522,9 +519,6 @@ func TestAntigravityAgent_RunReportsSchemaMiss(t *testing.T) {
 	}
 }
 
-// writeFakeAgyRecordingArgs writes a fake agy binary that appends its
-// space-joined argv to $AGY_TEST_ARGS_FILE and then emits the given JSONL
-// lines, so tests can assert on the exact flags no-mistakes passed.
 func writeFakeAgyRecordingArgs(t *testing.T, dir string, jsonlLines []string) string {
 	t.Helper()
 
@@ -733,12 +727,6 @@ func TestAntigravityAgent_RunCarriesUsageAndResponsePrecedence(t *testing.T) {
 	}
 }
 
-// TestAntigravityAgent_FailedTurnReportsTheConversationAgyServed covers the
-// case where the served conversation is the only fact the turn produced: agy
-// silently replaces the stale conversation and then exits non-zero before any
-// usage arrives. The replacement identity is the evidence the resume did not
-// happen, so the Result must exist to carry it - resultFromUsage alone returns
-// nil here, and the invocation would be recorded as a clean resume.
 func TestAntigravityAgent_FailedTurnReportsTheConversationAgyServed(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakeAgy(t, dir, []string{

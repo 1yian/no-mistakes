@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// TestCapabilitiesDeclareReviewComments pins the opt-in capability the shared
-// finding reader gates on: GitLab can read a merge request's unresolved review
-// comments through the discussions API.
 func TestCapabilitiesDeclareReviewComments(t *testing.T) {
 	t.Parallel()
 
@@ -93,11 +90,6 @@ func TestGitLabCodeRabbitCheckUsesHeadVersionIdentityAndUnresolvedState(t *testi
 	}
 }
 
-// TestGetReviewCommentsReadsUnresolvedBotDiscussions covers the reader path:
-// only a resolvable, unresolved, non-system diff note authored by a registered
-// review-bot login becomes a comment. Resolution lives on the discussion's
-// notes, and a general MR comment is never resolvable, so neither can become a
-// finding.
 func TestGetReviewCommentsReadsUnresolvedBotDiscussions(t *testing.T) {
 	t.Parallel()
 
@@ -163,9 +155,6 @@ func TestGetReviewCommentsReadsUnresolvedBotDiscussions(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsPaginatesConcatenatedPages pins that a merge request
-// with more discussions than one page never silently loses the later ones: an
-// unresolved bot comment on a dropped page would never become a finding.
 func TestGetReviewCommentsPaginatesConcatenatedPages(t *testing.T) {
 	t.Parallel()
 
@@ -185,9 +174,6 @@ func TestGetReviewCommentsPaginatesConcatenatedPages(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsSurfacesCorruptPage keeps a malformed payload from
-// reading as "no unresolved comments": a page that cannot be decoded must fail
-// the read instead of reporting a clean merge request.
 func TestGetReviewCommentsSurfacesCorruptPage(t *testing.T) {
 	t.Parallel()
 
@@ -202,9 +188,6 @@ func TestGetReviewCommentsSurfacesCorruptPage(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsScopesTheReadToTheHost pins that the discussions read
-// carries the repo's GitLab hostname, so a stale credential or an ambient
-// working directory cannot make another instance's merge request answer.
 func TestGetReviewCommentsScopesTheReadToTheHost(t *testing.T) {
 	t.Parallel()
 
@@ -223,9 +206,6 @@ func TestGetReviewCommentsScopesTheReadToTheHost(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsDerivesProjectFromTheMRURL covers a host built without a
-// project path: the recorded merge request URL is validated and supplies the
-// project, so a reattached run still reads the right discussions.
 func TestGetReviewCommentsDerivesProjectFromTheMRURL(t *testing.T) {
 	t.Parallel()
 
@@ -246,10 +226,6 @@ func TestGetReviewCommentsDerivesProjectFromTheMRURL(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsWithoutCoordinatesIsUnsupported keeps a host that cannot
-// address a merge request from parking a run under ci.review_bot_comments:
-// always. It answers "cannot supply comments" - the same answer a provider
-// without the capability gives - rather than a failed read.
 func TestGetReviewCommentsWithoutCoordinatesIsUnsupported(t *testing.T) {
 	t.Parallel()
 
@@ -260,8 +236,6 @@ func TestGetReviewCommentsWithoutCoordinatesIsUnsupported(t *testing.T) {
 	}
 }
 
-// TestGetReviewCommentsSurfacesTheCLIError pins that a rejected glab invocation
-// fails the read rather than reading as an empty comment list.
 func TestGetReviewCommentsSurfacesTheCLIError(t *testing.T) {
 	t.Parallel()
 
@@ -301,8 +275,6 @@ func TestProjectPathFromMRURL(t *testing.T) {
 	}
 }
 
-// The discussions API contract requires array pages, including [] for no
-// discussions. A successful CLI exit alone must not certify an unread payload.
 func TestGetReviewCommentsRequiresDiscussionArrays(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

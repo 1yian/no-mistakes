@@ -10,10 +10,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Finding represents a single code review or lint finding.
 type Finding = types.Finding
 
-// Findings is the structured output from a pipeline step agent call.
 type Findings = types.Findings
 
 func unmarshalRequiredFindings(raw []byte, findings *Findings, requireNonEmptySummary bool) error {
@@ -201,7 +199,6 @@ func scenarioContractIssues(i int, scenario testScenarioContractFields) []string
 	return issues
 }
 
-// findingsSchema is the JSON schema for structured findings output.
 var findingsSchema = json.RawMessage(`{
 	"type": "object",
 	"properties": {
@@ -296,8 +293,6 @@ var testFindingsSchema = json.RawMessage(`{
 	"required": ["findings", "summary", "tested", "testing_summary", "artifacts", "scenarios", "verdict"]
 }`)
 
-// reviewFindingsSchema is the JSON schema for structured review output with risk assessment.
-// Field order matters for chain-of-thought: findings first, then risk level, then rationale.
 var reviewFindingsSchema = json.RawMessage(`{
 	"type": "object",
 	"properties": {
@@ -336,10 +331,6 @@ var reviewFindingsSchema = json.RawMessage(`{
 	"required": ["findings", "risk_level", "risk_rationale", "risk_scope"]
 }`)
 
-// WithCustomGates returns the run's step sequence: the given core pipeline
-// with each repository-declared gate inserted immediately after its anchor core
-// step. The core sequence is never reordered and never loses a member, so the
-// gates a repository adds can only lengthen what a pass means.
 func WithCustomGates(core []pipeline.Step, gates []config.Gate) []pipeline.Step {
 	if len(gates) == 0 || IsDemoMode() {
 		return core
@@ -356,8 +347,6 @@ func WithCustomGates(core []pipeline.Step, gates []config.Gate) []pipeline.Step 
 	return sequence
 }
 
-// AllSteps returns the fixed core pipeline step sequence.
-// When NM_DEMO=1, it returns mock steps for demo recordings.
 func AllSteps() []pipeline.Step {
 	if IsDemoMode() {
 		return DemoSteps()

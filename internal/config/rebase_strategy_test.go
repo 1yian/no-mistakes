@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// resolveRebaseStrategy runs one global YAML document and one repository pair
-// (trusted default-branch copy + pushed-branch copy) through the same path the
-// daemon uses, and returns the strategy the rebase step would see.
 func resolveRebaseStrategy(t *testing.T, globalYAML, trustedRepoYAML, pushedRepoYAML string) string {
 	t.Helper()
 	global, err := LoadGlobalFromBytes([]byte(globalYAML))
@@ -25,7 +22,6 @@ func resolveRebaseStrategy(t *testing.T, globalYAML, trustedRepoYAML, pushedRepo
 	return Merge(global, EffectiveRepoConfig(pushed, trusted, false)).Rebase.Strategy
 }
 
-// unset is an empty YAML document: the loaders reject a zero-byte one.
 const unsetRebaseYAML = "{}\n"
 
 func TestRebaseStrategy_DefaultsToRebase(t *testing.T) {
@@ -61,9 +57,6 @@ func TestRebaseStrategy_GlobalAndProjectPrecedence(t *testing.T) {
 	}
 }
 
-// rebase.strategy decides whether integrating a moved base leaves an auditable
-// merge commit behind, so a pushed branch must not be able to change it in
-// either direction.
 func TestRebaseStrategy_TrustedOnly(t *testing.T) {
 	t.Parallel()
 	const unset = unsetRebaseYAML
@@ -109,8 +102,6 @@ func TestRebaseStrategy_RejectsUnknownValue(t *testing.T) {
 	}
 }
 
-// An empty value means "not set" rather than a third strategy, so commenting
-// the value out cannot silently invent behavior.
 func TestRebaseStrategy_EmptyValueKeepsTheDefault(t *testing.T) {
 	t.Parallel()
 	if got := resolveRebaseStrategy(t, "rebase:\n  strategy: \"\"\n", unsetRebaseYAML, unsetRebaseYAML); got != RebaseStrategyRebase {

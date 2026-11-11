@@ -806,16 +806,6 @@ func waitForStartedBranch(t *testing.T, started <-chan string, branch string) {
 	}
 }
 
-// TestPushReceivedConcurrentDifferentBranchRunsAvoidSharedConfigLock fires two
-// branch pushes for the same repo at the same time so both runs hit worktree
-// creation and git-identity setup concurrently. All runs share one gate bare
-// repo, so writing identity with `git config --local` (which targets the bare's
-// shared config) made the two startups race on <bare>/config.lock and fail one
-// run with "could not lock config file ...: File exists". CopyLocalUserIdentity
-// now writes per-worktree, so the startups no longer contend. The race window
-// is during synchronous startRun, so a failure surfaces directly as the
-// push_received call's error. macOS-only in practice (Linux file locking and
-// timing hide it), but the assertion is platform-independent.
 func TestPushReceivedConcurrentDifferentBranchRunsAvoidSharedConfigLock(t *testing.T) {
 	started := make(chan string, 2)
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -1131,11 +1121,6 @@ func TestRerunInheritsPRBaseBranchFromSelectedRun(t *testing.T) {
 	}
 }
 
-// The omit-intent decision folds once at run start: the caller's tighten-only
-// request OR the operator's global intent.publish_intent default, stamped on
-// the run row at creation. Reruns inherit the selected run's decision and can
-// only add omission (rerun --no-publish-intent), never remove it, so a
-// since-changed config file never re-publishes mid-run or on rerun.
 func TestOmitIntentFoldsAtRunStartAndRerunInherits(t *testing.T) {
 	step := &mockPassStep{name: types.StepReview}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -1177,7 +1162,6 @@ func TestOmitIntentFoldsAtRunStartAndRerunInherits(t *testing.T) {
 		t.Fatal("flagged run must omit")
 	}
 
-	// Rerun inherits the selected run's decision.
 	var rerun ipc.RerunResult
 	if err := client.Call(ipc.MethodRerun, &ipc.RerunParams{RepoID: "omit-intent-repo", Branch: "main", PreviousRunID: second.ID}, &rerun); err != nil {
 		t.Fatal(err)
@@ -1187,7 +1171,6 @@ func TestOmitIntentFoldsAtRunStartAndRerunInherits(t *testing.T) {
 		t.Fatal("rerun must inherit the selected run's omit decision")
 	}
 
-	// An explicit rerun request can also raise omission on demand.
 	var rerunFlagged ipc.RerunResult
 	if err := client.Call(ipc.MethodRerun, &ipc.RerunParams{RepoID: "omit-intent-repo", Branch: "main", PreviousRunID: first.ID, OmitIntent: true}, &rerunFlagged); err != nil {
 		t.Fatal(err)
@@ -1197,8 +1180,6 @@ func TestOmitIntentFoldsAtRunStartAndRerunInherits(t *testing.T) {
 		t.Fatal("rerun with explicit omit must stamp it")
 	}
 
-	// A rerun of an omitting run can never re-publish: the wire flag is
-	// tighten-only, so a false request still inherits omission.
 	var rerunLoosen ipc.RerunResult
 	if err := client.Call(ipc.MethodRerun, &ipc.RerunParams{RepoID: "omit-intent-repo", Branch: "main", PreviousRunID: second.ID, OmitIntent: false}, &rerunLoosen); err != nil {
 		t.Fatal(err)
@@ -1208,9 +1189,6 @@ func TestOmitIntentFoldsAtRunStartAndRerunInherits(t *testing.T) {
 	}
 }
 
-// A legacy (unpinned) launch with an unparseable global config still creates
-// a failed run row carrying the load error, so axi status and the trigger
-// wait can surface it instead of timing out on a run that never appears.
 func TestBadGlobalConfigStillCreatesFailedRunRow(t *testing.T) {
 	step := &mockPassStep{name: types.StepReview}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -1248,8 +1226,6 @@ func TestBadGlobalConfigStillCreatesFailedRunRow(t *testing.T) {
 	}
 }
 
-// The operator's global intent.publish_intent: false is folded in at start:
-// runs started without any flag omit the public Intent section.
 func TestGlobalPublishIntentFalseStampsRuns(t *testing.T) {
 	step := &mockPassStep{name: types.StepReview}
 	p, d := startTestDaemonWithSteps(t, func() []pipeline.Step {
@@ -1778,7 +1754,6 @@ func TestProofLaunchFallbackInheritsOnlyLivePRIdentity(t *testing.T) {
 	}
 }
 
-// Record only the public receipt and selected persisted launch state, never intent.
 func logLaunchEvidence(t *testing.T, label string, value any) {
 	t.Helper()
 	encoded, err := json.Marshal(value)
@@ -1788,13 +1763,6 @@ func logLaunchEvidence(t *testing.T, label string, value any) {
 	t.Logf("launch-evidence %s: %s", label, encoded)
 }
 
-// TestPushReceivedRejectsGateFromAnotherHome is defense in depth behind
-// paths.ForGate's gate-derived root. A gate path names the root that owns it,
-// but the daemon keeps only the repo id from it, so a notify carrying a gate
-// under a different root - from a hand-run CLI or a direct IPC client - used to
-// re-resolve that id under this daemon's own root and validate a foreign
-// repository's push against local worktree paths. The misroute must surface as
-// an explicit refusal instead.
 func TestPushReceivedRejectsGateFromAnotherHome(t *testing.T) {
 	// The owned-gate half launches a real run, so the daemon must resolve an
 	// agent; startTestDaemon would depend on one being installed on the host.
@@ -1833,7 +1801,6 @@ func TestPushReceivedRejectsGateFromAnotherHome(t *testing.T) {
 		t.Fatalf("refusal must name the cause, got: %v", err)
 	}
 
-	// The guard must not cost the ordinary case: this root's own gate still runs.
 	var ok ipc.PushReceivedResult
 	if err := client.Call(ipc.MethodPushReceived, &ipc.PushReceivedParams{
 		Gate: p.RepoDir(repoID),
@@ -1848,11 +1815,6 @@ func TestPushReceivedRejectsGateFromAnotherHome(t *testing.T) {
 	}
 }
 
-// TestAdmitPushRejectsGateFromAnotherHome guards the same ownership invariant on
-// the admit leg, which is the ref-mutation boundary: an admit call that reached
-// the wrong daemon would otherwise be classified against that daemon's own PID
-// chain and active steps, so a push made inside another root's validation step
-// reads as unnested and is admitted.
 func TestAdmitPushRejectsGateFromAnotherHome(t *testing.T) {
 	p, d := startTestDaemon(t)
 
@@ -1884,10 +1846,6 @@ func TestAdmitPushRejectsGateFromAnotherHome(t *testing.T) {
 	}
 }
 
-// TestOwnedGateAcceptsARelativeRootSpelling pins the guard against the root
-// spelling: NM_HOME may be relative, while the gate path always arrives
-// absolute from git rev-parse, so a textual compare would refuse every push to
-// the daemon's own gate.
 func TestOwnedGateAcceptsARelativeRootSpelling(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

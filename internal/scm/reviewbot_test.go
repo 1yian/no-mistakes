@@ -2,10 +2,6 @@ package scm
 
 import "testing"
 
-// The registry is read from two sides - the check suite's app slug on the
-// pull request rollup and the comment author's login on review threads - and
-// both must resolve to the same bot, or a red Greptile check would be routed
-// to a decision without the comments that explain it.
 func TestReviewBotRegistry_ResolvesAppAndLoginToTheSameBot(t *testing.T) {
 	t.Parallel()
 	byApp, ok := ReviewBotForCheck(ReviewBotsFor(nil), Check{App: "greptile-apps"})

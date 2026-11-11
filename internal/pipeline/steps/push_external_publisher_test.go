@@ -21,8 +21,6 @@ const externalPublisherYAML = `push:
     remedy: Recover the validated head and publish with the shipping gate.
 `
 
-// Exercise both callers of the shared publication boundary. The submitted
-// branch removes the policy, including when pushed commands are allowed.
 func TestPublication_ExternalPublisher(t *testing.T) {
 	for _, repair := range []bool{false, true} {
 		for _, tc := range []struct {

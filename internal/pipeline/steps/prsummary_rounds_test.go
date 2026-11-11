@@ -292,8 +292,6 @@ func TestBuildPipelineSummary_FailedTestRoundIncludesTestedDetails(t *testing.T)
 	}
 }
 
-// A skipped step that recorded an empty round never checked anything; the
-// body must say it was skipped instead of claiming "No issues found".
 func TestBuildPipelineSummary_SkippedStepWithEmptyRoundIsNotAPass(t *testing.T) {
 	t.Parallel()
 

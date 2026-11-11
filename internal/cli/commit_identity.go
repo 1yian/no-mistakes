@@ -26,9 +26,6 @@ func captureSubmissionIdentity(ctx context.Context, client *ipc.Client, dir stri
 	return &identity, nil
 }
 
-// A receive hook runs inside the bare gate. Resolve the registered submitting
-// checkout, and discard receive-pack's repository-routing variables only. The
-// pushing process's identity and config environment must still reach Git.
 func captureHookIdentity(ctx context.Context, client *ipc.Client, p *paths.Paths, gateDir string) (*git.CommitIdentity, error) {
 	database, err := db.OpenReadOnly(p.DB())
 	if err != nil {

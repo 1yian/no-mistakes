@@ -10,14 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Issue #283: a gated branch built on top of a local default branch that is
-// ahead of origin carries that other workstream's committed-but-unpushed
-// commits. Rebasing onto the fresh remote default branch keeps them in the
-// branch's history, so the PR silently bundles unrelated work.
-//
-// The rebase step must detect that the branch carries commits which exist on
-// the local default branch but were never pushed to origin/<default>, and stop
-// for review instead of silently widening the PR.
 func TestRebaseStep_DetectsUnpushedLocalDefaultBranchCommits(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -172,8 +164,6 @@ func TestRebaseStep_DetectsUnpushedLocalDefaultBranchCommitsOnForcePush(t *testi
 	}
 }
 
-// Issue #998: committing intended work on main before naming its delivery
-// branch is not evidence of a separate bundled workstream.
 func TestRebaseStep_LocalDefaultTipIsIntendedDelivery(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()

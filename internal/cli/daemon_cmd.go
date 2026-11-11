@@ -298,9 +298,6 @@ func parseSkipSteps(value string) ([]types.StepName, error) {
 	return dedupeSteps(steps), nil
 }
 
-// intentPushOptionPrefix carries an agent-supplied intent through a git push.
-// The value is base64-encoded so multi-line or special-character intents
-// survive the push-option transport (which is line-oriented).
 const intentPushOptionPrefix = "no-mistakes.intent="
 
 const (
@@ -331,8 +328,6 @@ func parseValidationGenerationPushOptions(options []string) (string, error) {
 	return parseOpaquePushOptions(options, validationGenerationPushOptionPrefix, "validation generation")
 }
 
-// parseOpaquePushOptions rejects conflicting duplicates rather than selecting
-// one and manufacturing a receipt for a request no caller actually made.
 func parseOpaquePushOptions(options []string, prefix, label string) (string, error) {
 	value := ""
 	for _, option := range options {
@@ -353,11 +348,8 @@ func parseOpaquePushOptions(options []string, prefix, label string) (string, err
 	return value, nil
 }
 
-// prBaseBranchPushOptionPrefix carries a per-run PR base branch through a git push.
 const prBaseBranchPushOptionPrefix = "no-mistakes.pr-base-branch="
 
-// formatIntentPushOption encodes intent as a single push option, or returns ""
-// when there is no intent to carry.
 func formatIntentPushOption(intent string) string {
 	if strings.TrimSpace(intent) == "" {
 		return ""
@@ -365,8 +357,6 @@ func formatIntentPushOption(intent string) string {
 	return intentPushOptionPrefix + base64.StdEncoding.EncodeToString([]byte(intent))
 }
 
-// parseIntentPushOptions extracts and decodes the intent push option, if any.
-// The last occurrence wins.
 func parseIntentPushOptions(options []string) (string, error) {
 	intent := ""
 	for _, option := range options {
@@ -383,8 +373,6 @@ func parseIntentPushOptions(options []string) (string, error) {
 	return intent, nil
 }
 
-// formatPRBaseBranchPushOption encodes a per-run PR base branch as a push
-// option, or returns "" when unset.
 func formatPRBaseBranchPushOption(branch string) string {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
@@ -393,8 +381,6 @@ func formatPRBaseBranchPushOption(branch string) string {
 	return prBaseBranchPushOptionPrefix + branch
 }
 
-// parsePRBaseBranchPushOptions extracts the per-run PR base branch push option,
-// if any. The last occurrence wins.
 func parsePRBaseBranchPushOptions(options []string) (string, error) {
 	branch := ""
 	for _, option := range options {
@@ -410,13 +396,8 @@ func parsePRBaseBranchPushOptions(options []string) (string, error) {
 	return branch, nil
 }
 
-// omitIntentPushOption carries axi run --no-publish-intent through a git push.
-// Like every publication control it is tighten-only: the option can only ask
-// for omission, never for publication.
 const omitIntentPushOption = "no-mistakes.omit-intent"
 
-// formatOmitIntentPushOption encodes the caller-side omit-intent request as a
-// push option. An absent request formats to no option at all.
 func formatOmitIntentPushOption(omit bool) string {
 	if !omit {
 		return ""
@@ -424,8 +405,6 @@ func formatOmitIntentPushOption(omit bool) string {
 	return omitIntentPushOption
 }
 
-// parseOmitIntentPushOptions reports whether the push carried the omit-intent
-// request. Repetition is harmless; the value is boolean and tighten-only.
 func parseOmitIntentPushOptions(options []string) (bool, error) {
 	omit := false
 	for _, option := range options {
@@ -436,17 +415,6 @@ func parseOmitIntentPushOptions(options []string) (bool, error) {
 	return omit, nil
 }
 
-// requireDaemonHonorsOmitIntent probes the running daemon before any RPC
-// that may start an omitting run. Daemon requests decode JSON permissively,
-// so a reused older daemon would silently ignore the unknown omit_intent
-// field and publish the intent it was asked to withhold; it would likewise
-// never read the global `intent.publish_intent: false` default that only the
-// daemon folds into the run. Omission may apply when the flag is set or the
-// local global default is false; global is nil when the file is unreadable,
-// which counts as may-omit. Only a request that cannot omit skips the probe.
-// A rerun can never rule omission out from the caller side (it inherits the
-// selected prior run's omission, which only the daemon knows), so it calls
-// probeDaemonOmitIntent unconditionally instead.
 func requireDaemonHonorsOmitIntent(client *ipc.Client, omit bool, global *config.GlobalConfig) error {
 	if !omit && global != nil && global.Intent.PublishesIntentByDefault() {
 		return nil
@@ -454,9 +422,6 @@ func requireDaemonHonorsOmitIntent(client *ipc.Client, omit bool, global *config
 	return probeDaemonOmitIntent(client)
 }
 
-// probeDaemonOmitIntent asks the daemon for the omit-intent capability. The
-// probe is a distinct method that an older daemon refuses; any failure or a
-// non-OK answer refuses the request, never falls back to publishing.
 func probeDaemonOmitIntent(client *ipc.Client) error {
 	var result ipc.ProbeOmitIntentResult
 	err := client.Call(ipc.MethodProbeOmitIntent, &ipc.ProbeOmitIntentParams{}, &result)
@@ -469,13 +434,8 @@ func probeDaemonOmitIntent(client *ipc.Client) error {
 	return nil
 }
 
-// reconciledPreviousHeadPushOptionPrefix carries the pre-reconciliation private
-// mirror head through a git push. A reconciled branch is deleted and re-created
-// by that push, so the hook sees no previous head of its own.
 const reconciledPreviousHeadPushOptionPrefix = "no-mistakes.reconciled-previous-head="
 
-// formatReconciledPreviousHeadPushOption encodes the archived pre-reconciliation
-// head as a push option, or returns "" when nothing was reconciled.
 func formatReconciledPreviousHeadPushOption(head string) string {
 	head = strings.TrimSpace(head)
 	if head == "" {
@@ -484,9 +444,6 @@ func formatReconciledPreviousHeadPushOption(head string) string {
 	return reconciledPreviousHeadPushOptionPrefix + head
 }
 
-// parseReconciledPreviousHeadPushOptions extracts the pre-reconciliation head
-// push option, if any. The last occurrence wins. The value is only a claim: the
-// daemon accepts it solely when the gate's own archive tag records it.
 func parseReconciledPreviousHeadPushOptions(options []string) (string, error) {
 	head := ""
 	for _, option := range options {
@@ -517,8 +474,6 @@ func isHexCommitSHA(value string) bool {
 	return true
 }
 
-// closingIssuePushOptionPrefix carries one closing issue reference through a git push.
-// Repeating the option preserves the repeatable --closes CLI contract.
 const closingIssuePushOptionPrefix = "no-mistakes.closes="
 
 func formatClosingIssueRefsPushOptions(refs []string) []string {
@@ -529,8 +484,6 @@ func formatClosingIssueRefsPushOptions(refs []string) []string {
 	return options
 }
 
-// parseClosingIssueRefsPushOptions extracts all closing issue push options and
-// applies the same validation, deduplication, and ordering as the public CLI.
 func parseClosingIssueRefsPushOptions(options []string) ([]string, error) {
 	var values []string
 	for _, option := range options {
@@ -566,11 +519,6 @@ func validStep(step types.StepName) bool {
 	return false
 }
 
-// validReadableStep accepts everything a run can have recorded a step log for,
-// which includes the repository's own gates. Read-only surfaces use this;
-// validStep stays the stricter answer for anything that CHANGES what a run
-// does. In particular `no-mistakes.skip=` must never accept a gate name, or a
-// pushed branch could switch off the maintainer's extra check by push option.
 func validReadableStep(step types.StepName) bool {
 	return validStep(step) || step.IsCustomGate()
 }

@@ -9,11 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ResolvePiProfile resolves only opt-in requests. Native selection overrides
-// are ambiguous with a run pin and are refused, not silently given precedence.
-// Agent eligibility is intentionally deferred to the daemon's pre-cancel check:
-// only there is the freshly fetched trusted repository override available to
-// replace the global agent selection before the effective config is validated.
 func (c *GlobalConfig) ResolvePiProfile(request *agentcfg.PiProfile) (*agentcfg.PiProfile, error) {
 	if request == nil {
 		return nil, nil
@@ -41,8 +36,6 @@ func (c *GlobalConfig) ResolvePiProfile(request *agentcfg.PiProfile) (*agentcfg.
 	return &resolved, nil
 }
 
-// ValidatePiProfileAgents runs after trusted repository config is merged. A
-// single-model pin must not silently drop a configured non-Pi reviewer/fallback.
 func (c *Config) ValidatePiProfileAgents() error {
 	return validatePiProfileAgents(c.Agent, c.Agents, c.ReviewAgents)
 }
@@ -70,9 +63,6 @@ func validatePiProfileAgents(agent types.AgentName, agents []types.AgentName, re
 	return nil
 }
 
-// ApplyPiProfile uses fresh maps/slices: no global or concurrent run can be
-// mutated. The run pin outranks role profiles and later global selections.
-// All other configuration, including trusted instruction suppression, stays live.
 func (c *Config) ApplyPiProfile(pin *agentcfg.PiProfile) error {
 	if pin == nil {
 		return nil

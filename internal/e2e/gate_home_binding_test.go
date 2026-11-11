@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// decoyHome is a second no-mistakes root that never has a daemon: a push that
-// misroutes to it can only fail, and any state created under it proves the CLI
-// dialed the wrong root.
 func decoyHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -25,11 +22,6 @@ func decoyHome(t *testing.T) string {
 	return home
 }
 
-// TestGateHookBindsPushToTheHomeThatOwnsTheGate drives the reported bug end to
-// end: git never sets NM_HOME for a hook, so whatever the pushing shell
-// exported used to decide which daemon authorized and ran the push. Pushing
-// with NM_HOME naming a different root must still reach the daemon that owns
-// the gate, and must leave that other root untouched.
 func TestGateHookBindsPushToTheHomeThatOwnsTheGate(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	if out, err := h.Run("init"); err != nil {
@@ -75,10 +67,6 @@ func TestGateHookBindsPushToTheHomeThatOwnsTheGate(t *testing.T) {
 	}
 }
 
-// TestPushToAMisshapenGateIsRefusedClosed: a gate that is not laid out as
-// <home>/repos/<id>.git gives the hook no owning root to derive, and admission
-// is a security boundary, so the push must be refused rather than routed to
-// whichever daemon the ambient NM_HOME names.
 func TestPushToAMisshapenGateIsRefusedClosed(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	if out, err := h.Run("init"); err != nil {

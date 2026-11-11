@@ -175,9 +175,6 @@ func TestFreshInputTokens(t *testing.T) {
 	}
 }
 
-// TestPerRoundTokens covers the cumulative-vs-per-invocation delta rule that
-// keeps a resumed session's cumulative counter from being mistaken for
-// per-round usage.
 func TestPerRoundTokens(t *testing.T) {
 	cases := []struct {
 		name       string

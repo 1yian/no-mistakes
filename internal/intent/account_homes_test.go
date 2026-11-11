@@ -13,7 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// Every transcript and SQLite row is invented, including the competing account.
 func writeAccountTranscript(t *testing.T, backend, root, repo, text string) {
 	t.Helper()
 	if backend == "claude" {

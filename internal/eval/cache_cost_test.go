@@ -14,11 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agent"
 )
 
-// TestPersistEvaluationRecordsCacheTokens pins the registry's cache token
-// columns: cache reads dominate review cost (the P0 smoke measured 23.4M
-// cache-read against 556 fresh-input tokens across claude's eight replays),
-// so a registry row that drops them understates real cost by orders of
-// magnitude and forces cost analysis back into the per-eval JSON files.
 func TestPersistEvaluationRecordsCacheTokens(t *testing.T) {
 	store, err := Open(t.TempDir())
 	if err != nil {
@@ -118,10 +113,6 @@ VALUES ('old-eval', 'session', 'case-old', 'claude+test', 1, 1, 2, 'completed', 
 	return db
 }
 
-// TestStoreMigrationAddsCacheTokenColumnsForward opens a registry created by
-// an older binary (evaluations without cache columns and one row already in
-// it) and proves the migration adds the columns without losing the row,
-// so existing histories stay readable and new rows persist cleanly.
 func TestStoreMigrationAddsCacheTokenColumnsForward(t *testing.T) {
 	root := t.TempDir()
 	db := openLegacyEvaluationRegistry(t, root)
@@ -453,10 +444,6 @@ VALUES (?, 'session', 'case-old', ?, 1, 1, 2, 'completed', 2, 2, 0, 0, 0, ?, ?, 
 	}
 }
 
-// TestObservedAgentSumsCacheWriteTokens extends the honest-cost rule to
-// cache-write tokens: an adapter that reports cache creation has it summed
-// across attempts, and an attempt without the field leaves the sum alone
-// rather than fabricating a write count.
 func TestObservedAgentSumsCacheWriteTokens(t *testing.T) {
 	withWrite := func(input, output, cacheRead, cacheWrite int) *agent.Result {
 		result := reportedUsage(input, output, cacheRead)
@@ -515,9 +502,6 @@ func TestObservedAgentCountsEachTokenBucketOnce(t *testing.T) {
 	}
 }
 
-// reportsForEvaluations drives the real report path: every evaluation is
-// persisted through the store (JSON payload plus registry row) exactly as a
-// replay persists one, then rendered.
 func reportsForEvaluations(t *testing.T, evaluations []Evaluation) []CandidateReport {
 	t.Helper()
 	store, err := Open(t.TempDir())
@@ -553,10 +537,6 @@ func reportsForEvaluations(t *testing.T, evaluations []Evaluation) []CandidateRe
 	return reports
 }
 
-// TestRenderReportIncludesCacheTokensInTokenCost pins the report's token
-// line to the honest total: cache reads dominate review cost, so a line that
-// prints only fresh-input and output understates cost by orders of magnitude
-// and ranks the recall-vs-cost frontier by the wrong number.
 func TestRenderReportIncludesCacheTokensInTokenCost(t *testing.T) {
 	evaluations := []Evaluation{{
 		Candidate: "claude+test", Status: "completed", TokensReported: true,
@@ -611,9 +591,6 @@ func TestRenderReportCacheSegmentsAddToTotal(t *testing.T) {
 	}
 }
 
-// TestRenderReportFrontierRanksOnTrueCost proves the frontier compares the
-// cache-inclusive total: an arm burning millions of cache-read tokens must
-// not read as cheaper than one that spent them honestly.
 func TestRenderReportFrontierRanksOnTrueCost(t *testing.T) {
 	cacheHeavy := Evaluation{Candidate: "cache-heavy", Status: "completed", TokensReported: true,
 		InputTokens: 2_921_774, OutputTokens: 184, CacheReadTokens: 2_921_704, FreshInputTokens: 70, DurationMS: 1000, HasFindingGold: true, GoldCount: 2, TruePositive: 2}

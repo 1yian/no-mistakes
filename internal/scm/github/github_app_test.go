@@ -7,10 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// The CI step tells a third-party review bot's check from the repository's own
-// Actions jobs by the check suite's app slug, which only the commit rollup
-// query reports. A CheckRun without a check suite, and a StatusContext, carry
-// no app identity at all.
 func TestGetChecksCarriesCheckSuiteAppSlug(t *testing.T) {
 	t.Parallel()
 

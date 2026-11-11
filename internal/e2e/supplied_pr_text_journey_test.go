@@ -51,11 +51,6 @@ func exitCode(err error) int {
 	return -1
 }
 
-// TestSuppliedPRTextJourney drives issue #1699 end to end through the real
-// binary, daemon, and a stateful fake gh: a caller-supplied PR title and
-// description are refused loudly when invalid, published verbatim above the
-// appendix on create, persisted across a daemon restart, inherited by rerun,
-// and kept byte for byte by a later plain gate push.
 func TestSuppliedPRTextJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	statePath := setupStatefulGitHub(t, h)
@@ -115,7 +110,6 @@ func TestSuppliedPRTextJourney(t *testing.T) {
 		t.Fatalf("invalid PR text started %d run(s)", len(runs))
 	}
 
-	// Happy path: create publishes the supplied title and narrative verbatim.
 	const title = "feat(widgets): Add supplied fixture"
 	narrative := "## Summary\n\nTeam-convention description.\n\n## Testing\n\nRan it by hand.\n\nPath: " + h.HomeDir + "/secret.txt\n"
 	bodyPath := filepath.Join(scratch, "body.md")
@@ -205,7 +199,6 @@ func TestSuppliedPRTextJourney(t *testing.T) {
 		t.Errorf("plain push did not keep the owned narrative; body:\n%s", pr.Body)
 	}
 
-	// Push-option transport: a raw gate push carries base64 title and body.
 	const optBranch = "feature/supplied-push-option"
 	h.CommitChange(optBranch, "opt.txt", "opt\n", "add push option fixture")
 	optTitle := "fix: Push option title"
@@ -225,7 +218,6 @@ func TestSuppliedPRTextJourney(t *testing.T) {
 		t.Errorf("push option PR = %q / body:\n%s", pr.Title, pr.Body)
 	}
 
-	// Unconfigured run: no flags, nothing stored, ordinary drafted body.
 	const plainBranch = "feature/no-supplied-text"
 	h.CommitChange(plainBranch, "plain.txt", "plain\n", "add plain fixture")
 	pwt := h.AddWorktree(plainBranch)

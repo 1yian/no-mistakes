@@ -519,12 +519,6 @@ func TestUpdateStepStatus(t *testing.T) {
 	}
 }
 
-// A custom gate shares its anchor's step_order, so a run holds duplicate sort
-// keys for the first time. Executor.recoveredGate matches these rows to the
-// executor's step list POSITIONALLY, and SQLite does not define the order of
-// rows with equal keys, so without a tie-break every parked run in a
-// gates-configured repository could become unrecoverable. Step ids are
-// monotonic ULIDs, so id order is insertion - that is, execution - order.
 func TestGetStepsByRun_OrdersEqualStepOrderRowsDeterministically(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/tmp/repo", "git@github.com:test/repo.git", "main")
@@ -572,8 +566,6 @@ func TestGetStepsByRun_OrdersEqualStepOrderRowsDeterministically(t *testing.T) {
 	}
 }
 
-// The production insertion path must produce the same answer: a gate comes
-// back immediately after the anchor it runs after.
 func TestGetStepsByRun_PlacesAGateAfterItsAnchor(t *testing.T) {
 	d := openTestDB(t)
 	repo, err := d.InsertRepo("/tmp/repo", "git@github.com:test/repo.git", "main")

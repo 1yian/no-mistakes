@@ -18,25 +18,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Every fixture in this file uses a synthetic home. A test fixture is published
-// source, exactly like the PR bodies this guard exists to keep clean, so no
-// real account may appear here.
 const (
 	fixtureHome         = "/home/testuser"
 	fixtureWorktreePath = fixtureHome + "/.no-mistakes/worktrees/ab12cd/1/svc"
 	fixtureWindowsHome  = `C:\Users\testuser`
 )
 
-// fixtureEvidenceDir is a synthetic evidence directory in the RUNNING
-// platform's spelling, unlike the fixtures above, which are literal strings
-// that only ever have to survive redaction.
-//
-// A case that exercises the artifact `path` field needs the real allowlist to
-// accept the path: sanitizeArtifactPath requires filepath.IsAbs and
-// filepath.Clean(p) == p for this platform, and a POSIX root satisfies neither
-// on Windows. With a POSIX fixture the artifact is dropped before rendering, so
-// the case stops testing redaction and quietly asserts nothing - which is
-// exactly how these passed on Linux and macOS while failing on windows-git.
 var fixtureEvidenceDir = filepath.Join(fixtureNativeHome(), ".no-mistakes", "evidence", "run-1")
 
 func fixtureNativeHome() string {
@@ -46,14 +33,10 @@ func fixtureNativeHome() string {
 	return fixtureHome
 }
 
-// fixtureRedactedPath is what fixtureEvidenceDir renders as once the home
-// prefix is replaced, in the running platform's separators.
 func fixtureRedactedPath(elem ...string) string {
 	return "~" + string(filepath.Separator) + filepath.Join(elem...)
 }
 
-// assertFixturePathIsRenderable fails loudly when a fixture path could not
-// survive the allowlist, instead of letting the case pass vacuously.
 func assertFixturePathIsRenderable(t *testing.T, p string) {
 	t.Helper()
 	if !filepath.IsAbs(p) {
@@ -64,9 +47,6 @@ func assertFixturePathIsRenderable(t *testing.T, p string) {
 	}
 }
 
-// homePathLeakNeedles are checked against every assembled PR body regardless of
-// which shape a case exercised. A shape-specific assertion would only catch the
-// shape someone already thought of.
 var homePathLeakNeedles = []string{
 	fixtureHome,
 	"/Users/testuser",
@@ -75,15 +55,8 @@ var homePathLeakNeedles = []string{
 }
 
 type homePathLeakCase struct {
-	name string
-	// evidenceDir overrides the run's evidence directory. Absolute artifact
-	// paths are only rendered when they resolve under the worktree or the
-	// evidence directory, so a case exercising an artifact path has to put the
-	// evidence directory under the synthetic home the same way production puts
-	// it under the operator's real one.
-	evidenceDir string
-	// evidenceFiles are written under the resolved evidence directory before
-	// assembly, for the case where captured output is embedded from disk.
+	name           string
+	evidenceDir    string
 	evidenceFiles  map[string]string
 	reviewFindings string
 	testFindings   string
@@ -91,18 +64,9 @@ type homePathLeakCase struct {
 	userIntent     string
 	agentTitle     string
 	agentBody      string
-	// wantVisible are strings that must survive redaction, so a "fix" that
-	// simply drops the leaking section cannot pass.
-	wantVisible []string
+	wantVisible    []string
 }
 
-// TestPRStep_BuildPRContentRedactsAbsoluteHomePaths feeds realistic captured
-// output, artifact records, and agent-authored prose through the PR-body
-// assembly and asserts that no absolute home path survives into the content
-// handed to the provider.
-//
-// Every subtest fails against the pre-fix assembly, which had no path-aware
-// processing on this path at all.
 func TestPRStep_BuildPRContentRedactsAbsoluteHomePaths(t *testing.T) {
 	t.Parallel()
 
@@ -277,9 +241,6 @@ func TestPRStep_BuildPRContentRedactsAbsoluteHomePaths(t *testing.T) {
 	}
 }
 
-// TestPRStep_ExecuteRedactsAbsoluteHomePathsBeforePublishing asserts on the
-// bytes actually handed to the provider CLI, not just on the assembly's return
-// value, so the redaction boundary cannot be bypassed by the publish path.
 func TestPRStep_ExecuteRedactsAbsoluteHomePathsBeforePublishing(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -333,10 +294,6 @@ func TestPRStep_ExecuteRedactsAbsoluteHomePathsBeforePublishing(t *testing.T) {
 	}
 }
 
-// TestPRStep_BuildPRContentRedactsAfterClampingToHostLimit pins the ordering
-// property redaction depends on: it runs last, and because the placeholder is
-// never longer than what it replaces it can only shrink an already clamped
-// body.
 func TestPRStep_BuildPRContentRedactsAfterClampingToHostLimit(t *testing.T) {
 	t.Parallel()
 	tc := homePathLeakCase{
@@ -424,9 +381,6 @@ func buildHomePathLeakPRContentWithLimit(t *testing.T, tc homePathLeakCase, body
 	return content
 }
 
-// insertCompletedStep records one finished step plus its initial round. A
-// non-empty stepError records a failed step instead, which is how a step's raw
-// error text reaches the PR body.
 func insertCompletedStep(t *testing.T, sctx *pipeline.StepContext, name types.StepName, findings, stepError string) *db.StepResult {
 	t.Helper()
 	step, err := sctx.DB.InsertStepResult(sctx.Run.ID, name)
@@ -489,12 +443,6 @@ func findingsJSON(t *testing.T, findings types.Findings) string {
 	return string(raw)
 }
 
-// TestTestFindingsSchema_DoesNotSolicitAbsolutePaths pins the other half of the
-// fix. The renderer only ever accepts an artifact path that resolves under the
-// worktree or the run's evidence directory, but the schema used to ask for
-// "absolute paths for temporary local evidence files when available" - so the
-// pipeline solicited the operator's home directory and then published it.
-// Redacting while still asking for it leaves the tool fighting itself.
 func TestTestFindingsSchema_DoesNotSolicitAbsolutePaths(t *testing.T) {
 	t.Parallel()
 	var schema map[string]any
@@ -526,21 +474,6 @@ func artifactPathDescription(t *testing.T, schema map[string]any) string {
 	return description
 }
 
-// TestTestFindingsSchema_KeepsEvidenceDirectoryPathsReportable is the other
-// side of the schema contract, and the correction to a first attempt that
-// closed the loop too far.
-//
-// The renderer's allowlist for an absolute artifact path is the worktree or the
-// run's evidence directory (see sanitizeArtifactPath); a path under neither is
-// dropped rather than rendered. The evidence directory defaults to
-// <NM_HOME>/evidence/<run-id> and NM_HOME defaults to a directory under the
-// operator's home, so a schema clause forbidding home directory paths outright
-// would forbid the one path an evidence artifact has to report - an obedient
-// agent would drop its own evidence.
-//
-// Keeping that path reportable is safe because publication safety belongs to
-// the redaction boundary in pr.go, not to the schema. The schema's job is only
-// to stop soliciting paths from elsewhere on the machine.
 func TestTestFindingsSchema_KeepsEvidenceDirectoryPathsReportable(t *testing.T) {
 	t.Parallel()
 
@@ -599,9 +532,6 @@ func TestTestFindingsSchema_KeepsEvidenceDirectoryPathsReportable(t *testing.T) 
 	})
 }
 
-// TestPRStep_BuildPRContentRedactsRunWorktreePaths covers evidence text inlined
-// into the PR body: the run worktree and any run worktree under an NM_HOME
-// outside the home directory, which home redaction never sees (#1611).
 func TestPRStep_BuildPRContentRedactsRunWorktreePaths(t *testing.T) {
 	nmHome := t.TempDir()
 	t.Setenv("NM_HOME", nmHome)
@@ -643,8 +573,6 @@ func TestPRStep_BuildPRContentRedactsRunWorktreePaths(t *testing.T) {
 	}
 }
 
-// "Verbatim" stops at the publication boundary: a supplied description is
-// redacted like every other source before its integrity guard is stamped.
 func TestPRStep_SuppliedBodyIsRedactedBeforePublishing(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

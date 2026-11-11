@@ -14,18 +14,11 @@ import (
 	"time"
 )
 
-// opencodeErrorServer serves the minimal session lifecycle with a
-// caller-supplied POST /session/{id}/message body, and reports how many
-// message requests it answered. The SSE stream carries no text, which is
-// what real opencode emits for a turn that failed before the model replied.
 func opencodeErrorServer(t *testing.T, bodies ...string) (*httptest.Server, *int) {
 	t.Helper()
 	return opencodeErrorServerWithEvents(t, "", bodies...)
 }
 
-// opencodeErrorServerWithEvents is opencodeErrorServer with caller-supplied
-// SSE events replayed before session.idle, so a test can put the tool
-// activity that a failed turn left behind on the stream.
 func opencodeErrorServerWithEvents(t *testing.T, events string, bodies ...string) (*httptest.Server, *int) {
 	t.Helper()
 	sent := 0
@@ -71,20 +64,10 @@ func runOpencodeAgainst(t *testing.T, server *httptest.Server) (*Result, error) 
 	})
 }
 
-// providerRejectedBody is the response real opencode returns when the
-// provider rejects the forced tool_choice that a json_schema request
-// carries: HTTP 200, no parts, zero tokens, and the whole cause nested
-// under info.error.data.
 const providerRejectedBody = `{"info":{"id":"msg1","role":"assistant","tokens":{"input":0,"output":0},` +
 	`"error":{"name":"APIError","data":{"message":"Error from provider (Console Go): Upstream request failed: ` +
 	`[invalid_request_error] Thinking mode does not support this tool_choice","statusCode":400,"isRetryable":false}}},"parts":[]}`
 
-// TestOpencodeAgent_FailedTurnSurfacesProviderErrorInsteadOfEmptyOutput is
-// the regression for a review step that failed in seconds with zero tokens
-// and reported only "opencode returned no text output". opencode reports a
-// failed turn on info.error with HTTP 200, so every variant other than
-// StructuredOutputError used to be dropped and the run fell through to the
-// empty-text fallback, hiding an actionable provider rejection.
 func TestOpencodeAgent_FailedTurnSurfacesProviderErrorInsteadOfEmptyOutput(t *testing.T) {
 	server, sent := opencodeErrorServer(t, providerRejectedBody)
 
@@ -109,10 +92,6 @@ func TestOpencodeAgent_FailedTurnSurfacesProviderErrorInsteadOfEmptyOutput(t *te
 	}
 }
 
-// TestOpencodeAgent_StructuredOutputErrorReadsNestedErrorData pins the wire
-// shape: opencode serializes every named error as {"name":..,"data":{..}},
-// so reading message/retries from the top level left the user-facing error
-// blank ("failed after 0 internal retries: ").
 func TestOpencodeAgent_StructuredOutputErrorReadsNestedErrorData(t *testing.T) {
 	server, _ := opencodeErrorServer(t, `{"info":{"id":"msg1","role":"assistant","error":{"name":"StructuredOutputError",`+
 		`"data":{"message":"Model did not produce structured output","retries":2}}},"parts":[]}`)
@@ -130,9 +109,6 @@ func TestOpencodeAgent_StructuredOutputErrorReadsNestedErrorData(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_RetriesRetryableProviderErrorThenSucceeds covers the
-// other half: a provider blip opencode itself marks retryable costs a retry,
-// not the whole pipeline round.
 func TestOpencodeAgent_RetriesRetryableProviderErrorThenSucceeds(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -230,29 +206,18 @@ func TestClassifyOpencodeTransient(t *testing.T) {
 	}
 }
 
-// toolPartEvent is a tool part on the SSE stream: opencode reports every tool
-// invocation as a part of type "tool" on the assistant message.
 const toolPartEvent = `data: {"payload":{"type":"message.part.updated","properties":{"sessionID":"s1",` +
 	`"part":{"id":"prt1","messageID":"msg1","type":"tool"}}}}` + "\n\n"
 
-// stepFinishEvent ends a model step. Every turn emits one, including a turn
-// that only produced text, so it must never by itself count as tool activity.
 const stepFinishEvent = `data: {"payload":{"type":"message.part.updated","properties":{"sessionID":"s1",` +
 	`"part":{"id":"step1","messageID":"msg1","type":"step-finish","tokens":{"input":10,"output":5}}}}}` + "\n\n"
 
-// retryableProviderBlipBody is a failure opencode itself marks retryable.
 const retryableProviderBlipBody = `{"info":{"id":"msg1","role":"assistant","error":{"name":"APIError",` +
 	`"data":{"message":"Service Unavailable","statusCode":503,"isRetryable":true}}},"parts":[]}`
 
 const structuredSuccessBody = `{"info":{"id":"msg2","role":"assistant","structured":{"summary":"all good"},` +
 	`"tokens":{"input":10,"output":5}},"parts":[{"type":"text","text":"{\"summary\":\"all good\"}"}]}`
 
-// TestOpencodeAgent_RetryableFailureAfterToolActivityIsNotRetried is the
-// regression for the retry replaying side effects. runOnce creates a fresh
-// session per attempt, so a retry replays the whole prompt with no memory of
-// the tools the failed attempt already executed - a second branch push, a
-// second file write, a second PR comment. When the failed turn ran any tool
-// the retry is refused and the provider error is reported as-is.
 func TestOpencodeAgent_RetryableFailureAfterToolActivityIsNotRetried(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -280,10 +245,6 @@ func TestOpencodeAgent_RetryableFailureAfterToolActivityIsNotRetried(t *testing.
 	}
 }
 
-// TestOpencodeAgent_RetryableFailureWithoutToolActivityStillRetries pins the
-// other side of the gate: the motivating failure mode is a provider blip that
-// kills the turn before any tool runs, and that must still cost only a retry.
-// A step-finish part alone is not tool activity - every turn emits one.
 func TestOpencodeAgent_RetryableFailureWithoutToolActivityStillRetries(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -304,9 +265,6 @@ func TestOpencodeAgent_RetryableFailureWithoutToolActivityStillRetries(t *testin
 	}
 }
 
-// TestOpencodeAgent_ToolPartInTheMessageResponseAlsoBlocksRetry covers the
-// tool part that arrives only on the message response body: the SSE stream
-// can be cut short, so the response is the second place tool activity shows.
 func TestOpencodeAgent_ToolPartInTheMessageResponseAlsoBlocksRetry(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -325,11 +283,6 @@ func TestOpencodeAgent_ToolPartInTheMessageResponseAlsoBlocksRetry(t *testing.T)
 	}
 }
 
-// TestOpencodeAgent_ThinkingConflictAfterToolActivityDoesNotFallBack applies
-// the same gate to the prompt-only structured-output fallback. That fallback
-// is also a second attempt in a fresh session, and a session.error can arrive
-// at any point in a turn, so a conflict reported after the model already ran
-// a tool would replay that tool's side effects.
 func TestOpencodeAgent_ThinkingConflictAfterToolActivityDoesNotFallBack(t *testing.T) {
 	var sessions atomic.Int32
 	var eventStreams atomic.Int32
@@ -375,9 +328,6 @@ func TestOpencodeAgent_ThinkingConflictAfterToolActivityDoesNotFallBack(t *testi
 	}
 }
 
-// killResponseStream ends an in-flight response the way a dropped connection
-// does: the chunked body stops without its terminating chunk, so the client's
-// next read fails with an unexpected EOF rather than a clean end of stream.
 func killResponseStream(t *testing.T, w http.ResponseWriter) {
 	t.Helper()
 	flusher, ok := w.(http.Flusher)
@@ -396,10 +346,6 @@ func killResponseStream(t *testing.T, w http.ResponseWriter) {
 	conn.Close()
 }
 
-// opencodeStreamDeathServer serves a first turn whose SSE stream dies
-// mid-flight after replaying events, and a healthy turn on every later
-// attempt. It reports how many sessions were created, which is the fact the
-// gate is about: a retry is a fresh session that replays the whole prompt.
 func opencodeStreamDeathServer(t *testing.T, events string) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var sessions, streams atomic.Int32
@@ -429,13 +375,6 @@ func opencodeStreamDeathServer(t *testing.T, events string) (*httptest.Server, *
 	return server, &sessions
 }
 
-// TestOpencodeAgent_SSEFailureAfterToolActivityIsNotRetried is the same
-// replay hole on the path that never reaches opencode's own retryability
-// verdict. A dropped event stream is reported as "opencode events:
-// unexpected EOF", which the shared substring classifier reads as transient
-// and retries in a FRESH session - replaying every tool the failed turn
-// already ran. The tool part arrives on the stream before it dies, so the
-// retry is refused.
 func TestOpencodeAgent_SSEFailureAfterToolActivityIsNotRetried(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -457,9 +396,6 @@ func TestOpencodeAgent_SSEFailureAfterToolActivityIsNotRetried(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_SSEFailureWithoutToolActivityStillRetries pins the other
-// side: a stream that drops before the model acted is exactly the blip the
-// retry exists for, and still costs one retry rather than the whole round.
 func TestOpencodeAgent_SSEFailureWithoutToolActivityStillRetries(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -477,9 +413,6 @@ func TestOpencodeAgent_SSEFailureWithoutToolActivityStillRetries(t *testing.T) {
 	}
 }
 
-// TestOpencodeTurnFailure_GatesTheSharedClassifier covers the paths that
-// carry no verdict from opencode. The classifier sees only text there, so
-// the marker is what stands between a dropped stream and a replayed tool.
 func TestOpencodeTurnFailure_GatesTheSharedClassifier(t *testing.T) {
 	streamDrop := fmt.Errorf("opencode events: unexpected EOF")
 
@@ -546,9 +479,6 @@ func TestOpencodeTurnFailure_GatesTheSharedClassifier(t *testing.T) {
 	}
 }
 
-// TestResolveOpencodeToolEvidence is the three-valued question itself: a turn
-// that ran a tool, a turn PROVEN to have run none, and a turn nothing
-// available can answer for. The last one used to be read as the second.
 func TestResolveOpencodeToolEvidence(t *testing.T) {
 	respWithTool := &opencodeMessageResponse{Parts: []opencodeMessagePart{{Type: "tool"}}}
 	respWithoutTool := &opencodeMessageResponse{Parts: []opencodeMessagePart{{Type: "text", Text: "done"}}}
@@ -627,9 +557,6 @@ func TestResolveOpencodeToolEvidence(t *testing.T) {
 	}
 }
 
-// TestAwaitOpencodeMessage covers the bounded wait itself: an answer that
-// lands late still settles the evidence, and one that never lands leaves the
-// result unsettled rather than empty-and-believed.
 func TestAwaitOpencodeMessage(t *testing.T) {
 	ch := make(chan opencodeMessageResult, 1)
 	go func() {
@@ -650,12 +577,6 @@ func TestAwaitOpencodeMessage(t *testing.T) {
 	}
 }
 
-// opencodeSlowMessageServer serves a first turn whose SSE stream dies after
-// the caller-supplied events and whose message request answers only once that
-// stream is already gone - the interleaving the non-blocking receive cannot
-// see through. An empty answer never arrives at all. Later attempts get a
-// healthy stream and a successful turn, so a replay is visible as a second
-// session.
 func opencodeSlowMessageServer(t *testing.T, events, answer string) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var sessions, streams atomic.Int32
@@ -708,9 +629,6 @@ func opencodeSlowMessageServer(t *testing.T, events, answer string) (*httptest.S
 	return server, &sessions
 }
 
-// withFastEvidenceWait shortens the bounded wait for a failed turn's message
-// response, so a test modelling a turn that never answers does not sit out
-// the production budget. Returns a restore func, like withFastBackoff.
 func withFastEvidenceWait(t *testing.T) func() {
 	t.Helper()
 	prev := opencodeEvidenceWait
@@ -718,12 +636,6 @@ func withFastEvidenceWait(t *testing.T) func() {
 	return func() { opencodeEvidenceWait = prev }
 }
 
-// TestOpencodeAgent_InFlightMessageResponseWithholdsTheRetry is the race the
-// tool-activity gate had left: a stream that dies after opencode ran a tool
-// but before the tool event arrives leaves NO evidence at classification
-// time - the stream carries no tool part, and the message response that
-// would list one is still in flight. Reading that silence as "no tools ran"
-// retries in a fresh session and replays the tool.
 func TestOpencodeAgent_InFlightMessageResponseWithholdsTheRetry(t *testing.T) {
 	defer withFastBackoff(t)()
 	defer withFastEvidenceWait(t)()
@@ -746,10 +658,6 @@ func TestOpencodeAgent_InFlightMessageResponseWithholdsTheRetry(t *testing.T) {
 	}
 }
 
-// TestOpencodeAgent_LateMessageResponseWithoutToolsStillRetries is the other
-// side of the same wait: the response arrives only after the stream is gone,
-// and it is what PROVES the turn ran no tool. The blip the retry exists for
-// still costs one retry rather than the whole round.
 func TestOpencodeAgent_LateMessageResponseWithoutToolsStillRetries(t *testing.T) {
 	defer withFastBackoff(t)()
 
@@ -767,10 +675,6 @@ func TestOpencodeAgent_LateMessageResponseWithoutToolsStillRetries(t *testing.T)
 	}
 }
 
-// TestOpencodeAgent_LateMessageResponseWithToolPartWithholdsTheRetry is the
-// case the race actually hid: the tool part exists, but only in a response
-// that arrives after the stream died. Waiting for it turns an unverifiable
-// turn into a known one, and the refusal says so.
 func TestOpencodeAgent_LateMessageResponseWithToolPartWithholdsTheRetry(t *testing.T) {
 	defer withFastBackoff(t)()
 

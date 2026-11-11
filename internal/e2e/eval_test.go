@@ -13,11 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestEvalJourney drives the public CLI through a real captured pipeline run
-// and replays its review with a fakeagent scenario. The harness's NM_HOME owns
-// the source daemon; eval itself must create its own temporary sandbox and
-// never reuse it. Nothing here enables eval: recording replay provenance is a
-// default, so an ordinary run is capturable and replayable as it stands.
 func TestEvalJourney(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "eval-scenario.yaml")
 	if err := os.WriteFile(scenario, []byte(`actions:
@@ -122,10 +117,6 @@ func TestEvalJourney(t *testing.T) {
 	t.Logf("eval report output:\n%s", out)
 }
 
-// TestEvalAutoCaptureJourney is the end-to-end contract for automatic
-// collection: a user who never runs an eval command still ends up with a
-// corpus. It deliberately never invokes "eval capture" - the only commands here
-// are an ordinary pipeline run and a read-only inspection of the sets.
 func TestEvalAutoCaptureJourney(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "auto-capture-scenario.yaml")
 	if err := os.WriteFile(scenario, []byte(`actions:

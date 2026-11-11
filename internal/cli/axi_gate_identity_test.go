@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A step's next round can park at the same status before any read observes it
-// running, so the status alone cannot say whether the gate just answered is
-// gone. Every round is persisted before the step parks again, so the round
-// count does.
 func TestWaitStepLeavesGate_SameStatusAtAHigherRoundIsANewGate(t *testing.T) {
 	var round atomic.Int32
 	round.Store(1)
@@ -56,9 +52,6 @@ func TestWaitStepLeavesGate_SameStatusAtAHigherRoundIsANewGate(t *testing.T) {
 	}
 }
 
-// axi respond hits the same shape: the next round can park before the wait's
-// first read, and keyed on status alone that park read as the one just
-// responded to, hanging the command until --wait elapsed.
 func TestAxiRespond_ReparkAtTheSameStatusIsReturnedAsTheNextGate(t *testing.T) {
 	var responded atomic.Bool
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{responded: &responded})

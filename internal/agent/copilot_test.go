@@ -223,9 +223,6 @@ func TestParseCopilotEvents_SkipsMalformedAndSessionLines(t *testing.T) {
 	}
 }
 
-// writeFakeCopilot writes a fake copilot binary that emits the given JSONL
-// lines on stdout (one echo per line) and exits with exitCode. It returns the
-// path to the fake binary.
 func writeFakeCopilot(t *testing.T, dir string, jsonlLines []string, exitCode int) string {
 	t.Helper()
 
@@ -304,9 +301,6 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// winEchoEscape escapes a JSON line so cmd.exe `echo` emits it verbatim. JSON
-// produced by these tests contains no cmd metacharacters except quotes, which
-// echo prints literally; escape the shell-significant ones defensively.
 func winEchoEscape(s string) string {
 	r := strings.NewReplacer(
 		"^", "^^",
@@ -406,11 +400,6 @@ func TestParseCopilotEvents_CollectsAllAssistantMessages(t *testing.T) {
 	}
 }
 
-// TestFinalizeCopilotResult_RecoversJSONBeforeProseSummary is the core
-// regression for the fix-step parse bug: Copilot emitted the schema JSON in an
-// earlier assistant message, then closed with a prose summary beginning with
-// 'N'. The final message alone cannot be parsed, so scanning newest-first must
-// recover the earlier JSON object.
 func TestFinalizeCopilotResult_RecoversJSONBeforeProseSummary(t *testing.T) {
 	schema := json.RawMessage(`{
 		"type":"object",

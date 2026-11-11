@@ -171,14 +171,6 @@ func TestServiceProxyEnvSkipsUnsetAndEmpty(t *testing.T) {
 	}
 }
 
-// TestServiceProxyEnvDedupesOnCaseInsensitivePlatforms reproduces the Windows
-// CI failure: with case-insensitive env-var names, HTTPS_PROXY and https_proxy
-// resolve to one variable with one value, and forwarding both spellings would
-// bake a duplicate entry into the rendered service definition. serviceProxyEnv
-// must collapse them into a single entry. runtimeGOOS is forced to "windows" so
-// the dedup branch is exercised deterministically on any host; both spellings
-// are set to the same value, mirroring how a case-insensitive environment
-// resolves them.
 func TestServiceProxyEnvDedupesOnCaseInsensitivePlatforms(t *testing.T) {
 	oldGOOS := runtimeGOOS
 	runtimeGOOS = "windows"
@@ -196,11 +188,6 @@ func TestServiceProxyEnvDedupesOnCaseInsensitivePlatforms(t *testing.T) {
 	}
 }
 
-// TestServiceProxyEnvForwardsBothSpellingsOnCaseSensitivePlatforms guards that
-// macOS/Linux behaviour is unchanged: when both spellings are set to different
-// values they are distinct variables and BOTH are forwarded verbatim, in
-// declaration order. Skipped on Windows, where the two spellings cannot hold
-// different values.
 func TestServiceProxyEnvForwardsBothSpellingsOnCaseSensitivePlatforms(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("env-var names are case-insensitive on Windows; the two spellings are one variable")
@@ -221,12 +208,6 @@ func TestServiceProxyEnvForwardsBothSpellingsOnCaseSensitivePlatforms(t *testing
 	}
 }
 
-// TestServiceProxyEnvForwardsLowerOnlySpelling is the regression guard for the
-// curl case: a proxy exported only as the lower-case http_proxy must reach the
-// daemon as http_proxy, not normalised to HTTP_PROXY, because curl honours only
-// the lower-case spelling for plain-HTTP requests. Skipped on Windows, where
-// the spelling is not preserved (and need not be, as lookups are
-// case-insensitive there).
 func TestServiceProxyEnvForwardsLowerOnlySpelling(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("env-var names are case-insensitive on Windows; spelling is not preserved")
@@ -260,14 +241,6 @@ func TestRenderSystemdUnitForwardsProxyEnv(t *testing.T) {
 	}
 }
 
-// TestRenderSystemdUnitForwardsEveryProxyEnvKey guards that the renderer and
-// proxyEnvKeys cannot drift apart: every declared key handed to the renderer -
-// both the upper- and lower-case spellings - must reach the unit as its own
-// Environment= line. The proxy environment is injected directly rather than
-// read from the process environment so the assertion is independent of the
-// host's env-var case sensitivity (it ran on Windows CI, where setting both
-// spellings to distinct values is impossible); serviceProxyEnv's own
-// platform-specific behaviour is covered by the TestServiceProxyEnv* tests.
 func TestRenderSystemdUnitForwardsEveryProxyEnvKey(t *testing.T) {
 	var proxyEnv [][2]string
 	for _, key := range proxyEnvKeys {
@@ -283,15 +256,6 @@ func TestRenderSystemdUnitForwardsEveryProxyEnvKey(t *testing.T) {
 	}
 }
 
-// TestRenderSystemdUnitEscapesPercentInProxyEnv guards that percent signs in a
-// forwarded proxy value are doubled (% -> %%) so systemd's specifier expansion
-// (which runs on Environment= directive values) does not corrupt or reject
-// percent-encoded credentials. A proxy URL such as
-// http://user:p%40ss%3Aw0rd@proxy:8080 - the normal encoding for reserved
-// characters in a user/pass - would otherwise have %40/%3A treated as unit
-// specifiers (%4 is unknown and rejects the assignment on systemd >= v249,
-// silently corrupting the value on older releases). The launchd plist path is
-// XML and not subject to specifier expansion, so it is intentionally untouched.
 func TestRenderSystemdUnitEscapesPercentInProxyEnv(t *testing.T) {
 	proxyEnv := [][2]string{
 		{"HTTPS_PROXY", "http://user:p%40ss%3Aw0rd@proxy:8080"},
@@ -342,15 +306,6 @@ func TestWriteServiceFileTightensModeWhenProxyPresent(t *testing.T) {
 	}
 }
 
-// TestWriteServiceFileReplacesAtomicallyWhenProxyPresent guards that
-// credential-bearing content (a forwarded proxy URL can embed user:pass) is
-// never written into a pre-existing world-readable 0644 file and only tightened
-// afterwards. Writing in place with os.WriteFile would reuse the existing 0644
-// file - leaving the credentials world-readable until a follow-up Chmod - so
-// the proxy path must write a fresh 0600 file and atomically rename it over the
-// target. The replacement is observable as a different underlying file
-// (os.SameFile == false) that carries the new content at 0600, with no leftover
-// temp files in the directory.
 func TestWriteServiceFileReplacesAtomicallyWhenProxyPresent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX file modes (0644/0600) are not enforced on Windows; the proxy-bearing service file is only generated on macOS/Linux")

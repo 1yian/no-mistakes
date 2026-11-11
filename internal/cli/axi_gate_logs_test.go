@@ -13,9 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// A repository gate keeps its own step log, and the truncation marker a failing
-// command gate emits tells the operator to read it with exactly this command.
-// The CLI used to refuse the name it had just told them to type.
 func TestAxiLogsReadsARepositoryGateStepLog(t *testing.T) {
 	repoDir, p, database, repo := setupAxiQueryRepo(t)
 	chdir(t, repoDir)
@@ -48,8 +45,6 @@ func TestAxiLogsReadsARepositoryGateStepLog(t *testing.T) {
 	}
 }
 
-// Accepting gate names must not turn --step into an arbitrary file read: the
-// label is operator input joined straight onto the run's log directory.
 func TestAxiLogsRefusesAGateStepNameThatWouldEscapeTheLogDirectory(t *testing.T) {
 	repoDir, p, database, repo := setupAxiQueryRepo(t)
 	chdir(t, repoDir)
@@ -117,8 +112,6 @@ func TestAxiLogsRefusesGatesOnForbiddenAnchors(t *testing.T) {
 	}
 }
 
-// A gate is trusted-config-only, so a pushed branch must not be able to switch
-// one off through a push option. Read-only surfaces widened; skip did not.
 func TestSkipPushOptionRefusesARepositoryGateStepName(t *testing.T) {
 	gate := string(types.CustomGateStepName(types.StepTest, "mutation-budget"))
 	if _, err := parseSkipSteps(gate); err == nil {

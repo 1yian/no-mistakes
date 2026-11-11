@@ -68,8 +68,6 @@ func TestExecutor_SkipPersistenceFailureExecutesNoSteps(t *testing.T) {
 	}
 }
 
-// Exit at the durably emitted park, without cancelling the run. Recovery must
-// use the database alone, exactly as after loss of the original daemon process.
 func TestExecutorSkipRecoveryProcess(t *testing.T) {
 	root := os.Getenv("NM_SKIP_FIXTURE_ROOT")
 	if root == "" {

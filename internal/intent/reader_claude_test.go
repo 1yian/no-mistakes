@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// writeClaudeFixture builds a minimal Claude-style .jsonl transcript inside
-// a fake $HOME and returns the home path.
 func writeClaudeFixture(t *testing.T, repoCWD string, lines []string) string {
 	t.Helper()
 	home := t.TempDir()

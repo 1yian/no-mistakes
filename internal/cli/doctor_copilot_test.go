@@ -10,11 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/telemetry"
 )
 
-// TestDoctorListsCopilotAgent exercises the user-facing `no-mistakes doctor`
-// report and verifies the GitHub Copilot CLI now appears in the Agents section
-// and is detected (LookPath) when its binary is on PATH, just like the other
-// first-class agents. The full rendered report is logged so it can be captured
-// as reviewer-visible evidence.
 func TestDoctorListsCopilotAgent(t *testing.T) {
 	restore := telemetry.SetDefaultForTesting(&telemetryRecorder{})
 	defer restore()
@@ -47,9 +42,6 @@ func TestDoctorListsCopilotAgent(t *testing.T) {
 	}
 }
 
-// writeFakeCopilotBinary writes a stub `copilot` executable that doctor's
-// LookPath can resolve. doctor never executes it, so an empty no-op script is
-// enough.
 func writeFakeCopilotBinary(t *testing.T, dir string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {

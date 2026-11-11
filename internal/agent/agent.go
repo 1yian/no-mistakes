@@ -20,71 +20,30 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Agent is the interface for running AI agent tasks.
-//
-// Run may return a non-nil Result together with an error: a failed or
-// cancelled invocation still carries the usage the adapter parsed, so
-// instrumentation records honest token counts instead of a fabricated zero.
-// A non-nil Result is therefore not a success signal; callers must check the
-// error.
 type Agent interface {
 	Name() string
 	Run(ctx context.Context, opts RunOpts) (*Result, error)
 	Close() error
 }
 
-// RunOpts configures a single agent invocation.
 type RunOpts struct {
-	Prompt string
-	// RequireCompletedChildren refuses a successful native agent exit if its
-	// owned process group or job still has children after the bounded settle
-	// window, or completion cannot be verified.
-	// It does not verify detached checks or their exit statuses.
+	Prompt                   string
 	RequireCompletedChildren bool
-	// Env appends invocation-scoped environment entries to the agent process.
-	// Entries later in the slice override inherited values.
-	Env         []string
-	CWD         string
-	JSONSchema  json.RawMessage      // structured output schema (optional)
-	OnChunk     func(text string)    // streaming text callback (optional)
-	OnLifecycle func(LifecycleEvent) // native agent lifecycle callback (optional)
-	// Session, when non-nil, asks a session-capable adapter (see
-	// SessionResumer) to start or resume a durable native session. Adapters
-	// without session support ignore it and run cold; the caller detects the
-	// fallback via an empty Result.SessionID.
-	Session *SessionRef
-	// SessionFallback marks this invocation as the fresh-session retry after
-	// a failed resume. Instrumentation only; adapters ignore it.
-	SessionFallback bool
-	// Purpose labels the pipeline duty this invocation serves (review,
-	// review-fix, test-evidence, ...). The review-role router uses review and
-	// review-fix to select a harness; concrete adapters ignore it.
-	Purpose string
-	// Round is the 1-based review-loop round this invocation belongs to, or 0
-	// when the caller does not number rounds. The review-role router uses it to
-	// apply an operator-configured later-round role override; concrete adapters
-	// ignore it. An unknown round always keeps the primary role selection.
-	Round int
-	// SessionFallbackReason is the low-cardinality reason a failed resume forced
-	// this fresh-session retry (see db.FallbackReason*). Set only when
-	// SessionFallback is true. Instrumentation only; adapters ignore it.
-	SessionFallbackReason string
-	// Workload, when non-nil, records the bounded size of the change this
-	// invocation is working over (files and net lines), so review/fix telemetry
-	// can be normalized without external git archaeology. Instrumentation only;
-	// adapters ignore it.
-	Workload *InvocationWorkload
-	// OnAttempt receives each concrete adapter attempt, including retries and
-	// fallback-provider attempts, after it completes. It is instrumentation
-	// only and must not change invocation behavior.
-	OnAttempt       func(Attempt)
-	ConfiguredModel string
+	Env                      []string
+	CWD                      string
+	JSONSchema               json.RawMessage      // structured output schema (optional)
+	OnChunk                  func(text string)    // streaming text callback (optional)
+	OnLifecycle              func(LifecycleEvent) // native agent lifecycle callback (optional)
+	Session                  *SessionRef
+	SessionFallback          bool
+	Purpose                  string
+	Round                    int
+	SessionFallbackReason    string
+	Workload                 *InvocationWorkload
+	OnAttempt                func(Attempt)
+	ConfiguredModel          string
 }
 
-// IsStructuredOutputRejected reports whether an invocation completed but its
-// final structured response was absent, malformed, or rejected by the requested
-// schema. Callers may use this distinction to ask the same agent to correct its
-// response without treating provider, process, or timeout failures as bad JSON.
 func IsStructuredOutputRejected(err error) bool {
 	var rejection interface {
 		StructuredOutputRejected() bool
@@ -92,9 +51,6 @@ func IsStructuredOutputRejected(err error) bool {
 	return errors.As(err, &rejection) && rejection.StructuredOutputRejected()
 }
 
-// IsUsageLimitReached reports the adapter's terminal usage-limit signal. The
-// signal remains matchable through pipeline error wrappers, even when a
-// timeout diagnostic bounds the adapter's displayed error text.
 func IsUsageLimitReached(err error) bool {
 	var limit interface {
 		UsageLimitReached() bool
@@ -115,8 +71,6 @@ func (e *structuredOutputRejection) Error() string                { return e.err
 func (e *structuredOutputRejection) Unwrap() error                { return e.err }
 func (*structuredOutputRejection) StructuredOutputRejected() bool { return true }
 
-// RejectStructuredOutput marks absent, malformed, or schema-rejected final
-// output without changing its diagnostic or underlying error chain.
 func RejectStructuredOutput(err error) error {
 	if err == nil || IsStructuredOutputRejected(err) {
 		return err
@@ -124,9 +78,6 @@ func RejectStructuredOutput(err error) error {
 	return &structuredOutputRejection{err: err}
 }
 
-// Attempt describes one completed concrete adapter attempt for an agent
-// invocation. An Agent may make several attempts when it retries transient
-// failures or moves to a fallback provider.
 type Attempt struct {
 	ConfiguredModel string
 	Agent           string
@@ -138,37 +89,24 @@ type Attempt struct {
 	SessionFallback bool
 }
 
-// SessionRef identifies a durable adapter-native session for RunOpts.Session.
 type SessionRef struct {
-	// ID is the adapter-native session identity to resume. Empty starts a
-	// new resumable session whose identity is reported via Result.SessionID.
 	ID    string
 	Agent string
 }
 
-// SessionResumer is the optional adapter capability for durable native
-// session resume across invocations. Decorators must forward it; callers use
-// SupportsSessionResume so wrapping never hides the capability.
 type SessionResumer interface {
 	SupportsSessionResume() bool
 }
 
-// SupportsSessionResume reports whether a (possibly wrapped) agent can start
-// and resume durable native sessions.
 func SupportsSessionResume(a Agent) bool {
 	r, ok := a.(SessionResumer)
 	return ok && r.SupportsSessionResume()
 }
 
-// SessionProviderMatcher reports whether an agent can resume sessions minted
-// by a particular provider. Fallback wrappers implement it so callers do not
-// mistake the wrapper's name for the provider that owns a session identity.
 type SessionProviderMatcher interface {
 	SupportsSessionProvider(string) bool
 }
 
-// SupportsSessionProvider reports whether a (possibly wrapped) agent can
-// resume a session minted by provider.
 func SupportsSessionProvider(a Agent, provider string) bool {
 	if provider == "" {
 		return false
@@ -179,42 +117,19 @@ func SupportsSessionProvider(a Agent, provider string) bool {
 	return a != nil && a.Name() == provider && SupportsSessionResume(a)
 }
 
-// AttemptReporter is the optional adapter capability for reporting every
-// concrete attempt, including internal retries and fallback providers.
 type AttemptReporter interface {
 	ReportsAgentAttempts() bool
 }
 
-// ReportsAgentAttempts reports whether a (possibly wrapped) agent emits an
-// Attempt callback for each concrete adapter attempt.
 func ReportsAgentAttempts(a Agent) bool {
 	r, ok := a.(AttemptReporter)
 	return ok && r.ReportsAgentAttempts()
 }
 
-// GateInstructionNeutralizer is the optional adapter capability that reports the
-// adapter neutralizes the target repository's project agent-instruction files
-// (AGENTS.md/CLAUDE.md) for this invocation, so they cannot install a governing
-// identity on the gate agent.
-//
-// A gate agent runs with cmd.Dir set to the target checkout and a free shell. If
-// the checkout is itself an agent-orchestration harness (for example firstmate),
-// its AGENTS.md can otherwise convince the gate agent it is the fleet captain and
-// drive it to spawn a crew and reset the branch it is validating (the
-// ambient-authority incident). Only adapters whose suppression knob is
-// empirically verified implement this and return true, and only while that knob
-// is actually in effect for the invocation (an operator override that defeats the
-// knob must report false so the gate fails closed rather than launching
-// unneutralized).
 type GateInstructionNeutralizer interface {
 	NeutralizesGateInstructions() bool
 }
 
-// NeutralizesGateInstructions reports whether a (possibly wrapped) agent
-// neutralizes the target repo's project agent-instruction files during a gate
-// run. It fails closed: an adapter that does not implement the capability, a
-// nil agent, or a wrapper any member of which does not neutralize, is reported
-// as NOT neutralized.
 func NeutralizesGateInstructions(a Agent) bool {
 	if a == nil {
 		return false
@@ -223,12 +138,6 @@ func NeutralizesGateInstructions(a Agent) bool {
 	return ok && n.NeutralizesGateInstructions()
 }
 
-// EnsureGateNeutralized fails closed when the agent that will run gate steps in
-// the target checkout does not neutralize that checkout's project
-// agent-instruction files. Callers must invoke it before launching any gate
-// agent so an unverified harness is refused with a clear error rather than run
-// unneutralized in the target checkout. Only codex, claude, pi, and acp:omp have
-// a verified neutralization knob today.
 func EnsureGateNeutralized(a Agent) error {
 	if a == nil {
 		return fmt.Errorf("no gate agent configured")
@@ -243,113 +152,53 @@ func EnsureGateNeutralized(a Agent) error {
 		"'agent' to codex, claude, pi, or acp:omp in ~/.no-mistakes/config.yaml", a.Name())
 }
 
-// LifecycleEvent describes process-level activity for an agent invocation.
-// The pipeline records these as step log lines and active-step heartbeats.
 type LifecycleEvent struct {
-	Agent   string
-	Phase   string
-	PID     int
-	Message string
-	// NextAgent names the agent a LifecyclePhaseQuotaSwitch event moves the
-	// run to, so the executor can record the switch on the run's quota-routing
-	// record without parsing the prose. Empty on every other phase.
+	Agent     string
+	Phase     string
+	PID       int
+	Message   string
 	NextAgent string
 }
 
-// Result holds the output of an agent invocation.
 type Result struct {
-	// Output is structured JSON returned by the agent. Text-parsed fallback
-	// results are validated before return, and optional fields may be
-	// nullable there.
-	Output json.RawMessage
-	// Text is the raw text output.
-	Text string
-	// Usage tracks token consumption for the invocation.
-	Usage         TokenUsage
-	UsageReported bool
-	// SessionID is the adapter-native session identity of this invocation
-	// when the adapter reports one. Callers persist it to resume later.
-	SessionID string
-	// Resumed reports whether this invocation resumed opts.Session.ID.
-	Resumed         bool
-	ResumeRetryable *bool
-	// Model is the model the adapter reported serving this invocation, when
-	// available. Instrumentation records it, and eval replay validates it
-	// against the requested candidate.
-	Model string
-	// ModelProvider is the provider that served the model (e.g. "openai",
-	// "anthropic"), when the adapter can report it. Instrumentation records it
-	// as telemetry; eval model identity matching deliberately ignores it.
-	ModelProvider string
-	// Provider is the adapter provider that served this invocation. It lets
-	// fallback wrappers persist a session against the provider that minted it.
-	Provider string
-	// Metrics is the bounded per-invocation activity evidence the adapter
-	// extracted from its event stream (round-trips, tool calls + categories,
-	// subprocess wait time). Nil means the adapter reported nothing, which is
-	// recorded as unknown (NULL) rather than a fabricated zero.
-	Metrics *InvocationMetrics
-	// CacheCreationReported reports whether Usage.CacheCreationTokens is a
-	// meaningful value. Adapters whose provider does not surface cache-creation
-	// cost (codex) leave it false so the field is recorded as unknown instead of
-	// a fabricated zero.
-	CacheCreationReported bool
-	// SessionUsageCumulative reports that Usage accumulates across a resumed
-	// durable session, so round N's counters include rounds 1..N-1. The pipeline
-	// uses it to record correct per-round token deltas (see PerRoundTokens).
+	Output                 json.RawMessage
+	Text                   string
+	Usage                  TokenUsage
+	UsageReported          bool
+	SessionID              string
+	Resumed                bool
+	ResumeRetryable        *bool
+	Model                  string
+	ModelProvider          string
+	Provider               string
+	Metrics                *InvocationMetrics
+	CacheCreationReported  bool
 	SessionUsageCumulative bool
 }
 
-// TokenUsage tracks token consumption for an agent invocation.
 type TokenUsage struct {
-	InputTokens         int
-	OutputTokens        int
-	CacheReadTokens     int
-	CacheCreationTokens int
-	// ReasoningTokens is the output tokens the model spent on hidden reasoning,
-	// when the provider reports it separately. Zero when not reported.
-	ReasoningTokens int
-	// ReasoningReported distinguishes a genuine zero from an adapter that does
-	// not expose reasoning usage.
+	InputTokens           int
+	OutputTokens          int
+	CacheReadTokens       int
+	CacheCreationTokens   int
+	ReasoningTokens       int
 	ReasoningReported     bool
 	Reported              bool
 	CacheCreationReported bool
 }
 
-// InvocationWorkload is the bounded size of the change an invocation works
-// over: changed files and net changed lines. It carries no paths or content.
 type InvocationWorkload struct {
 	Files int
 	Lines int
 }
 
-// Options configures backend-specific agent construction behavior.
-// ACPRegistryOverrides maps acpx target names, including first-class alias
-// targets, to raw ACP agent commands.
 type Options struct {
-	ACPRegistryOverrides map[string]string
-	Environment          runenv.Overlay
-	// DisableProjectSettings, when true, asks a supported adapter (codex,
-	// claude, pi, and the acp:omp target) to launch with the target repo's
-	// project-level agent settings/instructions suppressed. It is the resolved,
-	// trusted-only opt-out from config.Config; adapters without a verified
-	// suppression knob ignore it and are refused separately by
-	// EnsureGateNeutralized when the opt-out is on.
+	ACPRegistryOverrides   map[string]string
+	Environment            runenv.Overlay
 	DisableProjectSettings bool
-	// Profile is the harness-neutral model/effort selection (see
-	// internal/agentcfg). NewWithOptions maps it down to whatever mechanism the
-	// named harness actually uses - injected argv flags for most CLIs, the
-	// session-message body for opencode, acpx's own --model for ACP targets -
-	// and refuses a knob the harness cannot express. A zero Profile leaves every
-	// harness on its own defaults, which is what every configuration that
-	// predates the common layer resolves to.
-	Profile agentcfg.Profile
+	Profile                agentcfg.Profile
 }
 
-// resultFromUsage returns a Result carrying the adapter's parsed usage so a
-// failed or cancelled invocation can still record honest token counts. Nil
-// when the adapter did not report usage, which recording stores as unknown
-// rather than a fabricated zero.
 func resultFromUsage(usage TokenUsage) *Result {
 	if !usage.Reported && !usage.CacheCreationReported {
 		return nil
@@ -361,11 +210,6 @@ func resultFromUsage(usage TokenUsage) *Result {
 	}
 }
 
-// failedResult returns the Result a failed turn should carry: the adapter's
-// parsed usage, plus the session the turn actually ran in. The served session
-// justifies a Result on its own, because one that differs from the requested
-// session is proof of a silent replacement whether or not the turn failed, and
-// resultFromUsage returns nil when the adapter reported no usage at all.
 func failedResult(usage TokenUsage, sessionID string) *Result {
 	res := resultFromUsage(usage)
 	if sessionID == "" {
@@ -409,9 +253,6 @@ func finalizeTextResult(agentName, text string, schema json.RawMessage, usage To
 	return res, nil
 }
 
-// outputSnippet returns a trimmed, length-capped excerpt of agent output for
-// inclusion in parse-failure errors. Without it, errors like "invalid
-// character 'N'" are undiagnosable without separately capturing agent stdout.
 func outputSnippet(text string) string {
 	const max = 200
 	trimmed := strings.TrimSpace(text)
@@ -521,17 +362,6 @@ func textValidationSchema(schema json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(value)
 }
 
-// fencedJSONCandidates extracts JSON bodies from ```json ... ``` fences.
-// Fence markers may appear anywhere in the text, including glued to the end
-// of a preceding line (e.g. "...behavior.```json"), which is a shape real
-// codex/GPT-5 output regularly produces.
-//
-// Candidates are split into two groups. closed holds bodies of fences with
-// a matching closing fence (the canonical shape); open holds bodies of
-// fences with no closing fence, where the body runs to the end of the text
-// (the pi JSONL shape). The scan never stops at the first opener: an opener
-// whose candidate spans unrelated prose (e.g. prose quoting ```json as an
-// inline example) must not swallow a later, real fence block.
 func fencedJSONCandidates(text string) (closed, open []string) {
 	rest := text
 	for {
@@ -568,9 +398,6 @@ func fencedJSONCandidates(text string) (closed, open []string) {
 	}
 }
 
-// fenceContentStart returns the byte offset where a fence's content begins
-// (immediately after the info token and any following newline) plus the
-// parsed info token itself.
 func fenceContentStart(text string, fenceStart int) (int, string) {
 	after := text[fenceStart+3:]
 	lineEnd := strings.IndexByte(after, '\n')
@@ -585,12 +412,6 @@ func fenceContentStart(text string, fenceStart int) (int, string) {
 	return start, info
 }
 
-// fenceInfoToken returns the leading info token of a fence line (the part
-// after ```) together with its end offset within s. The token is a word
-// made of letters/digits/`-`/`_`; anything else (whitespace, `{`, `[`, …)
-// terminates it. This tolerates ```json glued directly to a JSON body on
-// the same line (e.g. ```json{"findings":[]}) — a shape real pi JSONL
-// streams produce when content blocks are concatenated without separators.
 func fenceInfoToken(s string) (string, int) {
 	i := 0
 	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
@@ -663,9 +484,6 @@ func indexJSONFenceClose(text string) (int, int) {
 	return -1, -1
 }
 
-// bareObject is one balanced {...} span found outside code fences, with the
-// schema-validated object (nil when the span failed validation) and its byte
-// span.
 type bareObject struct {
 	obj        json.RawMessage
 	raw        []byte
@@ -673,13 +491,6 @@ type bareObject struct {
 	endIndex   int
 }
 
-// bareJSONObjects scans text for balanced {...} substrings outside code fences
-// that parse as JSON and validate against the schema. Only concluding objects
-// are candidates; an incidental object followed by substantive prose is not a
-// verdict, and provider protocol residue after a complete object is. A single
-// answer split across adjacent objects - nothing between them but whitespace or
-// a single comma - is returned as their union when their keys are disjoint and
-// the union validates (see fuseAdjacentBareObjects).
 func bareJSONObjects(text string, schema json.RawMessage) ([]json.RawMessage, error) {
 	var valid []bareObject
 	var objects []bareObject
@@ -740,13 +551,6 @@ func bareJSONObjects(text string, schema json.RawMessage) ([]json.RawMessage, er
 	return nil, lastErr
 }
 
-// trailingNonJSONResidue reports whether rest - the text following a single
-// schema-valid bare object - is provider protocol residue rather than a second
-// structured answer or a prose continuation. Providers occasionally append
-// stray closing tool-call delimiters after a complete JSON object (DeepSeek's
-// DSML markers with full-width separators are the observed case). A prose
-// sentence, or anything containing another JSON object or a code fence, is
-// never treated as residue.
 func trailingNonJSONResidue(rest string) bool {
 	trimmed := strings.TrimSpace(rest)
 	if trimmed == "" {
@@ -764,13 +568,6 @@ func trailingNonJSONResidue(rest string) bool {
 	return true
 }
 
-// isProtocolResidueToken accepts one whitespace-delimited piece of provider
-// tool-protocol residue: markup whose text outside its tags carries no letters
-// or digits, such as a closing delimiter </invoke> or </parameter> (optionally
-// carrying DeepSeek's full-width DSML separators), or a run of punctuation with
-// no letters or digits at all, such as a stray closing brace. Markup that wraps
-// real content - <b>note</b>, 1<2>0 - and every ordinary prose word is not
-// residue, so a prose continuation is still rejected.
 func isProtocolResidueToken(token string) bool {
 	rest, sawTag := stripMarkupTags(token)
 	if !sawTag {
@@ -779,8 +576,6 @@ func isProtocolResidueToken(token string) bool {
 	return !containsAlphanumeric(rest)
 }
 
-// stripMarkupTags removes every <...> span from token and reports whether it
-// found at least one.
 func stripMarkupTags(token string) (string, bool) {
 	var rest strings.Builder
 	sawTag := false
@@ -804,31 +599,10 @@ func containsAlphanumeric(s string) bool {
 	})
 }
 
-// errSplitBareObjects marks a split answer whose adjacent objects have disjoint
-// keys but still do not validate once merged (the model left the answer
-// incomplete). It is deliberately distinct from a generic schema error so the
-// retry classifier can retry it: the step's real work is done and only the
-// final text shape is wrong.
 var errSplitBareObjects = errors.New("split bare JSON objects could not be fused into one valid object")
 
-// errDuplicateBareObjectKey marks adjacent bare objects that share a top-level
-// key. That is competing values for one field rather than halves of one answer,
-// so it stays terminal and is never retried.
 var errDuplicateBareObjectKey = errors.New("adjacent bare JSON objects share a top-level key")
 
-// fuseAdjacentBareObjects merges runs of adjacent top-level objects whose keys
-// are disjoint, returning the merged object when it validates against the full
-// schema. Models sometimes split one structured answer across two objects (for
-// example {"findings":...} then {"risk_level":...}); each half fails
-// validation alone while the union satisfies it. Adjacent means nothing
-// separates the objects but whitespace or a single comma, and no key may repeat
-// across the run, so two competing verdicts embedded in prose are never fused.
-// A run counts only when it is concluding, on the same rule as the
-// single-object path: anything other than protocol residue after the run means
-// the objects were quoted mid-answer, not answered. A concluding run that
-// cannot be fused reports errSplitBareObjects rather than the generic schema
-// error. A run whose keys repeat is competing values, not a recoverable split,
-// and falls through to the generic schema error so it stays terminal.
 func fuseAdjacentBareObjects(text string, objects []bareObject, schema json.RawMessage) (json.RawMessage, error) {
 	for i := 0; i < len(objects); {
 		j := i
@@ -853,9 +627,6 @@ func fuseAdjacentBareObjects(text string, objects []bareObject, schema json.RawM
 	return nil, nil
 }
 
-// isBareObjectSeparator reports whether the text between two bare objects marks
-// them as halves of one split answer rather than separate statements: nothing
-// but whitespace, or a single comma.
 func isBareObjectSeparator(gap string) bool {
 	trimmed := strings.TrimSpace(gap)
 	return trimmed == "" || trimmed == ","
@@ -1029,10 +800,6 @@ func decimalOrder(decimal jsonDecimal) *big.Int {
 	return order.Add(order, big.NewInt(int64(len(decimal.digits))))
 }
 
-// scanBalancedObject returns the exclusive end index of a brace-balanced
-// substring starting at text[start] == '{', or (0, false) if no balanced
-// closing brace exists. It respects JSON string literals so braces inside
-// strings do not affect the depth count.
 func scanBalancedObject(text string, start int) (int, bool) {
 	depth := 0
 	inString := false
@@ -1132,10 +899,6 @@ func decodeJSONValue(raw []byte) (any, error) {
 	return value, nil
 }
 
-// SchemaViolation is a structured output's rejection by the requested schema.
-// Field names the schema field that failed as a dotted path without array
-// indices (so the same field fails under one name whichever array element
-// carried it); it is empty when the failure is the whole output's own type.
 type SchemaViolation struct {
 	Field   string
 	Message string
@@ -1322,12 +1085,10 @@ func formatJSONPath(path string) string {
 	return path + " "
 }
 
-// Total returns input + output tokens (the billing-relevant total).
 func (u TokenUsage) Total() int {
 	return u.InputTokens + u.OutputTokens
 }
 
-// Add accumulates another usage into this one.
 func (u *TokenUsage) Add(other TokenUsage) {
 	u.InputTokens += other.InputTokens
 	u.OutputTokens += other.OutputTokens
@@ -1339,16 +1100,10 @@ func (u *TokenUsage) Add(other TokenUsage) {
 	u.CacheCreationReported = u.CacheCreationReported || other.CacheCreationReported
 }
 
-// New creates an agent by name with the given binary path.
-// For native agents, extraArgs are user CLI flags from agent_args_override that
-// are injected into the underlying tool's argv ahead of no-mistakes' managed flags.
-// ACP agents and aliases ignore extraArgs; use NewWithOptions to provide
-// registry overrides and the harness-neutral model/effort Profile.
 func New(name types.AgentName, bin string, extraArgs []string) (Agent, error) {
 	return NewWithOptions(name, bin, extraArgs, Options{})
 }
 
-// NewWithOptions creates an agent by name with additional backend-specific options.
 func NewWithOptions(name types.AgentName, bin string, extraArgs []string, opts Options) (Agent, error) {
 	// Fail closed on a knob this harness cannot express. Config load performs
 	// the same check, but this is the funnel every caller reaches - including
@@ -1398,8 +1153,6 @@ func NewWithOptions(name types.AgentName, bin string, extraArgs []string, opts O
 	}
 }
 
-// NewNoop returns an agent that does nothing. Used for demo mode where
-// mock steps handle all logic without calling a real agent.
 func NewNoop() Agent { return &noopAgent{} }
 
 type noopAgent struct{}

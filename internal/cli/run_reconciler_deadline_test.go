@@ -12,15 +12,10 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// passedDeadlineCtx is a context whose deadline has passed but whose timer has
-// not fired yet, the window a --wait expiry opens on every run-state read.
 type passedDeadlineCtx struct{ context.Context }
 
 func (passedDeadlineCtx) Deadline() (time.Time, bool) { return time.Now().Add(-time.Second), true }
 
-// A run-state read in that window used to return ctx.Err() - still nil - as
-// success with an empty result, so Reconcile handed the drive loop a nil run
-// and an elapsed --wait was reported as "run not found".
 func TestRunStateReadAfterItsDeadlineIsAnError(t *testing.T) {
 	socketPath := filepath.Join(makeSocketSafeTempDir(t), "reconcile.sock")
 	srv := ipc.NewServer()
@@ -35,9 +30,6 @@ func TestRunStateReadAfterItsDeadlineIsAnError(t *testing.T) {
 	}
 }
 
-// The same window reaches the caller's classification: the read reports the
-// passed deadline before the drive context's own timer fires, and that must
-// still read as an elapsed --wait rather than a failure.
 func TestAxiWaitElapsedBeforeTheDriveTimerFires(t *testing.T) {
 	if !isAxiWaitElapsed(context.Background(), passedDeadlineCtx{context.Background()}, context.DeadlineExceeded) {
 		t.Fatal("a passed drive deadline whose timer has not fired was not classified as an elapsed wait")
@@ -47,11 +39,6 @@ func TestAxiWaitElapsedBeforeTheDriveTimerFires(t *testing.T) {
 	}
 }
 
-// A question park's grace and the outer --wait can both surface as
-// DeadlineExceeded with a nil Err(), and only the outer one must reach
-// isAxiWaitElapsed. Crediting the grace returned the park the answer had just
-// closed as the run's next gate at exit 0, telling a driving agent to answer
-// the same question again.
 func TestQuestionParkGraceIsNotCreditedWithTheWaitsOwnExpiry(t *testing.T) {
 	elapsedWait := passedDeadlineCtx{context.Background()}
 	if graceExpired(elapsedWait, context.DeadlineExceeded) {

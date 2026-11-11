@@ -13,10 +13,6 @@ import (
 	"time"
 )
 
-// githubToken reads a GitHub token from the environment, honoring GITHUB_TOKEN
-// before falling back to GH_TOKEN. The token is never required: the
-// channel-manifest fetch is anonymous over the release-asset CDN. When present,
-// the token authenticates asset downloads.
 func githubToken() string {
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		return token
@@ -24,9 +20,6 @@ func githubToken() string {
 	return os.Getenv("GH_TOKEN")
 }
 
-// applyGitHubAuth sets the Authorization header GitHub's API expects when a
-// token is present in the environment; it leaves the request untouched
-// (anonymous) otherwise.
 func applyGitHubAuth(req *http.Request) {
 	if token := githubToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)

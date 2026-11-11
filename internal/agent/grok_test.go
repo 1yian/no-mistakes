@@ -225,10 +225,6 @@ func TestFinalizeGrokResultValidatesStructuredOutputAgainstSchema(t *testing.T) 
 	}
 }
 
-// TestFinalizeGrokResultRejectionReturnsUsageWithoutOutput proves a rejected
-// turn hands back only what telemetry needs. Returning the rejected Output
-// would have the recorder count findings for an invocation whose output the
-// pipeline discarded and then reran.
 func TestFinalizeGrokResultRejectionReturnsUsageWithoutOutput(t *testing.T) {
 	usage := TokenUsage{InputTokens: 11, OutputTokens: 7, CacheReadTokens: 5, Reported: true}
 	schema := json.RawMessage(`{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}`)
@@ -255,10 +251,6 @@ func TestFinalizeGrokResultRejectionReturnsUsageWithoutOutput(t *testing.T) {
 	}
 }
 
-// TestParseGrokEventsErrorResultCarriesItsUsage proves a turn that ends on
-// grok's own error result still hands back the tokens that result event
-// reported, matching claude's equivalent branch. Dropping them would record
-// the failed round as having used nothing.
 func TestParseGrokEventsErrorResultCarriesItsUsage(t *testing.T) {
 	events := `{"type":"result","subtype":"error_max_turns","is_error":true,"errors":["turn limit"],"usage":{"input_tokens":11,"output_tokens":7,"cache_read_input_tokens":5,"cache_creation_input_tokens":3}}` + "\n"
 	result, err := parseGrokEvents(context.Background(), strings.NewReader(events), nil)
@@ -274,9 +266,6 @@ func TestParseGrokEventsErrorResultCarriesItsUsage(t *testing.T) {
 	}
 }
 
-// TestParseGrokEventsErrorResultWithoutUsageStaysUnknown proves the branch
-// above never fabricates a zero: an error result carrying no usage leaves the
-// invocation's tokens unknown.
 func TestParseGrokEventsErrorResultWithoutUsageStaysUnknown(t *testing.T) {
 	events := `{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["tool failed"]}` + "\n"
 	result, err := parseGrokEvents(context.Background(), strings.NewReader(events), nil)

@@ -12,14 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// D5: every state-changing event is emitted AFTER its database write.
-//
-// This is the premise the whole subscription overflow contract rests on. The
-// daemon stamps a snapshot with a revision sampled before it reads the
-// database; that is only sound if a state event's write has already landed by
-// the time the event exists. If any emitter ever moved ahead of its write, a
-// subscriber could reconcile a snapshot that is older than the revision it was
-// stamped with and then discard the delta that would have repaired it.
 func TestExecutor_StateEventsAreEmittedAfterTheirDatabaseWrite(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -90,7 +82,6 @@ func TestExecutor_StateEventsAreEmittedAfterTheirDatabaseWrite(t *testing.T) {
 	}
 }
 
-// The skip path takes a different set of emitters, so exercise it too.
 func TestExecutor_SkippedStepEventsAlsoFollowTheirDatabaseWrite(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

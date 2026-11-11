@@ -554,8 +554,6 @@ func TestPRTemplateStructureInvalidBacktickFenceKeepsRequiredHeadings(t *testing
 	}
 }
 
-// A supplied description replaces the agent's template fill, under the same
-// top-level heading rule, and is refused loudly before anything is created.
 func TestPRTemplateSuppliedBodyMustKeepTheTemplateHeadings(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

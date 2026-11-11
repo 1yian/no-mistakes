@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// CommandOverride adds machine-local checks and lowers scheduling priority,
-// never changing the repository's command string or its environment.
-// Additional checks have separate exit statuses.
 type CommandOverride struct {
 	Nice       int      `yaml:"nice" json:"nice,omitempty"`
 	Additional []string `yaml:"additional" json:"additional,omitempty"`

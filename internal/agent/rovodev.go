@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// rovodevAgent starts a persistent HTTP server via `acli rovodev serve`
-// and sends requests via REST with SSE streaming.
 type rovodevAgent struct {
 	bin       string
 	extraArgs []string
@@ -72,7 +70,6 @@ func (a *rovodevAgent) runOnce(ctx context.Context, opts RunOpts) (*Result, erro
 		return nil, err
 	}
 
-	// Stream chat response
 	var usage TokenUsage
 	text, err := a.streamChat(ctx, baseURL, sessionID, opts.OnChunk, &usage)
 	if err != nil {
@@ -103,8 +100,6 @@ func (a *rovodevAgent) ensureServer(ctx context.Context, cwd string, env []strin
 	return srv.baseURL(), nil
 }
 
-// buildRovodevServeArgs builds `acli`'s serve argv with user-supplied extras
-// inserted after the "rovodev serve" subcommands and before the managed flags.
 func buildRovodevServeArgs(extraArgs []string, port int) []string {
 	args := make([]string, 0, len(extraArgs)+4)
 	args = append(args, "rovodev", "serve")
@@ -202,8 +197,6 @@ func (a *rovodevAgent) deleteSession(baseURL, sessionID string) {
 	}
 }
 
-// buildRovodevSystemPrompt creates a system prompt that instructs the agent
-// to return structured JSON matching the given schema.
 func buildRovodevSystemPrompt(schema json.RawMessage) string {
 	return strings.Join([]string{
 		"When you finish, reply with only valid JSON.",
@@ -213,26 +206,18 @@ func buildRovodevSystemPrompt(schema json.RawMessage) string {
 	}, "\n")
 }
 
-// rovodevSSEEvent captures every field we care about from a rovodev SSE
-// data payload. Real rovodev emits text content via part_start / part_delta
-// events (not a single "text" event) and puts request-usage fields at the
-// top level of the payload, not nested under "usage". Shape matches the
-// well-proven gnhf integration.
 type rovodevSSEEvent struct {
 	EventKind string `json:"event_kind,omitempty"`
 	Content   string `json:"content,omitempty"`
 
-	// request-usage
 	InputTokens      int `json:"input_tokens,omitempty"`
 	OutputTokens     int `json:"output_tokens,omitempty"`
 	CacheReadTokens  int `json:"cache_read_tokens,omitempty"`
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 
-	// part_start
 	Index int             `json:"index,omitempty"`
 	Part  *rovodevSSEPart `json:"part,omitempty"`
 
-	// part_delta
 	Delta *rovodevSSEDelta `json:"delta,omitempty"`
 }
 
@@ -246,16 +231,6 @@ type rovodevSSEDelta struct {
 	PartDeltaKind string `json:"part_delta_kind"`
 }
 
-// parseRovodevSSE processes the SSE stream from rovodev, extracting text
-// chunks, token usage, and the latest assembled text for structured output.
-//
-// Text arrives in three possible shapes:
-//   - "text" events carry the full current message in `content`.
-//   - "part_start" events start a new text part at an index.
-//   - "part_delta" events append to the part at the given index.
-//
-// Tool activity ("tool-return", "on_call_tools_start") resets the buffer so
-// only the final post-tool text segment is returned as the structured answer.
 func parseRovodevSSE(r io.Reader, onChunk func(string), usage *TokenUsage, latestText *string) error {
 	var parts []string
 	partIndex := map[int]int{}
@@ -347,7 +322,6 @@ func parseRovodevSSE(r io.Reader, onChunk func(string), usage *TokenUsage, lates
 	})
 }
 
-// doJSON makes an HTTP request with JSON body and returns the response body.
 func doJSON(ctx context.Context, method, url string, headers map[string]string, body any) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {

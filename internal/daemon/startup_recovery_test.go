@@ -81,21 +81,6 @@ func TestPreserveStaleRunHeadsAnchorsCrashWorkBeforeTerminalization(t *testing.T
 	}
 }
 
-// TestRecoverOnStartup_DoesNotDeleteActiveRunWorktree is the regression test
-// for the second half of the duplicate-daemon wedge: startup cleanup used to
-// remove every worktree directory under the shared root with no check of the
-// owning run's status, so a duplicate daemon's cleanup could delete the
-// checkout out from under a pipeline that was still actively running in it
-// (observed live as "chdir .../worktrees/...: no such file or directory").
-// A worktree whose run row is pending or running must survive cleanup.
-//
-// This exercises cleanupOrphanWorktrees directly (rather than the full
-// recoverOnStartup) because RecoverStaleRuns, which runs first in
-// production, unconditionally marks every pending/running run failed - so by
-// design there is no pending/running row left by the time cleanup runs in
-// the normal single-daemon path. Testing cleanupOrphanWorktrees in isolation
-// verifies its DB-aware skip logic as defense in depth, independent of
-// whatever recovery step runs before it.
 func TestRecoverOnStartup_DoesNotDeleteActiveRunWorktree(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {
@@ -163,11 +148,6 @@ func TestRecoverOnStartup_DoesNotDeleteActiveRunWorktree(t *testing.T) {
 	}
 }
 
-// TestRunWithOptions_RequiresSingletonLockBeforeRecovery proves the ordering
-// the fix depends on: when another process already holds the singleton lock
-// for this root, RunWithOptions must fail before ever calling
-// RecoverStaleRuns, so a duplicate daemon can never mark a live daemon's
-// active runs as crashed.
 func TestRunWithOptions_RequiresSingletonLockBeforeRecovery(t *testing.T) {
 	p := paths.WithRoot(t.TempDir())
 	if err := p.EnsureDirs(); err != nil {

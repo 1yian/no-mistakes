@@ -28,12 +28,10 @@ var demoWait = func(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// IsDemoMode returns true when the NM_DEMO environment variable is set.
 func IsDemoMode() bool {
 	return os.Getenv("NM_DEMO") == "1"
 }
 
-// DemoSteps returns mock pipeline steps for demo recordings.
 func DemoSteps() []pipeline.Step {
 	return []pipeline.Step{
 		&demoStep{
@@ -164,7 +162,6 @@ func (s *demoStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, e
 	return outcome, nil
 }
 
-// streamDemoLog emits log text in chunks with realistic pacing.
 func streamDemoLog(sctx *pipeline.StepContext, text string, total time.Duration) error {
 	if text == "" {
 		return nil
@@ -195,9 +192,6 @@ func streamDemoLog(sctx *pipeline.StepContext, text string, total time.Duration)
 	return nil
 }
 
-// demoCIStep simulates the CI monitor's failure-fix-retry flow.
-// The real CI step handles its own fix loop internally (not through the executor),
-// so this demo step does the same: emit logs that drive the TUI's CI view.
 type demoCIStep struct {
 	displayDur time.Duration
 }

@@ -23,9 +23,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// retryLaunch is what a continuation run takes from the failed run it
-// continues: the run itself, whose record the executor re-proves and carries,
-// and the audit link written before the continuation can execute anything.
 type retryLaunch struct {
 	source      *db.Run
 	link        db.RunRetry
@@ -34,9 +31,6 @@ type retryLaunch struct {
 	intentCheck config.IntentCheck
 }
 
-// record writes the audit link and the failed run's exact intent onto the
-// continuation run. The intent is copied byte for byte with its provenance
-// because a carried Intent step never runs again to produce it.
 func (r *retryLaunch) record(database *db.DB, run *db.Run) error {
 	link := r.link
 	link.RunID = run.ID
@@ -63,8 +57,6 @@ func (r *retryLaunch) record(database *db.DB, run *db.Run) error {
 	return nil
 }
 
-// retryRefusal names the proof a retry request failed. Every refusal leaves
-// the failed run, the branch, and the gate untouched.
 type retryRefusal struct {
 	runID  string
 	proof  string
@@ -79,17 +71,6 @@ func refuseRetry(runID, proof, format string, args ...any) error {
 	return &retryRefusal{runID: runID, proof: proof, detail: fmt.Sprintf(format, args...)}
 }
 
-// HandleRetry continues runID, the branch's latest run, in a new run that
-// starts at the failed run's preserved head: the steps before its failed step
-// are carried, the failed step restarts from the beginning, and every later
-// step runs normally. It refuses, changing nothing, unless every proof holds:
-// the run is this branch's latest and failed while nothing is active; its
-// record names exactly one failed step, failed on an agent invocation error,
-// with nothing from Test on carried and nothing published; its preserved head
-// is anchored; the caller is clean at exactly that head; the model profile and
-// the repository's gates are unchanged; and the repository configuration, the
-// recorded global configuration, and the agent and model that served each
-// carried step are the ones a new run would use.
 func (m *RunManager) HandleRetry(ctx context.Context, repoID, branch, runID, callerHeadSHA string) (*db.RunRetry, error) {
 	if m.restartPending() {
 		return nil, errRestartPending
@@ -215,9 +196,6 @@ func (m *RunManager) proveRetry(ctx context.Context, repo *db.Repo, branch, runI
 	}}, nil
 }
 
-// provePreservedHead requires the head the failed run verified when it ended
-// to still be the exact commit the gate keeps for it: its recovery anchor when
-// the pipeline moved the head, the submitted commit otherwise.
 func (m *RunManager) provePreservedHead(ctx context.Context, repo *db.Repo, source *db.Run) error {
 	if source.TerminalHeadVerifiedAt == nil {
 		return fmt.Errorf("the run's final head was not verified when it failed")
@@ -247,12 +225,6 @@ func (m *RunManager) provePreservedHead(ctx context.Context, repo *db.Repo, sour
 	return nil
 }
 
-// proveRetryConfiguration requires what the failed run pinned at creation to
-// resolve the same way now: the model profile, and the gates, which decide the
-// step sequence the carried record is matched against. It also requires the
-// configuration that produced every carried step result to be the one a new
-// run would use: the repository configuration the carried Review rounds
-// recorded, and the agent that served the carried steps.
 func (m *RunManager) proveRetryConfiguration(ctx context.Context, repo *db.Repo, source *db.Run, pinned []config.Gate, checkpoint *pipeline.RetryCheckpoint) (config.IntentCheck, error) {
 	globalCfg, err := config.LoadGlobal(m.paths.ConfigFile())
 	if err != nil {
@@ -277,10 +249,6 @@ func (m *RunManager) proveRetryConfiguration(ctx context.Context, repo *db.Repo,
 	return cfg.Intent.Check, nil
 }
 
-// proveConfigurationMatches compares a resolved configuration with the one the
-// failed run and its carried steps ran under. The launch calls it again with
-// the configuration the continuation run actually loaded, so a change between
-// the proof and the launch cannot carry a Review approval.
 func (m *RunManager) proveConfigurationMatches(ctx context.Context, source *db.Run, globalCfg *config.GlobalConfig, cfg *config.Config, currentRepoCfg *config.RepoConfig, pinned []config.Gate, checkpoint *pipeline.RetryCheckpoint) error {
 	if err := cfg.ApplyReviewerProfile(source.ReviewerProfile); err != nil {
 		return err
@@ -303,10 +271,6 @@ func (m *RunManager) proveConfigurationMatches(ctx context.Context, source *db.R
 	return m.proveCarriedAgent(ctx, source, cfg, carried)
 }
 
-// proveCarriedReviewConfig compares the configuration a carried Review ran
-// under with the configuration a new run would get now: the repository
-// effective repository configuration and the global configuration its rounds
-// recorded when they ran.
 func (m *RunManager) proveCarriedReviewConfig(globalCfg *config.GlobalConfig, current *config.RepoConfig, carried []*db.StepResult) error {
 	currentYAML, err := yaml.Marshal(current)
 	if err != nil {
@@ -353,8 +317,6 @@ func (m *RunManager) proveCarriedReviewConfig(globalCfg *config.GlobalConfig, cu
 	return nil
 }
 
-// changedSettings names the top-level settings whose values differ between two
-// YAML documents.
 func changedSettings(recorded, current []byte) ([]string, error) {
 	var before, after map[string]any
 	if err := yaml.Unmarshal(recorded, &before); err != nil {
@@ -378,10 +340,6 @@ func changedSettings(recorded, current []byte) ([]string, error) {
 	return changed, nil
 }
 
-// proveCarriedAgent requires the agent and model that served every carried
-// step to still be the ones a new run selects. Each carried row's invocations
-// live in the run that first executed it. A run pinned to a Pi profile is
-// proven by the profile instead.
 func (m *RunManager) proveCarriedAgent(ctx context.Context, source *db.Run, cfg *config.Config, carried []*db.StepResult) error {
 	if source.PiProfile != nil {
 		return nil
@@ -440,9 +398,6 @@ func (m *RunManager) proveCarriedAgent(ctx context.Context, source *db.Run, cfg 
 	return nil
 }
 
-// configsForInvocation returns the configurations eligible to serve inv in a new run,
-// selecting a review_agents role from the call's Purpose and Round the way
-// newPipelineAgent routes it.
 func configsForInvocation(cfg *config.Config, inv db.AgentInvocation) []*config.Config {
 	var role, lateRole string
 	switch inv.Purpose {
@@ -472,10 +427,6 @@ func reviewCandidateConfigs(cfg *config.Config, entry config.ReviewAgent) []*con
 	return configs
 }
 
-// proveAtLaunch repeats the configuration proof against the configuration the
-// continuation run loaded, then carries the failed run's Review conversation
-// into the run's own evidence directory. It refuses, naming the proof, before
-// the audit link or any carried step exists.
 func (r *retryLaunch) proveAtLaunch(ctx context.Context, m *RunManager, globalCfg *config.GlobalConfig, cfg *config.Config, repoCfg *config.RepoConfig, runID string) error {
 	launched := *cfg
 	if err := m.proveConfigurationMatches(ctx, r.source, globalCfg, &launched, repoCfg, r.gates, r.checkpoint); err != nil {
@@ -487,9 +438,6 @@ func (r *retryLaunch) proveAtLaunch(ctx context.Context, m *RunManager, globalCf
 	return nil
 }
 
-// discardRefusedRetryRun deletes the continuation run row and the evidence
-// directory a refused retry created, so the failed run stays the branch's
-// latest run and can be retried again once the cause is fixed.
 func (m *RunManager) discardRefusedRetryRun(runID string, cfg *config.Config) {
 	evidenceDir := m.recordedRunEvidenceDir(cfg, runID)
 	if err := m.db.DeleteRun(runID); err != nil {
@@ -498,14 +446,8 @@ func (m *RunManager) discardRefusedRetryRun(runID string, cfg *config.Config) {
 	os.RemoveAll(evidenceDir)
 }
 
-// RetryProofConversation names the proof that a carried Review's question
-// records are still readable.
 const RetryProofConversation = "review conversation"
 
-// carryReviewConversation copies the failed run's review conversation files
-// into the continuation run's evidence directory, where the PR step reads
-// them. A carried Review that recorded a question whose files can no longer be
-// read is refused: the open question would otherwise vanish from the PR.
 func (m *RunManager) carryReviewConversation(r *retryLaunch, cfg *config.Config, runID string) error {
 	var review *db.StepResult
 	for _, row := range r.checkpoint.Steps[:r.checkpoint.Index] {

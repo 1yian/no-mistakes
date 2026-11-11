@@ -7,8 +7,6 @@ import (
 	"strconv"
 )
 
-// processCWDs resolves each pid's working directory from /proc, which is both
-// cheaper and more reliable than shelling out on Linux.
 func processCWDs(pids []int) map[int]string {
 	cwds := make(map[int]string, len(pids))
 	for _, pid := range pids {

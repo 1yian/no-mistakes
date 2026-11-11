@@ -19,10 +19,6 @@ func defaultManifestURL(repo string) string {
 	return "https://github.com/" + repo + "/releases/download/" + channelsReleaseTag + "/" + channelsAssetName
 }
 
-// channelsManifest is the release-asset document the updater reads over the
-// GitHub download CDN. It names the current stable and beta (highest-semver
-// including prereleases) heads so version discovery does not use the rate-limited
-// REST API.
 type channelsManifest struct {
 	SchemaVersion int              `json:"schema_version"`
 	Stable        *releaseResponse `json:"stable,omitempty"`
@@ -57,11 +53,6 @@ func (m *channelsManifest) channel(includePrereleases bool) (*releaseResponse, e
 	return release, nil
 }
 
-// EncodeChannelsManifest builds the CDN channel document from GitHub REST
-// payloads. latestStableJSON is the body of GET /repos/{repo}/releases/latest
-// (empty when that endpoint 404s). allReleasesJSON is the array from
-// GET /repos/{repo}/releases. Beta is the highest-semver non-draft release,
-// including prereleases, matching the updater's --beta selection.
 func EncodeChannelsManifest(latestStableJSON, allReleasesJSON []byte) ([]byte, error) {
 	var all []releaseResponse
 	if len(bytes.TrimSpace(allReleasesJSON)) > 0 {

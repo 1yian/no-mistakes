@@ -1,11 +1,3 @@
-// Command publish-channels writes the no-mistakes update channel manifest
-// (channels.json) and uploads it to a dedicated GitHub prerelease tagged
-// `channels`. The updater reads that asset over the un-rate-limited release
-// download CDN instead of the REST API.
-//
-// Usage (CI):
-//
-//	GH_REPO=kunchenguid/no-mistakes GH_TOKEN=... go run ./cmd/publish-channels
 package main
 
 import (

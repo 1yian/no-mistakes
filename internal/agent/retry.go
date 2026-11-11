@@ -10,13 +10,8 @@ import (
 	"time"
 )
 
-// retryClassifier inspects an error and reports whether it should be retried,
-// returning a short human-readable label for telemetry.
 type retryClassifier func(error) (label string, retry bool)
 
-// transientBackoff is the package-level sleep function used between retries.
-// It is overridden in tests to keep them fast while preserving cancellation
-// semantics.
 var transientBackoff = func(ctx context.Context, attempt int) error {
 	delay := transientBackoffBaseDuration(attempt, time.Second)
 	// Apply +/- 25% jitter.
@@ -37,8 +32,6 @@ var transientBackoff = func(ctx context.Context, attempt int) error {
 	}
 }
 
-// transientBackoffBaseDuration returns the un-jittered delay for a given
-// 1-indexed retry attempt. Progression: base, 4*base, 16*base, ...
 func transientBackoffBaseDuration(attempt int, base time.Duration) time.Duration {
 	if attempt < 1 {
 		return 0
@@ -50,20 +43,12 @@ func transientBackoffBaseDuration(attempt int, base time.Duration) time.Duration
 	return delay
 }
 
-// exhaustedTransientRetries preserves the final diagnostic and error chain,
-// while marking the adapter's completed retry decision as terminal to callers.
-// In particular, a process exit underneath it must not start crash retries.
 type exhaustedTransientRetries struct{ err error }
 
 func (e *exhaustedTransientRetries) Error() string               { return e.err.Error() }
 func (e *exhaustedTransientRetries) Unwrap() error               { return e.err }
 func (e *exhaustedTransientRetries) TerminalProviderError() bool { return true }
 
-// runWithRetry invokes runOnce up to maxRetries+1 times, retrying when the
-// classifier marks the error as retriable. Between retries it sleeps with
-// exponential backoff (via transientBackoff) and respects ctx cancellation.
-// The retry attempt and classification label are surfaced to opts.OnLifecycle,
-// falling back to opts.OnChunk for older direct callers.
 func runWithRetry(
 	ctx context.Context,
 	name string,
@@ -148,11 +133,6 @@ func cloneSessionRef(session *SessionRef) *SessionRef {
 	return &copy
 }
 
-// claudeRetryClassifier retries both transient API errors and the
-// no-structured-output case that the existing loop already handled. When the
-// CLI reported the API error it ended on, that record alone decides: the
-// reported HTTP status takes precedence; without one, only the record's
-// terminal diagnostic is classified, never surrounding assistant or stderr text.
 func claudeRetryClassifier(err error) (string, bool) {
 	if errors.Is(err, errNoStructuredOutput) {
 		return "missing structured output", true
@@ -169,9 +149,6 @@ func claudeRetryClassifier(err error) (string, bool) {
 
 var transientStatusRE = regexp.MustCompile(`\b(429|503|529)\b`)
 
-// transientNeedles matches case-insensitive substrings emitted by Anthropic
-// API errors, the various agent CLIs, or Go's net stack when the underlying
-// failure is recoverable (load shed, network blip, DNS hiccup, etc.).
 var transientNeedles = []struct {
 	needle string
 	label  string
@@ -240,9 +217,6 @@ var terminalNeedles = []struct {
 	{"quota_exhausted", "quota exhausted"},
 }
 
-// classifyTransient reports whether an error message looks like a transient
-// API or network failure. It deliberately ignores ctx cancellation/deadline
-// errors so explicit cancellation is never silently retried.
 func classifyTransient(err error) (string, bool) {
 	if err == nil {
 		return "", false
@@ -307,8 +281,6 @@ func isPiPermanentStderr(stderr string) bool {
 	return false
 }
 
-// isTerminalRetryError reports whether an error message names a terminal
-// failure (today: quota exhaustion), so a retry inside this agent cannot help.
 func isTerminalRetryError(msg string) bool {
 	for _, sig := range terminalNeedles {
 		if strings.Contains(msg, sig.needle) {
@@ -318,12 +290,6 @@ func isTerminalRetryError(msg string) bool {
 	return false
 }
 
-// IsQuotaExhaustionError reports whether an error is a recognised
-// subscription-quota exhaustion: the same terminal needle set the retry
-// layer has always classified (free usage limit, insufficient quota, quota
-// exceeded/exhausted) plus claude's typed usage-limit response. Only these
-// concrete shapes may trigger the quota-aware mid-run switch - transient
-// overload, unavailability, and parse failures never do.
 func IsQuotaExhaustionError(err error) bool {
 	if err == nil || IsStructuredOutputRejected(err) {
 		return false

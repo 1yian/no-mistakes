@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// directChildren returns the pids of this process's direct children, whether
-// they are still running or waiting for their exit status to be collected.
 func directChildren(t *testing.T) map[int]bool {
 	t.Helper()
 	cmd := exec.Command("ps", "-eo", "pid=,ppid=")
@@ -38,15 +36,6 @@ func directChildren(t *testing.T) map[int]bool {
 	return children
 }
 
-// TestSpawnBackgroundLeavesNoUnreapedChild pins the process-lifecycle contract
-// of the startup update check. The check is deliberately fire-and-forget, so
-// the CLI must not block on it, but the CLI is still the child's only possible
-// wait owner and must collect its exit status.
-//
-// Without that, every no-mistakes CLI process carries a permanent <defunct>
-// child. A short-lived command hides it; a run-following `axi run` or
-// `axi respond` lives for tens of minutes, so an operator triaging that process
-// sees a zero-CPU process whose only child is defunct and reads it as wedged.
 func TestSpawnBackgroundLeavesNoUnreapedChild(t *testing.T) {
 	preexisting := directChildren(t)
 

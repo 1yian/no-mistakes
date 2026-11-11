@@ -22,8 +22,6 @@ const (
 	machineLocalConfigFile = "command-config.ndjson"
 )
 
-// setupMachineLocalCommands writes the operator's global repository override,
-// initializes the gate, and points origin at a forge-shaped URL that matches it.
 func setupMachineLocalCommands(t *testing.T, h *Harness, overrides string) {
 	t.Helper()
 	if overrides != "" {
@@ -63,9 +61,6 @@ func testStepPrompts(h *Harness) []string {
 	return prompts
 }
 
-// TestMachineLocalCommandOverridesJourney drives the real daemon with an
-// operator-only repository override that adds a local test check and lowers
-// the team command's priority.
 func TestMachineLocalCommandOverridesJourney(t *testing.T) {
 	t.Run("overrides_apply_are_declared_and_recorded", func(t *testing.T) {
 		priority, err := exec.Command("nice", "-n", "7", "sh", "-c", "ps -o nice= -p $$").Output()

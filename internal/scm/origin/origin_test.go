@@ -323,9 +323,6 @@ func TestGetPRStateAndMergeable(t *testing.T) {
 	}
 }
 
-// TestGetPRStateMergedWithObjectMergedBy pins the shape `origin pr view`
-// returns for a merged change, where mergedBy is an object rather than a
-// login string. The view must still decode so the CI step sees MERGED.
 func TestGetPRStateMergedWithObjectMergedBy(t *testing.T) {
 	t.Parallel()
 
@@ -372,8 +369,6 @@ func TestGetPRContentRejectsUnprovenResponses(t *testing.T) {
 	}
 }
 
-// Every Origin mergeability shape is a known state: only an explicit conflict
-// signal is CONFLICTING, and anything else must not hold the CI monitor pending.
 func TestGetMergeableStateShapes(t *testing.T) {
 	t.Parallel()
 

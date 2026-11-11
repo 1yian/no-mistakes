@@ -13,12 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// overrideVerifyingStep is a mockStep that also implements
-// pipeline.ApprovalOverrideVerifier, so these tests can exercise the
-// executor's ActionApprove override-recording path without a real CI/SCM
-// host. It never implements ApprovalGateReconciler: these tests are about
-// what happens when a human explicitly answers approve, not about
-// auto-reconciliation while parked.
 type overrideVerifyingStep struct {
 	*mockStep
 	verify func(sctx *StepContext) (string, error)
@@ -35,9 +29,6 @@ func newOverrideVerifyingApprovalStep(name types.StepName, findings string, veri
 	}
 }
 
-// runApprovalOverrideCase drives a single-step run through NeedsApproval,
-// answers ActionApprove once parked, and returns the completed step's
-// OverrideReason column (nil when never set).
 func runApprovalOverrideCase(t *testing.T, step Step) *string {
 	t.Helper()
 	database, p, run, repo := setupTest(t)
@@ -78,13 +69,6 @@ func runApprovalOverrideCase(t *testing.T, step Step) *string {
 	return steps[0].OverrideReason
 }
 
-// TestExecutor_ApprovalOverride_StillFailingIsRecorded is the core regression
-// for the "no-mistakes must never self-report a passing terminal outcome when
-// the live required-check view still contains an unresolved failure" defect:
-// a human approves a CI-shaped gate while the live condition is still
-// unresolved. The approval must still proceed (never block a deliberate
-// operator decision) but the completion must carry a durable override marker
-// instead of reading identically to a genuinely green run.
 func TestExecutor_ApprovalOverride_StillFailingIsRecorded(t *testing.T) {
 	step := newOverrideVerifyingApprovalStep(types.StepCI, `{"summary":"CI check failing: required-check"}`,
 		func(*StepContext) (string, error) {
@@ -99,11 +83,6 @@ func TestExecutor_ApprovalOverride_StillFailingIsRecorded(t *testing.T) {
 	}
 }
 
-// TestExecutor_ApprovalOverride_BecameGreenLeavesNoMark proves the opposite
-// direction: when the live condition has cleared by the time the human
-// approves (e.g. it turned green moments before they clicked), the completion
-// is the ordinary, unqualified pass with no override marker - this is not a
-// license to mark every CI approval as an override.
 func TestExecutor_ApprovalOverride_BecameGreenLeavesNoMark(t *testing.T) {
 	step := newOverrideVerifyingApprovalStep(types.StepCI, `{"summary":"CI check failing: required-check"}`,
 		func(*StepContext) (string, error) { return "", nil })
@@ -113,10 +92,6 @@ func TestExecutor_ApprovalOverride_BecameGreenLeavesNoMark(t *testing.T) {
 	}
 }
 
-// TestExecutor_ApprovalOverride_VerificationErrorFailsClosed covers a live
-// verification error (e.g. the provider could not be reached): the interface
-// contract fails closed, recording an override rather than silently
-// completing as if the condition had cleared.
 func TestExecutor_ApprovalOverride_VerificationErrorFailsClosed(t *testing.T) {
 	step := newOverrideVerifyingApprovalStep(types.StepCI, `{"summary":"CI check failing: required-check"}`,
 		func(*StepContext) (string, error) { return "", errors.New("provider unreachable") })
@@ -129,11 +104,6 @@ func TestExecutor_ApprovalOverride_VerificationErrorFailsClosed(t *testing.T) {
 	}
 }
 
-// TestExecutor_ApprovalOverride_OrdinaryStepUnaffected pins that a step which
-// does not implement ApprovalOverrideVerifier (today: every step but CI and
-// Test, e.g. review/document) behaves exactly as before ActionApprove is answered:
-// no override column is ever touched, and the plain completion path used for
-// every existing approval test is unchanged.
 func TestExecutor_ApprovalOverride_OrdinaryStepUnaffected(t *testing.T) {
 	step := newApprovalStep(types.StepReview, `{"issues":["nit"]}`)
 	reason := runApprovalOverrideCase(t, step)
@@ -142,11 +112,6 @@ func TestExecutor_ApprovalOverride_OrdinaryStepUnaffected(t *testing.T) {
 	}
 }
 
-// TestExecutor_ApprovalOverride_RecoveredPathStillFailing exercises the OTHER
-// ActionApprove site - the daemon-restart recovery path in Resume - proving
-// both callers of the interface route through the same override-recording
-// behavior. Setup mirrors TestExecutor_ResumeFatalReconcileErrorFailsRun: a
-// step parked at awaiting_approval as if the daemon restarted mid-gate.
 func TestExecutor_ApprovalOverride_RecoveredPathStillFailing(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	if err := database.UpdateRunStatus(run.ID, types.RunRunning); err != nil {
@@ -239,12 +204,6 @@ func TestExecutor_ApprovalOverride_RecoveredPathStillFailing(t *testing.T) {
 	}
 }
 
-// TestExecutor_ApprovalOverride_RunCompletedEventCarriesReason is the producer
-// half of the "TUI hides persisted CI overrides" P1: recording the override on
-// the step row (tested above) is not enough - the live run_completed delta must
-// carry the reason so an attached TUI can show the passed-with-override banner
-// without a snapshot read. Before the fix emitRunEvent dropped the reason and
-// the banner read as a plain green pass on the event path.
 func TestExecutor_CIOverrideReasonIgnoresTestOverride(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 	testStep, err := database.InsertStepResult(run.ID, types.StepTest)

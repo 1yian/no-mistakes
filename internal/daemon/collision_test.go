@@ -125,10 +125,6 @@ func TestParseDaemonProcessOutput(t *testing.T) {
 
 // --- reconcileCollidingDaemons ---
 
-// stubCollisionVars replaces the process enumeration, health check, and kill
-// seams with closures backed by the caller's maps. It returns a cleanup that
-// restores the originals. It deliberately does NOT touch serviceManagerBypassed
-// (tests that need the managed path use stubServiceRuntime).
 func stubCollisionVars(t *testing.T, procs []daemonProcessInfo, enumErr error, health func(root string) bool, killErr error) (*map[int]bool, func()) {
 	t.Helper()
 	oldList := daemonListDaemonProcesses
@@ -296,10 +292,6 @@ func containsCmd(cmds []string, want string) bool {
 
 func selfPID() int { return os.Getpid() }
 
-// TestListDaemonProcesses_FindsSpawnedDaemonRunHelper spawns the test binary
-// with an argv that looks exactly like a managed daemon (`daemon run --root X`)
-// and confirms the real ps-based collector rediscovers it. Unix-only: Windows
-// enumerates via PowerShell CIM.
 func TestListDaemonProcesses_FindsSpawnedDaemonRunHelper(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("ps-based enumeration is unix-only")

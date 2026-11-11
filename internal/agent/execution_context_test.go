@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// The generated prompt is an owned interface. These assertions implement the
-// permission contract in issue #1486, not a claim about model obedience.
 func assertBackingGitPrompt(t *testing.T, prompt string) {
 	t.Helper()
 	for _, want := range []string{
@@ -36,9 +34,6 @@ func TestExecutionContextPrompt_BackingGitContract(t *testing.T) {
 	assertBackingGitPrompt(t, ExecutionContextPromptSection(t.TempDir()))
 }
 
-// Exercise stdin, argv, and prompt-file delivery through real adapter spawns
-// with synthetic CLI responses. HTTP delivery is covered by the existing
-// OpenCode and RovoDev full-flow fixtures.
 func TestExecutionContextPrompt_NativeDelivery(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell fixtures require POSIX sh")

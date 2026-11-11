@@ -20,8 +20,6 @@ import (
 
 const pluginPRURL = "https://git.example.com/team/repo/pulls/7"
 
-// pluginCIContext wires the reference fake provider plugin as provider
-// "plugin:ssm" for git.example.com, with one open PR #7 for the run branch.
 func pluginCIContext(t *testing.T, state fakeplugin.State) (*pipeline.StepContext, string) {
 	t.Helper()
 	dir, baseSHA, headSHA := stepstest.SetupGitRepo(t)
@@ -205,11 +203,6 @@ func TestCIStep_ProviderPluginRepairRequiresFreshSelectedCheckHead(t *testing.T)
 	}
 }
 
-// A fork URL and an unauthenticated plugin skip the CI step with a reason,
-// exactly like a built-in provider; the executor persists it and axi reports
-// it under run.automatic_skips. A broken status handshake fails the step, and
-// so does a violation in a later call: polling a malformed answer again could
-// only spin to ci_timeout.
 func TestCIStep_ProviderPluginSkipsWithReasonAndFailsClosedOnProtocolViolation(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -261,9 +254,6 @@ func TestCIStep_ProviderPluginSkipsWithReasonAndFailsClosedOnProtocolViolation(t
 	}
 }
 
-// Failures remembered for the idle-timeout finding describe the head they were
-// seen on. Once the provider reports checks for another head, the timeout must
-// not blame the earlier failure on this one.
 func TestCIStep_ProviderPluginHeadChangeResetsRememberedTimeoutFailures(t *testing.T) {
 	t.Parallel()
 	sctx, statePath := pluginCIContext(t, fakeplugin.State{Checks: []fakeplugin.Check{

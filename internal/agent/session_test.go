@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// TestSupportsSessionResume_PerAdapter pins which adapters advertise durable
-// session resume. Claude, Codex, Grok, Pi, and Antigravity have native resume
-// (Claude/Grok --resume, Codex exec resume, Pi --session, Antigravity
-// --conversation); every other adapter must run cold so the pipeline's fallback
-// path records the cold invocation instead of assuming reuse.
 func TestSupportsSessionResume_PerAdapter(t *testing.T) {
 	cases := []struct {
 		name  string

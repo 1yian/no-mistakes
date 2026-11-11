@@ -76,21 +76,6 @@ func writeFinalPRScopeScenario(t *testing.T) string {
 	return path
 }
 
-// TestPRWhatChangedScopesToFinalDiffWhileEvidenceStaysStepScoped verifies the
-// final-diff scoping boundary at the closest supported user-visible boundary:
-// a real gate push executes the full pipeline and a GitHub PR creation
-// receives the final body on stdin.
-//
-// PR #605 originally made the whole PR body (including the deterministic
-// Risk Assessment, Testing, and Pipeline sections) final-diff scoped, but
-// that silently dropped those three sections everywhere (no-mistakes #605
-// regression, firstmate PR #1577/#1609). The corrected, intentional scope is
-// narrower: only the agent-authored `## What Changed` narrative is bound to
-// the actual final branch delta. The deterministic Risk Assessment, Testing,
-// and Pipeline sections legitimately describe the commit each step itself
-// inspected - that is what "evidence" means - and are restored in their full
-// pre-#605 form under their own clearly labeled headings, so a reviewer is
-// never told the Test step's own target commit is the shipped branch.
 func TestPRWhatChangedScopesToFinalDiffWhileEvidenceStaysStepScoped(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: writeFinalPRScopeScenario(t)})
 	ctx := context.Background()

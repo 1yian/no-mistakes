@@ -28,8 +28,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/verificationplan"
 )
 
-// correctingReviewStep commits one correction on its first execution, the way
-// a review fix round does, and then asks its agent for a verdict.
 type correctingReviewStep struct {
 	mu    sync.Mutex
 	heads []string
@@ -72,8 +70,6 @@ func (s *correctingReviewStep) seenHeads() []string {
 	return append([]string(nil), s.heads...)
 }
 
-// writeProviderOutageClaude writes a mock claude that fails like a provider
-// outage while flag exists and answers cleanly once it is removed.
 func writeProviderOutageClaude(t *testing.T, p *paths.Paths, flag string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "claude")
@@ -186,8 +182,6 @@ func TestRetryContinuesAFailedReviewFromThePreservedHead(t *testing.T) {
 	}
 }
 
-// retryFixture is a run that failed in Review on an agent invocation error,
-// with every retry proof holding, so each refusal case breaks exactly one.
 type retryFixture struct {
 	p          *paths.Paths
 	d          *db.DB
@@ -206,14 +200,10 @@ type retryFixtureOptions struct {
 	failInTest   bool
 	twoHop       bool
 	globalYAML   string
-	// repoYAML replaces the effective repository configuration the review
-	// round records; empty records the configuration a new run would get.
-	repoYAML   string
-	invocation db.AgentInvocation
-	// findings is the findings JSON the carried review round recorded.
-	findings *string
-	// prText is the caller-supplied PR text the failed source run carried.
-	prText db.RunPRText
+	repoYAML     string
+	invocation   db.AgentInvocation
+	findings     *string
+	prText       db.RunPRText
 }
 
 func newRetryFixture(t *testing.T, opts retryFixtureOptions) *retryFixture {
@@ -293,8 +283,6 @@ func newRetryFixture(t *testing.T, opts retryFixtureOptions) *retryFixture {
 	return f
 }
 
-// continuationOf records a retry of source that carries its Review and failed
-// in Test too, so its Review row holds no invocations of its own.
 func (f *retryFixture) continuationOf(t *testing.T, source *db.Run) *db.Run {
 	t.Helper()
 	sourceRows, err := f.d.GetStepsByRun(source.ID)
@@ -333,8 +321,6 @@ func (f *retryFixture) continuationOf(t *testing.T, source *db.Run) *db.Run {
 	return next
 }
 
-// writeFakeAgents points the named agents at executable stand-ins so a retry
-// can resolve them, and writes extra global configuration after them.
 func writeFakeAgents(t *testing.T, p *paths.Paths, selected string, extra string, names ...string) {
 	t.Helper()
 	config := "agent: " + selected + "\nagent_path_override:\n"
@@ -734,7 +720,6 @@ func TestRunInfoReportsACarriedStepsWorkFromTheRunItWasCarriedFrom(t *testing.T)
 	}
 }
 
-// conversationProbeStep records the review conversation its run can read.
 type conversationProbeStep struct {
 	mu        sync.Mutex
 	open      []string
@@ -874,8 +859,6 @@ func TestRetryRefusesWhenTheConfigurationChangesBetweenTheProofAndTheLaunch(t *t
 	f.requireNothingLaunched(t)
 }
 
-// requireNothingLaunched fails when a refused retry left an audit link, a
-// carried step, or an executed step behind.
 func (f *retryFixture) requireNothingLaunched(t *testing.T) {
 	t.Helper()
 	if link, err := f.d.GetRunRetryBySource(f.source.ID); err != nil || link != nil {

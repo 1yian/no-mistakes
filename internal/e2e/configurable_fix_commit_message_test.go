@@ -167,8 +167,6 @@ func TestFixCommitTrailersJourney(t *testing.T) {
 			userTrailers = append(userTrailers, trailers)
 		}
 	}
-	// The model is whatever the recorded claude fixture served; it must arrive
-	// as reported, not as the unknown placeholder.
 	const prefix = "Assisted-by: no-mistakes:claude:"
 	if len(fixTrailers) != 1 || !strings.HasPrefix(fixTrailers[0], prefix) ||
 		strings.Contains(fixTrailers[0], "\n") || strings.TrimPrefix(fixTrailers[0], prefix) == "unknown" {

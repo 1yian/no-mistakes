@@ -11,9 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// cumulativeSessionAgent models codex: a stable durable session whose reported
-// token usage is cumulative across resumed rounds, with bounded activity
-// metrics and no cache-creation reporting.
 type cumulativeSessionAgent struct {
 	round     int
 	cumInput  int
@@ -60,8 +57,6 @@ func (a *cumulativeSessionAgent) Run(_ context.Context, opts agent.RunOpts) (*ag
 	}, nil
 }
 
-// usageGapSessionAgent models a codex thread whose middle round dies before
-// any usage event, so that round's row stores unknown token counts.
 type usageGapSessionAgent struct{ round int }
 
 func (a *usageGapSessionAgent) Name() string                { return "codex" }
@@ -87,11 +82,6 @@ func (a *usageGapSessionAgent) Run(_ context.Context, _ agent.RunOpts) (*agent.R
 	}, nil
 }
 
-// TestPerfRecording_UsagelessRoundDoesNotResetTheSessionPrior proves the prior
-// cumulative lookup skips rows whose usage is unknown. A failed round now
-// writes such a row; treating it as the prior would report "no prior", and the
-// next round's whole cumulative counter would be recorded as one round's
-// delta - here 4000 instead of 3000.
 func TestPerfRecording_UsagelessRoundDoesNotResetTheSessionPrior(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 
@@ -128,10 +118,6 @@ func TestPerfRecording_UsagelessRoundDoesNotResetTheSessionPrior(t *testing.T) {
 	assertPtr(t, "round 3 delta input", invs[2].DeltaInputTokens, 3000)
 }
 
-// TestPerfRecording_ResumedSessionRecordsPerRoundDeltas proves a resumed
-// session's cumulative token counters are stored per round as correct deltas,
-// with fresh input, reasoning, model identity, activity metrics, workload, and
-// finding counts all populated, and cache creation left unknown.
 func TestPerfRecording_ResumedSessionRecordsPerRoundDeltas(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 
@@ -223,8 +209,6 @@ func TestPerfRecording_ReasoningDoesNotRequireActivityMetrics(t *testing.T) {
 	}
 }
 
-// resumeFailingAgent starts a session cold, then fails any resume with an
-// exit-shaped error, then succeeds on the fresh fallback session.
 type resumeFailingAgent struct{ calls int }
 
 func (a *resumeFailingAgent) Name() string                { return "codex" }
@@ -239,8 +223,6 @@ func (a *resumeFailingAgent) Run(_ context.Context, opts agent.RunOpts) (*agent.
 	return &agent.Result{Output: json.RawMessage(`{}`), SessionID: "sess-xyz"}, nil
 }
 
-// TestPerfRecording_FallbackRecordsReason proves a failed resume records both
-// the failed resume row and a fallback row carrying a classified reason.
 func TestPerfRecording_FallbackRecordsReason(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 
@@ -287,8 +269,6 @@ func TestPerfRecording_FallbackRecordsReason(t *testing.T) {
 	}
 }
 
-// TestPerfRecording_MissingProviderUsageIsUnknown proves an adapter that reports
-// no usage or activity metrics records unknown (NULL) fields, not zeros.
 func TestPerfRecording_MissingProviderUsageIsUnknown(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 
@@ -377,11 +357,6 @@ func TestPerfRecording_SchemaRejectedInvocationRecordsReportedUsage(t *testing.T
 	assertPtr(t, "fresh input", inv.FreshInputTokens, 153_000)
 }
 
-// TestPerfRecording_FailedResumedInvocationStaysResumed proves a resumed turn
-// that reports usage and then fails is still recorded as a resume. Adapters set
-// Resumed only after finalizing, so a failed result's Resumed=false is no
-// evidence the session was silently replaced - recording it as a fallback would
-// invent a fallback with no reason and skew the resume-health counts.
 func TestPerfRecording_FailedResumedInvocationStaysResumed(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 	wrapped := &perfRecordingAgent{
@@ -423,11 +398,6 @@ func (replacedSessionAgent) Run(context.Context, agent.RunOpts) (*agent.Result, 
 	}, errors.New("antigravity output parse: JSON output must be object")
 }
 
-// TestPerfRecording_FailedTurnInADifferentSessionRecordsFallback proves the
-// silent-replacement signal survives a failed turn. The adapter named a
-// session other than the one requested, which is evidence the resume never
-// happened rather than an unset field - recording it as a resume would hide
-// the stale-session path the fallback bucket exists to expose.
 func TestPerfRecording_FailedTurnInADifferentSessionRecordsFallback(t *testing.T) {
 	database, _, run, _ := setupTest(t)
 	wrapped := &perfRecordingAgent{

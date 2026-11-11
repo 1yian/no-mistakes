@@ -12,14 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestEjectSweepsEveryReachablePlacementInOneSweep bounds what eject pays for
-// the sweep it has to do. A repository's run rows are never pruned, so one sweep
-// per recorded placement means one process-table read per run the repository has
-// ever placed outside the default tree - thousands of `ps` and cwd passes for an
-// eject that has one leftover directory to clean up. One sweep answers all of
-// them, and a terminal run whose directory is already gone is not in it: its own
-// removal swept it, and nothing can be standing in a directory that no longer
-// exists for a run that ended.
 func TestEjectSweepsEveryReachablePlacementInOneSweep(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -71,12 +63,6 @@ func TestEjectSweepsEveryReachablePlacementInOneSweep(t *testing.T) {
 	}
 }
 
-// TestEjectSweepsTheDefaultTreeBeforeRemovingIt holds the sweep-before-removal
-// discipline to both halves of eject. Which placement a run landed in says
-// nothing about whether it leaked a process that escaped its group, so removing
-// the default tree unswept leaves that process burning CPU on a deleted cwd until
-// some later daemon startup happens to sweep the tree by shape - the exact cost
-// the eject sweep exists to eliminate rather than defer.
 func TestEjectSweepsTheDefaultTreeBeforeRemovingIt(t *testing.T) {
 	workDir := setupTestRepo(t)
 	p := paths.WithRoot(t.TempDir())
@@ -134,8 +120,6 @@ func TestEjectSweepsTheDefaultTreeBeforeRemovingIt(t *testing.T) {
 	}
 }
 
-// placeRun records a run whose worktree the operator's own directory holds,
-// optionally creating that directory.
 func placeRun(t *testing.T, d *db.DB, repoID, root string, status types.RunStatus, onDisk bool) string {
 	t.Helper()
 	run, err := d.InsertRun(repoID, "feature", "head", "base")

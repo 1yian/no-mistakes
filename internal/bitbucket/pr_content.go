@@ -10,9 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// Bitbucket's read shape is not its write shape: summary.raw is the text as
-// typed, while summary.html is rendered. Read only that raw field; never
-// infer an empty body from an absent summary or use rendered HTML.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	if pr == nil {
 		return scm.PRContent{}, fmt.Errorf("missing Bitbucket pull identity")

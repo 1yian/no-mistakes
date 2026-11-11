@@ -8,14 +8,12 @@ import (
 	"time"
 )
 
-// Slot is a held concurrency permit for one temporary E2E daemon owner.
 type Slot struct {
 	inv  *Inventory
 	path string
 	n    int
 }
 
-// MaxConcurrent returns the configured concurrency cap.
 func MaxConcurrent() int {
 	raw := os.Getenv(EnvMaxConcurrent)
 	if raw == "" {
@@ -28,8 +26,6 @@ func MaxConcurrent() int {
 	return n
 }
 
-// AcquireSlot blocks until a concurrency slot is free or timeout elapses.
-// The slot file records the owner pid for diagnostics.
 func (inv *Inventory) AcquireSlot(timeout time.Duration) (*Slot, error) {
 	if inv == nil {
 		return nil, fmt.Errorf("e2edaemon: nil inventory")
@@ -60,7 +56,6 @@ func (inv *Inventory) AcquireSlot(timeout time.Duration) (*Slot, error) {
 	}
 }
 
-// Release frees the concurrency slot.
 func (s *Slot) Release() {
 	if s == nil || s.path == "" {
 		return

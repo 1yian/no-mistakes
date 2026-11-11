@@ -7,8 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/git"
 )
 
-// BindRunCommitIdentity is create-only. A retry or a restart cannot change the
-// provenance of a run that already created commits.
 func (d *DB) BindRunCommitIdentity(runID string, identity git.CommitIdentity) error {
 	if err := identity.Validate(); err != nil {
 		return err

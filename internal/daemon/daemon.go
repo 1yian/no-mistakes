@@ -35,25 +35,14 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/worktrees"
 )
 
-// orphanProcessMinAge is the age floor for the startup orphan-process sweep.
-// Startup is the one moment where the daemon has no way to tell a leaked
-// process from one belonging to a run that is starting concurrently, so
-// anything young is left alone; run cleanup sweeps its own worktree with no
-// age floor because it owns that run.
 var orphanProcessMinAge = procreap.DefaultMinAge
 
-// applyShellEnvToProcess is the startup probe: it may wait for a login shell
-// binary that a boot-time race has not yet produced (see
-// shellenv.DefaultShellRetryWindow).
 var applyShellEnvToProcess = func(excluded ...string) error {
 	return shellenv.ApplyToProcessWithShellRetryExcept(shellenv.DefaultShellRetryWindow, excluded...)
 }
 var createDaemonPIDTempFile = os.CreateTemp
 var renameDaemonPIDFile = os.Rename
 
-// Run starts the daemon process. It blocks until a shutdown signal is received
-// or the shutdown IPC method is called. This is called via the hidden
-// `no-mistakes daemon run` entrypoint used by managed and detached services.
 func Run() (retErr error) {
 	startupStarted := time.Now()
 	p, err := paths.New()
@@ -134,10 +123,6 @@ func prepareDaemonEnvironment() error {
 	return nil
 }
 
-// applyLoginShellEnvironment applies a login-shell probe to the process and
-// keeps the service-supplied NM_HOME authoritative over anything the shell's
-// rc files export. A supplied telemetry opt-out also survives the probe, while
-// an enabling value may still be replaced by the shell's opt-out.
 func applyLoginShellEnvironment(apply func(...string) error, nmHome string) error {
 	var excluded []string
 	if nmHome != "" {
@@ -150,11 +135,6 @@ func applyLoginShellEnvironment(apply func(...string) error, nmHome string) erro
 	return apply(excluded...)
 }
 
-// logDaemonPathSummary records the effective PATH at daemon startup so that
-// "agent binary not in PATH" failures (see #143) can be diagnosed from the
-// lifecycle log alone. The daemon installs its lifecycle handler at info
-// before environment preparation, then reapplies the configured level after
-// loading global config, so this startup diagnostic is always retained.
 func logDaemonPathSummary() {
 	path := os.Getenv("PATH")
 	entries := 0
@@ -167,7 +147,6 @@ func logDaemonPathSummary() {
 	)
 }
 
-// initLogger sets up the global slog handler with the configured log level.
 func initLogger(w io.Writer, level string) {
 	lvl := config.ParseLogLevel(level)
 	handler := slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl})
@@ -180,14 +159,10 @@ func logStartupPhase(phase string, started time.Time, attrs ...any) {
 	slog.Info("daemon startup phase complete", fields...)
 }
 
-// RunWithResources starts the daemon with pre-initialized paths and DB.
-// Useful for testing where the caller controls resource setup.
 func RunWithResources(p *paths.Paths, d *db.DB) error {
 	return RunWithOptions(p, d, nil)
 }
 
-// RunWithOptions starts the daemon with optional overrides.
-// stepFactory overrides the default pipeline steps (for testing).
 func RunWithOptions(p *paths.Paths, d *db.DB, stepFactory StepFactory) error {
 	startupStarted := time.Now()
 	// Singleton guard: only one live daemon may own this NM_HOME at a time.
@@ -212,10 +187,6 @@ func RunWithOptions(p *paths.Paths, d *db.DB, stepFactory StepFactory) error {
 	return runWithOptionsLocked(p, d, globalCfg, stepFactory, startupStarted)
 }
 
-// runWithOptionsLocked takes the global configuration its caller already loaded,
-// so startup reads and validates config.yaml exactly once. Re-reading it per
-// consumer would let one startup act on two different documents, and every later
-// read needs a fallback for a failure the caller has already refused to start on.
 func runWithOptionsLocked(p *paths.Paths, d *db.DB, globalCfg *config.GlobalConfig, stepFactory StepFactory, startupStarted time.Time) error {
 	// Refuse an unusable worktree placement before anything walks, sweeps, or
 	// removes a directory under it. This is the second half of worktree_roots
@@ -406,12 +377,6 @@ func writeDaemonPIDFile(path string, record daemonPIDFile) error {
 	return nil
 }
 
-// recoverOnStartup cleans up after a previous daemon crash by marking stale
-// runs/steps as failed, killing orphaned managed-server subprocesses
-// (opencode, rovodev), and removing orphaned worktree directories. It also
-// best-effort migrates gate bare repos in place so older installs pick up
-// the per-worktree hookspath isolation introduced for issue #122 when Git
-// supports config --worktree.
 func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktrees.Layout) {
 	orphanStarted := time.Now()
 	reapOrphanedServers(p)
@@ -575,24 +540,6 @@ func isGitAncestor(ctx context.Context, dir, ancestor, descendant string) bool {
 	return err == nil
 }
 
-// sweepOrphanRunProcesses terminates processes still standing in a run
-// worktree that no run owns any more. A predecessor daemon's group teardown
-// cannot reach a child that left its process group (see internal/procreap),
-// and once that child reparents to init nothing lineage-based can name it
-// again - it just keeps burning CPU and holding a deleted worktree open. This
-// runs after stale-run recovery so every run's status is settled, and before
-// worktree cleanup so the directories are freed of their holders first.
-//
-// Reach outside the default worktrees tree is exactly the recorded run
-// worktrees, never a configured root: signalling in an operator's own directory
-// is limited to the directories our own run rows name, matching what cleanup
-// there may remove, and a placement the operator has since reconfigured away is
-// still swept because the run recorded it.
-//
-// retained is the set of default-tree run IDs worktreeReapCandidates decided
-// to keep (see retainedDefaultTreeRunIDs): a terminal run alone does not mean
-// orphaned once retention exists, so a run in this set is left alone here too,
-// exactly like the removal-scoped sweep reapWorktrees runs for itself later.
 func sweepOrphanRunProcesses(d *db.DB, p *paths.Paths, worktrees []procreap.Worktree, retained map[string]bool) {
 	ctx := context.Background()
 	wtRoot := p.WorktreesDir()
@@ -618,12 +565,6 @@ func sweepOrphanRunProcesses(d *db.DB, p *paths.Paths, worktrees []procreap.Work
 	}, "daemon_startup")
 }
 
-// retainedDefaultTreeRunIDs is the run IDs of default-tree worktrees the
-// worktree retention policy is keeping. The startup process sweep runs before
-// reapWorktrees decides what to remove, so it consults the same decision here
-// rather than treating "run is terminal" alone as orphaned - otherwise a
-// restart could kill a process still using a checkout the operator configured
-// to retain (see worktreeReapCandidates).
 func retainedDefaultTreeRunIDs(d *db.DB, p *paths.Paths, policy worktreeReapPolicy, now time.Time) map[string]bool {
 	removable, _ := defaultTreeOrphanWorktrees(d, p)
 	if len(removable) == 0 {
@@ -642,22 +583,6 @@ func retainedDefaultTreeRunIDs(d *db.DB, p *paths.Paths, policy worktreeReapPoli
 	return retained
 }
 
-// sweepableWorktrees is the procreap view of the run worktrees outside the
-// default tree, and the bound on how many of them the sweep carries.
-//
-// Every entry becomes a path matcher tested against every candidate process, so
-// the cost is per entry, not per directory that exists - and run rows are never
-// pruned, so the full recorded history would make each restart of a long-lived
-// install slower than the last. Two sets are enough to reach every process the
-// sweep can legitimately reach, and both are bounded by the present rather than
-// by history:
-//
-//   - leftover: a recorded worktree still on disk. Anything standing in one is
-//     reachable through it, and cleanup is about to try to remove it anyway.
-//   - active: the recorded worktree of a run that was executing when this
-//     daemon started, whose directory may already be gone while a process that
-//     escaped its process group still holds it as its cwd. A run that reached a
-//     terminal state has had that sweep run against its own worktree already.
 func sweepableWorktrees(sets ...[]db.RunWorktree) []procreap.Worktree {
 	var out []procreap.Worktree
 	seen := make(map[string]bool)
@@ -673,26 +598,6 @@ func sweepableWorktrees(sets ...[]db.RunWorktree) []procreap.Worktree {
 	return out
 }
 
-// leftoverRecordedRunWorktrees returns the run worktrees this machine placed
-// outside <NM_HOME>/worktrees that are still on disk, as the runs that created
-// them recorded them (see internal/worktrees). It is what startup cleanup
-// removes there, so cleanup depends on no configuration at all: an operator who
-// edits or drops a worktree_roots entry after a crash would otherwise hide a
-// directory a run is still recorded as owning, and nothing would ever name it
-// again.
-//
-// Only rows whose directory is still there survive, so everything DOWNSTREAM -
-// the canonical-path comparison, the process sweep, the removals - is
-// proportional to what is actually left over, which is normally nothing.
-//
-// The filter itself is not: run rows are never pruned, so this pays one os.Stat
-// per run this machine has ever placed outside the default tree, on every
-// startup, before the socket is bound. That cost is accepted rather than bounded.
-// A cheaper set cannot be had from the run status here, because this runs AFTER
-// crash recovery has already turned the runs that left directories behind
-// terminal - the status that would filter them out is the status that identifies
-// them. Bounding it by age instead would trade a stat-per-row for a directory
-// nobody ever removes, which is the failure this exists to prevent.
 func leftoverRecordedRunWorktrees(d *db.DB, p *paths.Paths) []db.RunWorktree {
 	recorded, err := d.RunWorktreesOutside(p.WorktreesDir())
 	if err != nil {
@@ -702,10 +607,6 @@ func leftoverRecordedRunWorktrees(d *db.DB, p *paths.Paths) []db.RunWorktree {
 	return outsideDefaultWorktreesTree(p, onDisk(recorded))
 }
 
-// activeRecordedRunWorktrees returns the recorded placements of the runs that
-// are still active, whose directories are deliberately NOT required to exist
-// (see db.ActiveRunWorktreesOutside). Call it before crash recovery settles run
-// statuses.
 func activeRecordedRunWorktrees(d *db.DB, p *paths.Paths) []db.RunWorktree {
 	recorded, err := d.ActiveRunWorktreesOutside(p.WorktreesDir())
 	if err != nil {
@@ -715,7 +616,6 @@ func activeRecordedRunWorktrees(d *db.DB, p *paths.Paths) []db.RunWorktree {
 	return outsideDefaultWorktreesTree(p, recorded)
 }
 
-// onDisk keeps the recorded placements that still name a directory.
 func onDisk(recorded []db.RunWorktree) []db.RunWorktree {
 	out := make([]db.RunWorktree, 0, len(recorded))
 	for _, wt := range recorded {
@@ -727,11 +627,6 @@ func onDisk(recorded []db.RunWorktree) []db.RunWorktree {
 	return out
 }
 
-// outsideDefaultWorktreesTree drops placements that are in the default tree
-// after all, which the query's byte-prefix test cannot decide for a second
-// spelling of the same directory (/var and /private/var). The default tree is
-// discovered by walking it, so a row that belongs to it must not be handled
-// twice.
 func outsideDefaultWorktreesTree(p *paths.Paths, recorded []db.RunWorktree) []db.RunWorktree {
 	worktreesDir := p.WorktreesDir()
 	out := make([]db.RunWorktree, 0, len(recorded))
@@ -744,23 +639,6 @@ func outsideDefaultWorktreesTree(p *paths.Paths, recorded []db.RunWorktree) []db
 	return out
 }
 
-// validatedWorktreeLayout is the one worktree placement startup resolves, and it
-// fails startup when that placement is one this machine cannot host (see
-// worktrees.CheckPlacement for which placements those are and why). Refusing to
-// start is the same treatment an unreadable global config already gets, and
-// for the same reason: the daemon's first act is crash recovery, which walks
-// and removes directories, so a placement it would misread must be rejected
-// before that runs rather than warned about afterwards.
-//
-// Because the layout it returns is the validated one, every later startup
-// consumer is handed it rather than rebuilding one from another read of the same
-// file - which would have to carry a fallback for a failure this function has
-// already refused to start on.
-//
-// This is where the registered repositories are known, so it is the only layer
-// that can judge a root placed inside a checkout other than the one whose runs
-// it holds. A repository registered after such a root was configured is caught
-// here on the next startup.
 func validatedWorktreeLayout(d *db.DB, p *paths.Paths, globalCfg *config.GlobalConfig) (*worktrees.Layout, error) {
 	layout := worktrees.New(p, globalCfg.WorktreeRoots)
 	checkouts, err := registeredCheckouts(d)
@@ -773,13 +651,6 @@ func validatedWorktreeLayout(d *db.DB, p *paths.Paths, globalCfg *config.GlobalC
 	return layout, nil
 }
 
-// registeredCheckouts lists the working paths of every registered repository, so
-// placement validation can name a checkout a configured root would dirty. A
-// failure to read them is fatal to the caller's guard: an unreadable repository
-// list means the guard cannot see the set it protects, and a guard that cannot
-// see its set must refuse rather than silently validate against nothing — the
-// database has already opened and migrated by the time any caller runs, so the
-// failure is never routine.
 func registeredCheckouts(d *db.DB) ([]string, error) {
 	if d == nil {
 		return nil, nil
@@ -787,15 +658,6 @@ func registeredCheckouts(d *db.DB) ([]string, error) {
 	return d.RepoWorkingPaths()
 }
 
-// reportUnusableWorktreeRoots names configured placements that will not do
-// what the operator expects. A worktree_roots key is matched against a
-// registered checkout path, so a stale key left behind by a moved or ejected
-// checkout - or one that differs from the recorded path in a way this
-// filesystem does not consider equal, such as letter case - silently places
-// nothing, which has no other symptom than runs continuing to appear under
-// NM_HOME. That is the one placement worth only a log line: a root that does
-// not work at all already refused startup (see
-// validatedWorktreeLayout and worktrees.Layout.Validate).
 func reportUnusableWorktreeRoots(d *db.DB, layout *worktrees.Layout) {
 	checkouts := layout.Checkouts()
 	if len(checkouts) == 0 {
@@ -817,31 +679,6 @@ func reportUnusableWorktreeRoots(d *db.DB, layout *worktrees.Layout) {
 	}
 }
 
-// cleanupOrphanWorktrees removes worktree directories left behind by runs
-// that are no longer active, for the operator-placed leftovers named by
-// recordedOrphanWorktrees (see worktree_roots in the global config) - that
-// directory is the operator's own, so every eligible leftover there is
-// removed unconditionally, once, at startup. It is DB-aware: a worktree is
-// only removed when its run row is terminal, or when there is no matching
-// run row at all. This is what keeps cleanup from deleting the checkout out
-// from under a pipeline that is still actually running (see
-// skipWorktreeCleanup). Called from recoverOnStartup after
-// RecoverStaleRuns, so in the normal single-daemon path every run this loop
-// sees has already been resolved to a terminal status.
-//
-// Leftovers under the default <NM_HOME>/worktrees tree are NOT removed here:
-// that tree is bounded by the operator's retention policy via reapWorktrees,
-// which recoverOnStartup runs first, so this only reclaims the (now likely
-// empty) per-repo directories reapWorktrees left behind.
-//
-// Every directory it is going to remove is swept in ONE process snapshot before
-// any of them is removed. The sweep-before-removal invariant is what matters
-// (see procreap.SweepRunWorktrees), not that each directory gets a snapshot of
-// its own: reading the process table is the expensive part, a scoped sweep has
-// no age floor so every process on the machine is a candidate, and this whole
-// pass runs before the daemon binds its socket, against the startup budget. A
-// crash that leaves several directories behind would otherwise make the daemon
-// slower to start the more there is to clean up.
 func cleanupOrphanWorktrees(d *db.DB, p *paths.Paths, leftover []db.RunWorktree) {
 	ctx := context.Background()
 	_, repoDirs := defaultTreeOrphanWorktrees(d, p)
@@ -861,8 +698,6 @@ func cleanupOrphanWorktrees(d *db.DB, p *paths.Paths, leftover []db.RunWorktree)
 	}
 }
 
-// orphanWorktree is one run worktree directory startup cleanup has decided it
-// may remove, resolved before anything is swept or removed.
 type orphanWorktree struct {
 	gateDir string
 	dir     string
@@ -870,9 +705,6 @@ type orphanWorktree struct {
 	runID   string
 }
 
-// defaultTreeOrphanWorktrees walks <NM_HOME>/worktrees, which no-mistakes owns
-// outright, and returns the run worktrees no run still owns plus the repository
-// directories to drop once they are empty.
 func defaultTreeOrphanWorktrees(d *db.DB, p *paths.Paths) (removable []orphanWorktree, repoDirs []string) {
 	wtRoot := p.WorktreesDir()
 	entries, err := os.ReadDir(wtRoot)
@@ -907,18 +739,6 @@ func defaultTreeOrphanWorktrees(d *db.DB, p *paths.Paths) (removable []orphanWor
 	return removable, repoDirs
 }
 
-// recordedOrphanWorktrees names the leftover worktrees of runs the operator
-// placed outside <NM_HOME>/worktrees (see worktree_roots in the global config).
-//
-// That directory belongs to the operator, not to no-mistakes: it holds the
-// mise.local.toml, .envrc, or scratch checkout that motivated pointing runs at
-// it in the first place, and it can hold a run-shaped directory this daemon
-// never created - another tool's, or one left by a repository that used to
-// point here. So unlike the default tree, which is discovered by walking, this
-// names only the exact directories run records name, which is the same rule
-// eject applies (see gate.removeRepoWorktrees): nothing there is enumerated,
-// and a directory no run recorded is never even looked at. Whether a named
-// directory may go is decided by removableOrphanWorktree.
 func recordedOrphanWorktrees(d *db.DB, p *paths.Paths, leftover []db.RunWorktree) []orphanWorktree {
 	var removable []orphanWorktree
 	for _, wt := range leftover {
@@ -933,10 +753,6 @@ func recordedOrphanWorktrees(d *db.DB, p *paths.Paths, leftover []db.RunWorktree
 	return removable
 }
 
-// removableOrphanWorktree combines the active-run guard with refusal retention.
-// This removal decision does not exempt retained terminal runs from evidence
-// expiry (a separate, unrelated budget); the startup process sweep now applies
-// the same worktree retention policy through retainedDefaultTreeRunIDs.
 func removableOrphanWorktree(d *db.DB, wt orphanWorktree) bool {
 	if skip, reason := skipWorktreeCleanup(context.Background(), d, wt.runID, wt.dir); skip {
 		slog.Info("skipping worktree cleanup", "path", wt.dir, "reason", reason)
@@ -954,10 +770,6 @@ func removableOrphanWorktree(d *db.DB, wt orphanWorktree) bool {
 	return true
 }
 
-// removeOrphanWorktree removes one run worktree directory its caller has
-// already decided on and swept (see cleanupOrphanWorktrees). It reports
-// whether the directory was actually removed, since git worktree remove and
-// its os.RemoveAll fallback can both fail and merely log a warning.
 func removeOrphanWorktree(ctx context.Context, wt orphanWorktree) bool {
 	gateDir, wtPath := wt.gateDir, wt.dir
 	if err := git.WorktreeRemove(ctx, gateDir, wtPath); err != nil {
@@ -972,27 +784,6 @@ func removeOrphanWorktree(ctx context.Context, wt orphanWorktree) bool {
 	return true
 }
 
-// skipWorktreeCleanup reports whether the worktree directory for runID must
-// be left alone during startup cleanup. It is the active-run guard that
-// makes cleanup safe even if the singleton lock were ever bypassed: a
-// worktree is never removed while its run is still pending or running -
-// only terminal-run leftovers or directories with no matching run row at
-// all (e.g. a directory left behind after its run row was independently
-// pruned) are eligible for removal. RunManager.startRun always inserts the
-// run row before creating the worktree directory, so on a single daemon a
-// "no matching run" directory is never one whose insert simply hasn't landed
-// yet - it is safe to remove immediately.
-//
-// A run marked RunCIMonitorInterrupted (the daemon restarted while monitoring
-// CI for an already-open PR, issue #361) is terminal and would otherwise leak
-// its checkout on every future restart. Such a worktree is reclaimed like any
-// other terminal-run leftover EXCEPT when it may hold unpushed work: a CI
-// auto-fix commits locally before pushing (see steps/ci_fix.go), so a crash in
-// that window leaves the only copy of the fix commit in this checkout. We
-// reclaim only when the worktree HEAD equals the head the run already pushed -
-// run.HeadSHA advances solely after a verified push, so a match proves nothing
-// local is unpushed - and fail safe to preservation on any mismatch or
-// unreadable HEAD so recoverable commits are never discarded.
 func skipWorktreeCleanup(ctx context.Context, d *db.DB, runID, wtPath string) (bool, string) {
 	run, err := d.GetRun(runID)
 	if err != nil {
@@ -1021,8 +812,6 @@ func skipWorktreeCleanup(ctx context.Context, d *db.DB, runID, wtPath string) (b
 	return false, ""
 }
 
-// protectedPathCleanupReason protects only the index and working files. It must
-// not be used as a process-liveness or test-evidence retention predicate.
 func protectedPathCleanupReason(d *db.DB, run *db.Run) string {
 	if run == nil || (run.Status == types.RunCancelled && run.Error != nil && *run.Error == types.RunCancelReasonAbortedByUser) {
 		return ""
@@ -1058,11 +847,6 @@ var ensureGateHooksPathIsolation = git.EnsureHooksPathIsolation
 
 var sweepRunWorktrees = procreap.SweepRunWorktrees
 
-// migrateGateConfigs discovers gates from authoritative DB records plus legacy
-// directories with the strict <id>.git shape. Every unstamped candidate is
-// structurally checked and explicitly verified as bare before any hook or Git
-// mutation. A completed, content-versioned stamp makes normal restarts a cheap
-// filesystem-only pass instead of six Git subprocesses per gate.
 func migrateGateConfigs(ctx context.Context, d *db.DB, p *paths.Paths) gateMigrationStats {
 	var stats gateMigrationStats
 	candidates := make(map[string]struct{})
@@ -1562,10 +1346,6 @@ func registerHandlers(srv *ipc.Server, mgr *RunManager, d *db.DB, shutdown func(
 		}
 		dispositions, err := mgr.HandleRespondWithOverrides(p.RunID, p.Step, p.Action, p.FindingIDs, p.IgnoreFindingIDs, respondInstructions(p), p.AddedFindings, p.ApprovalReason, pipeline.ResponseOptions{Origin: p.Origin, Coverage: p.Coverage})
 		if err != nil {
-			// A refused fix response is the caller's input to fix, not a
-			// transport failure: the gate is still parked. Report it as a
-			// structured result so the CLI can name the unaccounted findings
-			// and help, and the caller can send a corrected response.
 			var refusal *pipeline.RespondRefusal
 			if errors.As(err, &refusal) {
 				return &ipc.RespondResult{OK: false, Refusal: refusal.Message, Missing: refusal.Missing, DeclinedEarlierFix: refusal.DeclinedEarlierFix, Help: refusal.Help}, nil
@@ -1648,8 +1428,6 @@ func registerHandlers(srv *ipc.Server, mgr *RunManager, d *db.DB, shutdown func(
 	})
 }
 
-// respondInstructions carries a response's per-finding guidance with who wrote
-// it, so the executor can keep a driver's guidance apart from the user's.
 func respondInstructions(p ipc.RespondParams) *pipeline.FixInstructions {
 	if len(p.Instructions) == 0 {
 		return nil
@@ -1657,20 +1435,6 @@ func respondInstructions(p ipc.RespondParams) *pipeline.FixInstructions {
 	return &pipeline.FixInstructions{ByFinding: p.Instructions, FromDriver: p.InstructionsFromDriver}
 }
 
-// runSnapshot reads an authoritative run snapshot and stamps it with the state
-// revision sampled BEFORE the read.
-//
-// The ordering is the whole point and must not be reversed. Every producer
-// writes state and only then broadcasts (see the executor's emitters), so a
-// revision sampled first is never newer than the snapshot that follows it:
-//
-//   - every event at or below the sampled revision already has its write
-//     reflected in the read, so nothing is lost by the consumer skipping it;
-//   - every event above it is still delivered and still exceeds the snapshot's
-//     revision, so the consumer still applies it on top.
-//
-// Sampling after the read would let a transition that landed in between be
-// skipped by the consumer's monotonic guard and never repaired.
 func runSnapshot(mgr *RunManager, runID string, read func(string) (*ipc.RunInfo, error)) (*ipc.RunInfo, error) {
 	stateRev := mgr.StateRev(runID)
 	info, err := read(runID)

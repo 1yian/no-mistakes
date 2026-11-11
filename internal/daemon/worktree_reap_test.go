@@ -14,13 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// worktreeReapFixture builds a DB plus a default worktrees tree and returns
-// helpers for seeding leftover run-worktree directories with a chosen age and
-// status. Directories are plain os.MkdirAll, not real git worktrees: removal
-// goes through removeOrphanWorktree, whose git.WorktreeRemove attempt fails
-// against the fixture's non-existent gate repo and falls back to
-// os.RemoveAll - the same fallback path startup cleanup already relies on
-// (see TestCleanupOrphanWorktreesSweepsEveryRemovableDirectoryInOneSnapshot).
 type worktreeReapFixture struct {
 	t    *testing.T
 	db   *db.DB
@@ -46,8 +39,6 @@ func newWorktreeReapFixture(t *testing.T) *worktreeReapFixture {
 	return &worktreeReapFixture{t: t, db: d, p: p, repo: repo}
 }
 
-// seed records a run in the given status and creates its default-tree
-// worktree directory, aged by backdating the directory's modification time.
 func (f *worktreeReapFixture) seed(branch string, status types.RunStatus, age time.Duration) string {
 	f.t.Helper()
 	run, err := f.db.InsertRun(f.repo.ID, branch, "head-"+branch, "base-"+branch)
@@ -76,9 +67,6 @@ func (f *worktreeReapFixture) exists(runID string) bool {
 	return err == nil
 }
 
-// TestReapWorktreesHonorsRetentionAndSparesActiveRuns is the core reaper
-// contract: a leftover worktree past the retention window is removed, one
-// inside it is kept, and a run still in flight is never touched at any age.
 func TestReapWorktreesHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	f := newWorktreeReapFixture(t)
 
@@ -103,9 +91,6 @@ func TestReapWorktreesHonorsRetentionAndSparesActiveRuns(t *testing.T) {
 	}
 }
 
-// TestReapWorktreesTrimsToTheRunCeilingOldestFirst covers the second bound: a
-// burst of leftovers that all land inside the retention window still cannot
-// grow the tree without limit.
 func TestReapWorktreesTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	f := newWorktreeReapFixture(t)
 
@@ -123,8 +108,6 @@ func TestReapWorktreesTrimsToTheRunCeilingOldestFirst(t *testing.T) {
 	}
 }
 
-// TestReapWorktreesKeepsEverythingWhenBothBoundsAreDisabled proves the
-// operator escape hatch really disables reaping.
 func TestReapWorktreesKeepsEverythingWhenBothBoundsAreDisabled(t *testing.T) {
 	f := newWorktreeReapFixture(t)
 
@@ -138,8 +121,6 @@ func TestReapWorktreesKeepsEverythingWhenBothBoundsAreDisabled(t *testing.T) {
 	}
 }
 
-// TestWorktreeReapPolicyForUsesGlobalConfigAndDefaults keeps the daemon's
-// resolution aligned with the global-only config contract (config.Worktree).
 func TestWorktreeReapPolicyForUsesGlobalConfigAndDefaults(t *testing.T) {
 	if got := worktreeReapPolicyFor(nil); got.Retention != config.DefaultWorktreeRetention || got.MaxRuns != config.DefaultWorktreeMaxRuns {
 		t.Errorf("nil global config = %+v, want the built-in defaults", got)
@@ -155,9 +136,6 @@ func TestWorktreeReapPolicyForUsesGlobalConfigAndDefaults(t *testing.T) {
 	}
 }
 
-// TestRunCleanupReapsLeftoverWorktreesAcrossTheWholeTree is the per-run half:
-// cleaning up one finished run also converges the whole default tree on the
-// worktree retention budget, the same way it already does for evidence.
 func TestRunCleanupReapsLeftoverWorktreesAcrossTheWholeTree(t *testing.T) {
 	f := newWorktreeReapFixture(t)
 	m := NewRunManager(f.db, f.p, nil)
@@ -177,8 +155,6 @@ func TestRunCleanupReapsLeftoverWorktreesAcrossTheWholeTree(t *testing.T) {
 	}
 }
 
-// TestRunCleanupWorktreeReapIsSafeWithoutConfig keeps the cleanup path from
-// ever being the thing that fails a finished run when config failed to load.
 func TestRunCleanupWorktreeReapIsSafeWithoutConfig(t *testing.T) {
 	f := newWorktreeReapFixture(t)
 	m := NewRunManager(f.db, f.p, nil)
@@ -192,11 +168,6 @@ func TestRunCleanupWorktreeReapIsSafeWithoutConfig(t *testing.T) {
 	}
 }
 
-// TestRemoveOrphanWorktreeReportsRemovalFailure pins the fix for the
-// inflated-count review finding: removeOrphanWorktree must report false, not
-// just log a warning, when both git worktree remove and its os.RemoveAll
-// fallback fail, so a caller counting removals (reapWorktrees) never claims a
-// directory is gone when it is still on disk.
 func TestRemoveOrphanWorktreeReportsRemovalFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory permission bits do not block removal the same way on windows")

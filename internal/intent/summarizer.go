@@ -11,23 +11,16 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/agent"
 )
 
-// maxTranscriptBytes caps the size of transcript text we send to the
-// summarizer. ~64KB is enough to convey intent without bloating prompts.
 const maxTranscriptBytes = 64 * 1024
 
 const maxSummaryDiffBytes = 32 * 1024
 
-// ChangeContext identifies the submitted change, rather than the agent's current
-// working tree. Diff may include Git's diffstat and binary-file notices.
 type ChangeContext struct {
 	Base string
 	Head string
 	Diff string
 }
 
-// SummaryContext carries the session discovery window. Only WindowEnd bounds
-// message times: a rebase can move WindowStart past the original request. The
-// branch diff identifies the task; matching and disambiguation keep the session.
 type SummaryContext struct {
 	Change      ChangeContext
 	WindowStart time.Time
@@ -43,27 +36,15 @@ var summarySchema = json.RawMessage(`{
   "additionalProperties": false
 }`)
 
-// Summarizer turns a session's user/assistant text into a 2-6 sentence
-// description of the user's intent.
 type Summarizer interface {
 	Summarize(ctx context.Context, s *Session, change SummaryContext) (string, error)
 }
 
-// agentSummarizer calls a no-mistakes agent to produce the summary.
-//
-// cwd is the working directory passed to the agent. This MUST be set to
-// the same directory the pipeline steps will run in (the worktree). Some
-// backends (e.g. opencode) spawn a long-lived server on the first Run()
-// call and lock its cwd to whatever was passed first; if the summarizer
-// runs with a different cwd than later steps, every subsequent step
-// inherits the wrong server-process cwd and can misread its environment.
 type agentSummarizer struct {
 	agent agent.Agent
 	cwd   string
 }
 
-// NewAgentSummarizer wraps an agent.Agent as a Summarizer. cwd should be
-// the worktree the pipeline will run in.
 func NewAgentSummarizer(a agent.Agent, cwd string) Summarizer {
 	return &agentSummarizer{agent: a, cwd: cwd}
 }
@@ -162,8 +143,6 @@ func truncateSummaryText(text string, limit int) string {
 	return text[:end] + notice
 }
 
-// buildTranscriptBlock formats messages as plain "role: text" lines after
-// clamping size, redacting secrets, and neutering adversarial markers.
 func buildTranscriptBlock(s *Session) string {
 	if s == nil {
 		return ""

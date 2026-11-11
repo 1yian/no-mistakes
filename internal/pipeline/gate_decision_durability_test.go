@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// The echo is a promise: a response must not be told what it recorded unless
-// that decision is durable. With decision writes failing, the response is
-// refused, the gate stays parked and nothing is dispatched; once writes work
-// again the same response is accepted against that still-parked gate.
 func TestExecutor_FixResponseRefusedWhenTheDecisionWriteFails(t *testing.T) {
 	contexts := make(chan *StepContext, 4)
 	step := &adaptiveCallStep{
@@ -79,12 +75,6 @@ func TestExecutor_FixResponseRefusedWhenTheDecisionWriteFails(t *testing.T) {
 	waitExecutorDone(t, done)
 }
 
-// A round can be answered twice only when recovery parks it again: the first
-// response's decision was recorded at park time and its dispatch never ran, so
-// the second response is what reaches the fixer. It keeps the acknowledged
-// content in the record and restores it into that dispatch, which is why both
-// the recorded payload and the dispatch below carry the first response's
-// finding, its instructions and its user-authored addition.
 func TestExecutor_ReansweredRoundPreservesAcknowledgedFindingContent(t *testing.T) {
 	for _, step := range []types.StepName{types.StepReview, types.StepLint} {
 		t.Run(string(step), func(t *testing.T) {
@@ -192,13 +182,6 @@ func TestNormalizeFixSelection_AllocatesAgainstIgnoredGateIDs(t *testing.T) {
 	}
 }
 
-// A fix response is durable before it is dispatched: persistResponseDecision
-// runs while the gate is still parked, so a daemon that stops in the window
-// between that write and the fix round comes back parked on the same round with
-// the decision recorded and never applied. The response that re-decides that
-// round is the dispatch, so it must carry the recorded selection - including
-// the --add-finding item and every instruction attached to it - to the fixer
-// instead of leaving it in the saved record.
 func TestExecutor_RecoveredRoundRestoresTheAcceptedAddition(t *testing.T) {
 	const gate = `{"findings":[` +
 		`{"id":"R1","severity":"warning","description":"first"},` +

@@ -9,8 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/ipc"
 )
 
-// axi respond is how an agent drives a run, so its --instructions reach the
-// daemon marked as the driver's guidance, not the user's own words.
 func TestAxiRespond_InstructionsAreMarkedAsTheDriversGuidance(t *testing.T) {
 	var gotParams ipc.RespondParams
 	var responded atomic.Bool

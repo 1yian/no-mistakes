@@ -18,8 +18,6 @@ import (
 	toon "github.com/toon-format/toon-go"
 )
 
-// Exercise the built CLI against a separate SQLite writer, rather than only
-// checking which opener the query selects. No daemon or agent is needed.
 func TestAxiStatusReadOnly(t *testing.T) {
 	t.Parallel()
 	bin := buildNoMistakesBinary(t)

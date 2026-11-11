@@ -10,15 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestReinstallSystemdServiceInheritsProxyFromExistingUnitWhenEnvUnset is the
-// core regression guard for the drift-detection proxy strip (#322 review
-// finding #1). After a proxy-time install the on-disk unit carries the proxy
-// Environment= lines. A later `daemon start` from a shell that does NOT export
-// the proxy variables must not re-detect drift and reinstall: doing so would
-// strip the baked-in proxy and re-break the daemon with "403 Request not
-// allowed". The render used to compute the drift target now inherits the
-// already-baked proxy from the existing unit (mirroring the existing executable
-// inheritance), so the target matches the on-disk unit and no reinstall runs.
 func TestReinstallSystemdServiceInheritsProxyFromExistingUnitWhenEnvUnset(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -82,8 +73,6 @@ func TestReinstallSystemdServiceInheritsProxyFromExistingUnitWhenEnvUnset(t *tes
 	}
 }
 
-// TestReinstallLaunchAgentInheritsProxyFromExistingPlistWhenEnvUnset is the
-// launchd counterpart of the drift no-op guard.
 func TestReinstallLaunchAgentInheritsProxyFromExistingPlistWhenEnvUnset(t *testing.T) {
 	p := paths.WithRoot(filepath.Join(t.TempDir(), "nm-home"))
 	if err := p.EnsureDirs(); err != nil {
@@ -144,11 +133,6 @@ func TestReinstallLaunchAgentInheritsProxyFromExistingPlistWhenEnvUnset(t *testi
 	}
 }
 
-// TestInstallSystemdUserServiceInheritsProxyFromExistingWhenEnvUnset guards the
-// write path: when a reinstall is legitimately triggered (e.g. the binary path
-// changed) from a shell without the proxy exported, the freshly written unit
-// must still carry the proxy inherited from the prior on-disk unit and keep the
-// owner-only 0600 mode, rather than stripping the credentials.
 func TestInstallSystemdUserServiceInheritsProxyFromExistingWhenEnvUnset(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX file modes (0600) are not enforced on Windows; the proxy-bearing service file is only generated on macOS/Linux")

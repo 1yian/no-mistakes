@@ -14,13 +14,8 @@ import (
 
 const commandConfigurationFile = "command-config.ndjson"
 
-// inheritedCommandEnvironmentKeys are the toolchain-path and parallelism
-// variables configured commands inherit from the daemon's environment. Their
-// values are recorded only in the private snapshot, never in logs or prompts.
 var inheritedCommandEnvironmentKeys = []string{"PATH", "GOMAXPROCS", "MAKEFLAGS", "CARGO_BUILD_JOBS", "CMAKE_BUILD_PARALLEL_LEVEL"}
 
-// inheritedCommandEnvironment omits an unset variable rather than recording an
-// empty value it never had.
 func inheritedCommandEnvironment() map[string]string {
 	env := map[string]string{}
 	for _, key := range inheritedCommandEnvironmentKeys {

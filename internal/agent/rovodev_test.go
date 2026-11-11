@@ -419,7 +419,6 @@ func TestRovodevAgent_CloseWithoutServer(t *testing.T) {
 	}
 }
 
-// TestRovodevAgent_FullFlow tests the full session lifecycle using a mock HTTP server.
 func TestRovodevAgent_FullFlow(t *testing.T) {
 	prompt := ExecutionContextPromptSection(t.TempDir())
 	step := 0
@@ -512,7 +511,6 @@ func TestRovodevAgent_FullFlow(t *testing.T) {
 		t.Errorf("expected 2 streamed chunks (part_start + part_delta), got %d: %v", len(chunks), chunks)
 	}
 
-	// Verify structured output parsed
 	var output map[string]any
 	if err := json.Unmarshal(result.Output, &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
@@ -527,7 +525,6 @@ func TestRovodevAgent_FullFlow(t *testing.T) {
 	}
 }
 
-// TestRovodevAgent_NoSchema tests that system prompt is skipped when no schema.
 func TestRovodevAgent_NoSchema(t *testing.T) {
 	calledPaths := make(map[string]bool)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -575,7 +572,6 @@ func TestRovodevAgent_NoSchema(t *testing.T) {
 }
 
 func mustParsePort(url string) int {
-	// url format: http://127.0.0.1:PORT
 	var port int
 	fmt.Sscanf(url, "http://127.0.0.1:%d", &port)
 	return port

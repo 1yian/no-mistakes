@@ -100,8 +100,6 @@ func TestPiProfileLaunchRPCAndNonceReplay(t *testing.T) {
 	if status.Run.PiProfile == nil || *status.Run.PiProfile != resolved {
 		t.Fatalf("IPC lost profile: %+v", status)
 	}
-	// A rerun is a new run. Old callers neither inherit a prior pin nor
-	// reject the raw native flags that remain valid for unpinned runs.
 	var rerun ipc.RerunResult
 	if err := client.Call(ipc.MethodRerun, &ipc.RerunParams{RepoID: repo.ID, Branch: "main"}, &rerun); err != nil {
 		t.Fatal(err)

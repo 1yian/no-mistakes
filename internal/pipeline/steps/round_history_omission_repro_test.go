@@ -7,11 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// Reproduction: a finding the user chose to fix in round 1 is carried into the
-// round 2 gate, and a round 2 `respond --action fix --findings` that omits it
-// re-renders that same finding under user_chose_to_ignore. Later rounds then
-// see the user both fixing and ignoring one finding, and the ignore guidance
-// tells them not to keep code changed to satisfy it.
 func TestRoundHistory_OmittedCarriedFindingIsNotRecordedAsIgnored(t *testing.T) {
 	t.Parallel()
 	sctx, stepID := newRoundHistoryContext(t)

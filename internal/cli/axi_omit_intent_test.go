@@ -68,10 +68,6 @@ func TestConflictingActiveRunOmitIntent(t *testing.T) {
 	}
 }
 
-// olderDaemonFixture serves a fake daemon that predates the omit-intent
-// capability: it answers health and run lookups but does not know the probe
-// method, and it records any launch RPC it receives so a test can prove
-// nothing was started.
 func olderDaemonFixture(t *testing.T, probe func() (interface{}, error), configure ...func(*ipc.Server)) (launched *[]string) {
 	t.Helper()
 	nmHome := makeSocketSafeTempDir(t)
@@ -200,9 +196,6 @@ func TestAxiRunNoPublishIntentRefusesOlderDaemon(t *testing.T) {
 	}
 }
 
-// TestAxiRunPublishingRunReusesOlderDaemon pins the only case that skips the
-// probe: nothing requested omission (flag unset, global default true), so an
-// older daemon can still serve a publishing run.
 func TestAxiRunPublishingRunReusesOlderDaemon(t *testing.T) {
 	olderDaemonFixture(t, nil)
 	writeGlobalConfig(t, "intent:\n  publish_intent: true\n")
@@ -216,10 +209,6 @@ func TestAxiRunPublishingRunReusesOlderDaemon(t *testing.T) {
 	}
 }
 
-// TestRerunRefusesOlderDaemonWithoutFlagOrGlobalDefault pins the rerun path:
-// omission can be inherited from the selected prior run, which only the daemon
-// knows, so the probe runs even when neither the flag nor the global default
-// requests omission. An older daemon refuses the rerun; nothing is published.
 func TestRerunRefusesOlderDaemonWithoutFlagOrGlobalDefault(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

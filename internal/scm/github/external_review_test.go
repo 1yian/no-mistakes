@@ -314,8 +314,6 @@ func reviewThreadCommentsCommand(threadID, cursor string) string {
 	return "gh api --hostname github.com graphql -f query=" + reviewThreadCommentsQuery + " -F id=" + threadID + " -F cursor=" + cursor
 }
 
-// A thread holding more than one page of comments must be read to its end:
-// a CodeRabbit finding past the first 100 comments still blocks completion.
 func TestCodeRabbitRequiredChecksReadEveryThreadCommentPage(t *testing.T) {
 	t.Parallel()
 	human := make([]map[string]any, 100)

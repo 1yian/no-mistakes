@@ -21,12 +21,8 @@ type fallbackAgent struct {
 	configuredModels  []string
 }
 
-// FallbackOption customizes a fallback chain.
 type FallbackOption func(*fallbackAgent)
 
-// WithReviewerQuotaFallback enables an operator-owned reviewer chain. Unlike
-// general fallback, it advances only on recognized quota exhaustion and never
-// retries an exhausted chain or changes the run's primary quota-routing record.
 func WithReviewerQuotaFallback(models ...string) FallbackOption {
 	return func(f *fallbackAgent) {
 		f.quotaSwitch = true
@@ -35,11 +31,6 @@ func WithReviewerQuotaFallback(models ...string) FallbackOption {
 	}
 }
 
-// WithQuotaSwitch activates the quota-aware mid-run switch: a recognised
-// quota-exhaustion error moves the run to the next agent in the chosen order
-// with a fresh session. Quota routing uses this option; dedicated reviewer
-// chains opt in separately. The plain launch fallback never consumes a quota
-// failure, preserving today's behavior when the feature is off.
 func WithQuotaSwitch(start string) FallbackOption {
 	return func(f *fallbackAgent) {
 		f.quotaSwitch = true
@@ -53,9 +44,6 @@ func WithQuotaSwitch(start string) FallbackOption {
 	}
 }
 
-// NewFallback returns an Agent that tries each agent in order when an
-// invocation fails because the current agent process is unavailable, or -
-// with WithQuotaSwitch - when the active agent's subscription quota ran out.
 func NewFallback(agents []Agent, opts ...FallbackOption) Agent {
 	if len(agents) == 0 {
 		return nil
@@ -99,11 +87,6 @@ func (a *fallbackAgent) SupportsSessionProvider(provider string) bool {
 
 func (a *fallbackAgent) ReportsAgentAttempts() bool { return true }
 
-// NeutralizesGateInstructions fails closed over the whole fallback set: the
-// wrapper may invoke any member, so it neutralizes the target repo's project
-// agent-instruction files only if EVERY member does. A single unverified member
-// makes the wrapper report false so the gate is refused rather than risk that
-// member running unneutralized.
 func (a *fallbackAgent) NeutralizesGateInstructions() bool {
 	if len(a.agents) == 0 {
 		return false

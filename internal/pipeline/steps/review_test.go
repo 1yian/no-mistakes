@@ -20,14 +20,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// cleanReviewFindings is a clean structured response. It also carries the
-// Test step's evidence contract, because whole-pipeline tests drive every step
-// with one mock agent and the evidence turn now always runs: the review step
-// ignores the extra fields, and the test step would otherwise reject the
-// payload as an incomplete contract.
-// ReviewedPaths carries the full coverage record of the template repo's one
-// changed file: a clean review certifies only with positive coverage, and a
-// fixture without it now spends the focused coverage completion pass.
 func cleanReviewFindings() Findings {
 	return Findings{
 		Items:          []Finding{},
@@ -49,11 +41,6 @@ func cleanReviewFindings() Findings {
 	}
 }
 
-// fullReviewCoverage is the coverage record a mock reviewer that "read
-// everything" reports: every file changed between baseSHA and dir's working
-// tree, which is the same set ReviewStep computes as reviewable when no
-// ignore_patterns apply. Tests that exercise partial or fabricated coverage
-// spell reviewed_paths out instead.
 func fullReviewCoverage(t *testing.T, dir, baseSHA string) []string {
 	t.Helper()
 	cmd := exec.Command("git", "diff", "--name-only", "--no-renames", baseSHA)
@@ -71,10 +58,6 @@ func fullReviewCoverage(t *testing.T, dir, baseSHA string) []string {
 	return paths
 }
 
-// TestReviewStep_UnrunAnalyzerDoesNotApprove pins issue #703's review half: a
-// review whose analyzer produced no structured output, or one whose risk
-// assessment is absent, must fail the step rather than approve on empty
-// findings.
 func TestReviewStep_UnrunAnalyzerDoesNotApprove(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -141,16 +124,6 @@ func TestReviewStep_UnrunAnalyzerDoesNotApprove(t *testing.T) {
 	}
 }
 
-// TestReviewStep_PartialReviewedPathsDoesNotGrantApproval closes the
-// Greptile P1 that a clean round (zero findings) with an EMPTY or PARTIAL
-// reviewed_paths could still certify the whole head, since NeedsApproval
-// was decided from hasBlockingFindings alone. An OMITTED reviewed_paths is
-// held to the same bar: the field is schema-optional only so an older
-// payload still parses, never a legacy pass that clears the head unread
-// (VISION.md R4). Each parked case first spends the focused coverage
-// completion pass (whose canned answer here repeats the same gap), and the
-// final park names which reviewable files went unverified so the operator
-// can see why a clean review did not approve.
 func TestReviewStep_PartialReviewedPathsDoesNotGrantApproval(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -270,12 +243,6 @@ func TestReviewStep_HangingAgentFailsRunAfterTimeout(t *testing.T) {
 	}
 }
 
-// TestReviewStep_WallClockTimeoutPreservesTheAgentReport pins the other half
-// of the diagnostic contract at the review invocation limit: whatever the adapter
-// managed to report reaches the operator. For a native agent that error is the
-// killed subprocess's exit status and stderr - the only account of what the
-// process was actually doing - and it is what makes a silent 30-minute review
-// timeout diagnosable instead of a dead end.
 func TestReviewStep_WallClockTimeoutPreservesTheAgentReport(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -310,10 +277,6 @@ func TestReviewStep_WallClockTimeoutPreservesTheAgentReport(t *testing.T) {
 	}
 }
 
-// TestReviewStep_EachAgentInvocationGetsItsOwnBudget pins the
-// review_agent_timeout ownership contract across two complete auto-fix cycles.
-// Each fixer and each independent rereviewer must start with a fresh silent
-// budget, not leftover time from the previous turn.
 func TestReviewStep_EachAgentInvocationGetsItsOwnBudget(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -664,8 +627,6 @@ func TestReviewStep_FixMode(t *testing.T) {
 	}
 }
 
-// A deterministic fake finding exercises the ordinary review gate, repair,
-// and rereview flow without claiming that the fake agent can judge tests.
 func TestReviewStep_SourceContentFindingFollowsNormalFixFlow(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -759,14 +720,6 @@ func TestReviewStep_ConcurrentHeadResetCannotGainApproval(t *testing.T) {
 	}
 }
 
-// The review fixer must apply every fix first, then run one focused
-// verification of the changed area, and must NOT re-run the whole repository
-// test/lint suite in the fix round. A forensic audit measured the old
-// open-ended "verify the issues are resolved" instruction driving the fixer to
-// re-run the full test+lint suite ~5x per round (~784s of a 2419s review step);
-// the dedicated Test and Lint steps that run after review are the authoritative
-// gates, though their coverage may be focused when commands are unconfigured.
-// This pins the exact contract wording so a revert is caught.
 func TestReviewStep_FixMode_FocusedVerificationContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -865,8 +818,6 @@ func TestReviewStep_DurableFixAdequacyContract(t *testing.T) {
 	}
 }
 
-// The qualitative corpus is an executable unified-diff contract, so each
-// fixture must remain consumable by the documented git-based evaluation flow.
 func TestReviewStep_IntendedUsageFixturesApply(t *testing.T) {
 	t.Parallel()
 
@@ -907,10 +858,6 @@ func TestReviewStep_IntendedUsageFixturesApply(t *testing.T) {
 	}
 }
 
-// Intended-usage evidence is a finding threshold, not a general "be less
-// noisy" rewrite: a rare but real sequence under intended usage still
-// qualifies, while a hypothetical unused path does not. The completeness
-// obligations stay; this pins the emitted contract, not model interpretation.
 func TestReviewStep_IntendedUsageEvidenceContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -967,10 +914,6 @@ func TestReviewStep_IntendedUsageEvidenceContract(t *testing.T) {
 	}
 }
 
-// Counterexample construction is a general review principle for any new or
-// changed logic, not a bug-fix-only reconstruction. Silently wrong values,
-// labels, and sets are named as risks. The principle stays short and general:
-// it must not become a checklist of incident-specific probes.
 func TestReviewStep_CounterexampleConstructionIsUnconditional(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1018,11 +961,6 @@ func TestReviewStep_CounterexampleConstructionIsUnconditional(t *testing.T) {
 	}
 }
 
-// Authorization and privacy are one conditional obligation in the existing
-// review pass. The emitted prompt must require concrete cross-boundary evidence,
-// preserve repository ownership of access policy, accept equivalent controls
-// and intentionally public data, and route material policy ambiguity through the
-// existing ask-user action rather than inventing a rule.
 func TestReviewStep_AuthorizationPrivacyTracingContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1066,14 +1004,6 @@ func TestReviewStep_AuthorizationPrivacyTracingContract(t *testing.T) {
 	}
 }
 
-// The rereview that certifies a fix round examines code the pipeline itself
-// authored, moments earlier, to the previous review turn's prescription. The
-// prompt must reframe that code as unreviewed new work under the same
-// adversarial standard as the author's changes - prior findings and fix
-// summaries are claims, and a same-round test is part of the claim, not
-// independent proof. This pins the contract wording; the initial review must
-// stay unchanged. Class regression for a pipeline-authored defect (code plus
-// blessing test written by one fix round) certified with zero findings.
 func TestReviewStep_RereviewTreatsFixRoundsAsPipelineAuthoredCode(t *testing.T) {
 	t.Parallel()
 	provenanceContract := []string{
@@ -1351,9 +1281,6 @@ func TestReviewStep_RoundHistorySanitizesAgentInput(t *testing.T) {
 	}
 }
 
-// An explicit --intent (Source=="agent") makes the review prompt carry the
-// intent-conformance obligation and the authoritative-criteria framing; an
-// inferred intent carries neither, leaving the prompt unchanged.
 func TestReviewStep_ConformanceObligationTracksIntentProvenance(t *testing.T) {
 	t.Parallel()
 
@@ -1419,11 +1346,6 @@ func TestReviewStep_ConformanceObligationTracksIntentProvenance(t *testing.T) {
 	}
 }
 
-// A post-fix rereview that detects a contradiction with the authoritative
-// acceptance criteria (here: the fixer resolved a finding by deleting a
-// required behavior) surfaces it as an ask-user finding, so the run parks for
-// a human instead of silently completing. This is the forensic's removal-delete
-// regression, caught by the conformance obligation.
 func TestReviewStep_RereviewFlagsIntentContradictionAsAskUser(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1484,9 +1406,6 @@ func TestReviewStep_RereviewFlagsIntentContradictionAsAskUser(t *testing.T) {
 	}
 }
 
-// reviewPromptFor runs one clean review turn against a fresh copy of the
-// template repo with the given path instructions and returns the review prompt
-// the agent received.
 func reviewPromptFor(t *testing.T, rules []config.PathInstruction) string {
 	t.Helper()
 	return reviewPromptForReview(t, config.Review{PathInstructions: rules})
@@ -1515,10 +1434,6 @@ func reviewPromptForReview(t *testing.T, review config.Review) string {
 	return strings.ReplaceAll(ag.calls[0].Prompt, dir, "<WORKDIR>")
 }
 
-// A repository with no review.path_instructions must get the review prompt it
-// got before the setting existed. The matched-rule prompt is asserted to be the
-// unconfigured prompt plus the appended section and nothing else, which proves
-// the feature only ever appends.
 func TestReviewStep_PathInstructionsLeaveUnconfiguredPromptUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -1547,9 +1462,6 @@ func TestReviewStep_PathInstructionsLeaveUnconfiguredPromptUnchanged(t *testing.
 	}
 }
 
-// Machine-local rules from the operator's global config render as their own
-// labeled sections ahead of the repository's trusted rules, and only append:
-// the prompt is the unconfigured one plus the three sections and nothing else.
 func TestReviewStep_OperatorPathInstructionsRenderAsLabeledSectionsBeforeTrusted(t *testing.T) {
 	t.Parallel()
 
@@ -1571,8 +1483,6 @@ func TestReviewStep_OperatorPathInstructionsRenderAsLabeledSectionsBeforeTrusted
 	}
 }
 
-// Only the blocks whose glob matches a changed path reach the reviewer, in
-// config order, each labelled with the scope it was selected for.
 func TestReviewStep_AppendsMatchedPathInstructionsOnly(t *testing.T) {
 	t.Parallel()
 
@@ -1604,9 +1514,6 @@ func TestReviewStep_AppendsMatchedPathInstructionsOnly(t *testing.T) {
 	}
 }
 
-// ignore_patterns comes from the pushed branch, so it must not decide which
-// trusted rules steer the review. A contributor who ignores the very path a
-// maintainer's rule covers still gets that rule.
 func TestReviewStep_PushedIgnorePatternsCannotSuppressPathInstructions(t *testing.T) {
 	t.Parallel()
 
@@ -1665,14 +1572,6 @@ func mustLatestRoundID(t *testing.T, sctx *pipeline.StepContext) string {
 	return rounds[len(rounds)-1].ID
 }
 
-// TestReviewStep_PromptClassifiesFindingsByRemedyScope pins the reviewer's
-// remedy-scope classification rule as it is actually rendered to the model. A
-// finding whose smallest honest remedy would extend the change - new durable
-// state, a schema change, new background/retry/persistence machinery, a new
-// subsystem - must be classified ask-user even when the defect itself reads as
-// mechanical, and the description must name the remedy as the thing needing
-// authorization. This routes expanding remedies to the existing gate instead of
-// letting them be built silently inside an auto-fix round.
 func TestReviewStep_PromptClassifiesFindingsByRemedyScope(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1707,12 +1606,6 @@ func TestReviewStep_PromptClassifiesFindingsByRemedyScope(t *testing.T) {
 	}
 }
 
-// TestReviewStep_FixPromptPrefersSimplificationOverMachinery pins the fixer's
-// depth rule as rendered: closing sibling sites with the same small edit or one
-// shared boundary is the fix, and when depth is warranted reach it by
-// simplifying an architectural reason rather than bolting on machinery that
-// manages the symptoms. The preceding diagnosis rule stays - depth is not
-// forbidden, symptom machinery is.
 func TestReviewStep_FixPromptPrefersSimplificationOverMachinery(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1756,13 +1649,6 @@ func TestReviewStep_FixPromptPrefersSimplificationOverMachinery(t *testing.T) {
 	}
 }
 
-// TestReviewStep_RereviewOffersRevertExitFromPriorRoundMachinery pins the
-// rereview's exit ramp from the fix-round ratchet: defects located in code a
-// prior fix round introduced, where that code exceeds what the original finding
-// required, become one ask-user finding recommending a revert to the minimal
-// fix instead of another round of repairs layered on that code. The obligation
-// is emitted for both provenance framings - this run's own fix rounds, and a
-// previous run's uncertified fixer commits - because both are prior-round code.
 func TestReviewStep_RereviewOffersRevertExitFromPriorRoundMachinery(t *testing.T) {
 	t.Parallel()
 	const revertExit = `report a single "ask-user" finding recommending that the prior round be reverted to the minimal fix, instead of filing further repairs on that machinery`
@@ -1861,12 +1747,6 @@ func TestReviewStep_RereviewOffersRevertExitFromPriorRoundMachinery(t *testing.T
 	})
 }
 
-// The Simplification section is a dedicated pass that asks whether the intent
-// requires each component the change introduced, distinct from the defect pass
-// and from the refactor-only "simplification opportunities" meaning that stays
-// in place. An unrequired component is a warning whose remedy is removal and
-// whose action stays ask-user: whether extra surface is wanted is the author's
-// call. This pins the emitted contract, not model interpretation.
 func TestReviewStep_SimplificationSectionContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1957,8 +1837,6 @@ func TestReviewStep_SimplificationSectionContract(t *testing.T) {
 	}
 }
 
-// The qualitative corpus is an executable unified-diff contract, so each
-// fixture must remain consumable by the documented git-based evaluation flow.
 func TestReviewStep_SimplificationFixturesApply(t *testing.T) {
 	t.Parallel()
 
@@ -1998,13 +1876,6 @@ func TestReviewStep_SimplificationFixturesApply(t *testing.T) {
 	}
 }
 
-// TestReviewStep_FixPromptPrefersRemovalOfUnrequiredPaths pins the fixer's
-// removal rule: a finding resolvable by removing a code path the intent does
-// not strictly require is fixed by removing that path, not by hardening it.
-// The anti-revert guard stays, but it now protects only code the intent
-// requires, so "the author wrote it on purpose" no longer turns every
-// unrequired branch into a fix-forward candidate. Genuine doubt still leaves
-// the code alone and reports the finding unresolved.
 func TestReviewStep_FixPromptPrefersRemovalOfUnrequiredPaths(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2059,17 +1930,6 @@ func TestReviewStep_FixPromptPrefersRemovalOfUnrequiredPaths(t *testing.T) {
 	}
 }
 
-// TestRereviewProvenanceIsNotContradictedByThePreviousRunsRounds covers the
-// two prompt blocks that both render on an ordinary run: a branch with an
-// earlier run has its review rounds bound once at step entry, before the fix
-// loop, so the binding survives every rereview - and a rereview also carries
-// the fix-round provenance clause.
-//
-// The superseded-rounds block used to end by asserting that the code under
-// review is the author's own and should get "the ordinary standard", which is
-// false on exactly those rereviews and directly weakens the anti-ratchet
-// framing the provenance clause exists to carry. Only fixRoundProvenanceClause
-// has the state to direct the standard for the current head.
 func TestRereviewProvenanceIsNotContradictedByThePreviousRunsRounds(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -2129,19 +1989,6 @@ func TestRereviewProvenanceIsNotContradictedByThePreviousRunsRounds(t *testing.T
 	}
 }
 
-// TestSupersededRoundsDoNotClaimTheCommitsAreTheAuthors covers the reachable
-// case the selector's own breadth creates. The previous run on this branch took
-// a pipeline fix round and COMPLETED, which certifies its range and removes it
-// from uncertified_pipeline_ranges - so this run's UncertifiedSourceRunID is
-// empty, BindPreviousRunReviewRounds does not skip it, and the fixer's commits
-// sit inside this ordinary review's own base..head scope.
-//
-// This review is neither a fix round nor carries an uncertified range, so
-// fixRoundProvenanceClause contributes nothing and the superseded-rounds block
-// is the ONLY provenance statement in the prompt. Asserting the commits are the
-// author's own therefore told the reviewer to apply the ordinary author
-// standard to pipeline-authored code - the exact inversion of the anti-ratchet
-// rule. The section must not characterise their authorship in either direction.
 func TestSupersededRoundsDoNotClaimTheCommitsAreTheAuthors(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

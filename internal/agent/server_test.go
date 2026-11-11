@@ -15,10 +15,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 )
 
-// TestStartServerWithPort_DetectsEarlyExit verifies that when the spawned
-// server exits before becoming healthy (e.g. `acli` not installed, bad
-// flags, or port bind failure), startup fails fast instead of waiting the
-// full health-check deadline.
 func TestStartServerWithPort_DetectsEarlyExit(t *testing.T) {
 	bin, err := exec.LookPath("true")
 	if err != nil {
@@ -79,18 +75,12 @@ func TestStartServerWithPortAppliesForgeEnvironment(t *testing.T) {
 	}
 }
 
-// TestDefaultHealthTimeout pins the cold-start budget for a freshly spawned
-// managed server. Bumped to 60s to absorb opencode boots of 15s+ when the
-// host is under load.
 func TestDefaultHealthTimeout(t *testing.T) {
 	if defaultHealthTimeout != 60*time.Second {
 		t.Errorf("defaultHealthTimeout = %v, want 60s", defaultHealthTimeout)
 	}
 }
 
-// TestWaitForHealth_TimesOut verifies that when the process stays alive but
-// never answers its health endpoint, waitForHealth gives up after the
-// configured healthTimeout and reports the duration it waited.
 func TestWaitForHealth_TimesOut(t *testing.T) {
 	bin, err := exec.LookPath("sleep")
 	if err != nil {
@@ -212,9 +202,6 @@ func TestSetManagedServerOutput_NilResetsToDefault(t *testing.T) {
 	}
 }
 
-// TestStartServerWithPort_RemovesPIDFileOnEarlyExit proves that when a
-// server exits before passing its health check, shutdown() still cleans up
-// the tracking file so recovery won't later try to reap a non-existent PID.
 func TestStartServerWithPort_RemovesPIDFileOnEarlyExit(t *testing.T) {
 	bin, err := exec.LookPath("true")
 	if err != nil {
@@ -244,9 +231,6 @@ func TestStartServerWithPort_RemovesPIDFileOnEarlyExit(t *testing.T) {
 	}
 }
 
-// TestManagedServerShutdown_RemovesPIDFile covers the graceful-shutdown
-// happy path: a running subprocess whose PID file gets cleaned once the
-// process exits.
 func TestManagedServerShutdown_RemovesPIDFile(t *testing.T) {
 	sh, err := exec.LookPath("sh")
 	if err != nil {

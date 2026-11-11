@@ -21,18 +21,10 @@ var piOutputExtension string
 
 const piOutputTool = "no_mistakes_output"
 
-// piLifecycleOutputPath is the adapter-control lifecycle phase that names, in
-// the step log, which structured-output path an invocation took.
 const piLifecycleOutputPath = "structured_output"
 
-// Pi's documented constrainedSampling strict=require contract was introduced
-// in 0.82.0; earlier releases silently ignore it, so a successful tool call
-// there would not prove that generation was schema-constrained.
 var piStrictOutputMinVersion = [3]int{0, 82, 0}
 
-// piStrictUnsupported is the error pi-ai raises before any request is sent
-// when the selected provider/model (or this schema) cannot take a
-// strict=require JSON-schema tool.
 var piStrictUnsupported = fmt.Sprintf("Tool %q requires JSON-schema constrained sampling", piOutputTool)
 
 type piOutputSupport struct {
@@ -42,9 +34,6 @@ type piOutputSupport struct {
 	unsupported bool
 }
 
-// runStructured runs one invocation on the strict output-tool path when Pi and
-// the provider support it, and otherwise on the prompt-inlined schema path
-// whose final text is validated against the same schema.
 func (a *piAgent) runStructured(ctx context.Context, opts RunOpts) (*Result, error) {
 	if len(opts.JSONSchema) == 0 {
 		return a.runOnce(ctx, opts, false)
@@ -70,9 +59,6 @@ func (a *piAgent) runStructured(ctx context.Context, opts RunOpts) (*Result, err
 	return a.runOnce(ctx, opts, false)
 }
 
-// structuredOutputPath reports whether the strict output tool is available,
-// or why not. A successful version probe and a provider refusal are cached for
-// the agent's lifetime; a failed probe is retried on the next invocation.
 func (a *piAgent) structuredOutputPath(ctx context.Context, opts RunOpts) (bool, string) {
 	a.output.mu.Lock()
 	defer a.output.mu.Unlock()
@@ -104,11 +90,6 @@ func (a *piAgent) structuredOutputPath(ctx context.Context, opts RunOpts) (bool,
 	return true, ""
 }
 
-// piToolRestrictionArg returns the configured flag that replaces Pi's tool
-// selection with an allowlist, or "". Pi applies that allowlist to extension
-// tools as well and an extension cannot widen it, so under --no-tools or
-// --tools the model never sees the output tool and every strict turn would end
-// in text and be rejected.
 func piToolRestrictionArg(args []string) string {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -122,8 +103,6 @@ func piToolRestrictionArg(args []string) string {
 	return ""
 }
 
-// piVersionSupportsStrictOutput compares a semantic version with the strict
-// output minimum, ordering a prerelease before its own release.
 func piVersionSupportsStrictOutput(version string) bool {
 	version, _, _ = strings.Cut(strings.TrimPrefix(version, "v"), "+")
 	core, _, prerelease := strings.Cut(version, "-")
@@ -143,13 +122,6 @@ func piVersionSupportsStrictOutput(version string) bool {
 	return !prerelease
 }
 
-// piStrictToolKeywords are the only JSON Schema keywords the strict tool
-// declaration carries: the ones the Review schema uses, which are the ones
-// measured against a real provider. A provider refuses a strict tool over a
-// keyword it does not support as a plain request error, which the prompt-path
-// fallback cannot recognise, so every other keyword (maxLength in the
-// commit-summary schemas) stays out of the declaration and is enforced on the
-// returned output instead.
 var piStrictToolKeywords = map[string]bool{
 	"type":        true,
 	"properties":  true,

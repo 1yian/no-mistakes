@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestExecutor_QuotaSwitchAmendsTheRunsRecord pins the executor's side of the
-// quota-aware mid-run switch: a quota_switch lifecycle event is recorded on
-// the run's quota-routing record (from, to, reason, in order), the narrative
-// still reaches the step log, and the switch never touches activity.
 func TestExecutor_QuotaSwitchAmendsTheRunsRecord(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()
@@ -100,9 +96,6 @@ func TestExecutor_QuotaSwitchAmendsTheRunsRecord(t *testing.T) {
 	}
 }
 
-// TestExecutor_QuotaSwitchWithoutARecordIsOnlyLogged pins the pre-feature and
-// lost-write shape: a switch event on a run with no stored record must not
-// create one and must not fail the run.
 func TestExecutor_QuotaSwitchWithoutARecordIsOnlyLogged(t *testing.T) {
 	database, p, run, repo := setupTest(t)
 	workDir := t.TempDir()

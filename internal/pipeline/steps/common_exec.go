@@ -145,9 +145,6 @@ func missingFromCustomPath(env []string, name string) string {
 	return missing
 }
 
-// stepCmd creates an exec.Cmd that inherits the StepContext's extra Env, if any.
-// When sctx.Env overrides PATH, the binary is resolved from the overridden PATH
-// so that tests can inject fake binaries without modifying the process environment.
 func stepCmd(sctx *pipeline.StepContext, name string, args ...string) *exec.Cmd {
 	return stepCmdContext(sctx, sctx.Ctx, name, args...)
 }
@@ -190,15 +187,11 @@ func configuredCommandEnvironment(sctx *pipeline.StepContext) []string {
 	return git.SubprocessEnvironment(pipelineCommandEnvironment(sctx))
 }
 
-// stepGitRun runs git with the StepContext's environment plus the standard
-// non-interactive git overrides. It is like git.Run but respects sctx.Env so
-// step-scoped PATH and credential environment stay in effect.
 func stepGitRun(sctx *pipeline.StepContext, args ...string) (string, error) {
 	out, err := stepGitRunRaw(sctx, args...)
 	return strings.TrimSpace(out), err
 }
 
-// stepGitRunRaw preserves NUL-delimited paths and porcelain status columns.
 func stepGitRunRaw(sctx *pipeline.StepContext, args ...string) (string, error) {
 	cmd := stepCmd(sctx, "git", args...)
 	cmd.Env = git.NonInteractiveEnvFrom(git.ApplyCommitIdentity(sctx.Ctx, cmd.Env), sctx.WorkDir)
@@ -213,16 +206,9 @@ func stepGitRunRaw(sctx *pipeline.StepContext, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// stepGitRunTree is stepGitRun for a read that only its context deadline can
-// end, such as ls-remote against a peer that never answers. cmd.Output returns
-// after every process holding its pipes has exited, and cancelling the context
-// kills git alone: a transport helper it started (ssh, git-remote-https, or the
-// real git.exe behind the cmd\git.exe launcher on Windows) keeps the pipes open
-// and the read hangs. shellenv ends the whole process tree on cancellation.
 func stepGitRunTree(sctx *pipeline.StepContext, args ...string) (string, error) {
 	cmd := stepCmd(sctx, "git", args...)
 	cmd.Env = git.NonInteractiveEnvFrom(git.ApplyCommitIdentity(sctx.Ctx, cmd.Env), sctx.WorkDir)
-	// OutputShellCommand never fills ExitError.Stderr, so capture it here.
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	shellenv.ConfigureShellCommand(cmd)
@@ -233,8 +219,6 @@ func stepGitRunTree(sctx *pipeline.StepContext, args ...string) (string, error) 
 	return strings.TrimSpace(string(out)), nil
 }
 
-// stepGitRunEnv is stepGitRun with extra environment variables appended after
-// the step environment, for commands that read identity from GIT_* variables.
 func stepGitRunEnv(sctx *pipeline.StepContext, extraEnv []string, args ...string) (string, error) {
 	cmd := stepCmd(sctx, "git", args...)
 	cmd.Env = append(git.NonInteractiveEnvFrom(git.ApplyCommitIdentity(sctx.Ctx, cmd.Env), sctx.WorkDir), extraEnv...)
@@ -267,10 +251,6 @@ func stepGitPush(sctx *pipeline.StepContext, remote, ref, expectedSHA string, fo
 	return err
 }
 
-// stepGitPushCommit pushes an explicit commit to a remote ref with the
-// StepContext's environment, mirroring git.PushCommit's argument assembly. The
-// explicit source SHA (rather than HEAD) is what lets a caller publish exactly
-// the commit it verified, even if the worktree moves underneath it.
 func stepGitPushCommit(sctx *pipeline.StepContext, remote, commitSHA, ref, expectedSHA string, forceWithLease bool) error {
 	args := []string{"push", remote}
 	if forceWithLease {
@@ -285,8 +265,6 @@ func stepGitPushCommit(sctx *pipeline.StepContext, remote, commitSHA, ref, expec
 	return err
 }
 
-// stepCLIAvailable checks whether the provider CLI binary is available,
-// respecting any custom PATH in sctx.Env.
 func stepCLIAvailable(sctx *pipeline.StepContext, provider scm.Provider) bool {
 	return stepExecutableAvailable(sctx, provider.CLIName())
 }
@@ -322,8 +300,6 @@ func hasExecutablePathSeparator(name string) bool {
 	return strings.ContainsRune(name, filepath.Separator) || (filepath.Separator != '/' && strings.ContainsRune(name, '/'))
 }
 
-// stepAuthConfigured checks whether the provider CLI is authenticated,
-// using sctx.Env to resolve the binary and pass environment variables.
 func stepAuthConfigured(sctx *pipeline.StepContext, provider scm.Provider) bool {
 	args := provider.AuthCheckCommand()
 	if len(args) == 0 {
@@ -333,8 +309,6 @@ func stepAuthConfigured(sctx *pipeline.StepContext, provider scm.Provider) bool 
 	return cmd.Run() == nil
 }
 
-// runShellCommand executes a shell command and returns stdout+stderr, exit code, and error.
-// A non-zero exit code is not treated as an error - only exec failures return error.
 func runShellCommand(ctx context.Context, dir, cmdStr string) (string, int, error) {
 	return runShellCommandWithEnv(ctx, dir, nil, cmdStr)
 }

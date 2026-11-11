@@ -12,14 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestReviewSchemaRetryExhaustionJourney drives the real daemon, gate, and
-// Pi adapter through a reviewer whose final JSON keeps failing the review
-// schema (issue #1280). Each retry's prompt quotes the previous rejection, so
-// the scenario keys every later attempt on that quoted error. The persisted
-// Review step error must attribute distinct-field failures, must not claim
-// distinct fields for a repeated single field or for non-field failures, must
-// name the final rejection only once, and a reviewer that recovers on a retry
-// must still complete Review.
 func TestReviewSchemaRetryExhaustionJourney(t *testing.T) {
 	const valid = `"findings":[],"risk_level":"low","risk_rationale":"r","risk_scope":"source-or-external","reviewed_paths":["%s"]`
 	scenario := filepath.Join(t.TempDir(), "review-schema-retry.yaml")

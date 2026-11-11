@@ -1,4 +1,3 @@
-// Package gitlab implements scm.Host backed by the glab CLI.
 package gitlab
 
 import (
@@ -19,10 +18,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// CmdFactory builds an exec.Cmd in the caller's workdir with the caller's env.
 type CmdFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
-// Host talks to GitLab through the glab CLI.
 type Host struct {
 	cmd                 CmdFactory
 	cliAvailable        func() bool
@@ -31,20 +28,10 @@ type Host struct {
 	draft               bool   // open created MRs as drafts (glab mr create --draft)
 	requiredReviews     []string
 	requiredReviewBotID string
-	// formProbeOnce records whether this glab has api --form. See uploads.go.
-	formProbeOnce sync.Once
-	formProbeOK   bool
+	formProbeOnce       sync.Once
+	formProbeOK         bool
 }
 
-// New builds a Host. cliAvailable reports whether the glab binary is
-// resolvable on the caller's PATH (possibly overridden by env). host is the
-// repo's GitLab hostname; when set the availability check is scoped to it via
-// --hostname so a stale credential for an unrelated configured glab host cannot
-// make this repo look unauthenticated. projectPath is the repo's "group/project"
-// path (subgroups allowed); when set, pipeline-job reads go through `glab api`
-// (REST), which is branch-independent and works in the daemon's detached-HEAD
-// worktree, where `glab ci get` refuses to run without a current branch. Both
-// are optional; empty reproduces the legacy unscoped behavior.
 func New(cmd CmdFactory, cliAvailable func() bool, host, projectPath string) *Host {
 	return &Host{
 		cmd:          cmd,
@@ -54,8 +41,6 @@ func New(cmd CmdFactory, cliAvailable func() bool, host, projectPath string) *Ho
 	}
 }
 
-// NewWithDraft builds a Host that opens created MRs as drafts when draft is
-// true (glab mr create --draft). See New for the other parameters.
 func NewWithDraft(cmd CmdFactory, cliAvailable func() bool, host, projectPath string, draft bool) *Host {
 	h := New(cmd, cliAvailable, host, projectPath)
 	h.draft = draft
@@ -68,12 +53,6 @@ func (h *Host) WithRequiredReviews(reviewers []string, botID string) *Host {
 	return h
 }
 
-// ProjectPath extracts the "group/project" path (no host, no trailing .git)
-// from a GitLab remote URL. GitLab projects can live under nested subgroups, so
-// the full path - not just the last two segments - is returned. It handles
-// HTTPS/ssh:// URLs and scp-style SSH (git@host:group/project.git). Returns ""
-// when no path can be determined; callers treat that as "unknown" and fall back
-// to branch-dependent porcelain.
 func ProjectPath(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -96,10 +75,6 @@ func ProjectPath(raw string) string {
 	return strings.TrimSuffix(path, ".git")
 }
 
-// isWindowsDrivePath reports whether raw begins with a Windows drive specifier
-// like "C:\..." or "C:/...". Such a path's drive-letter colon must not be
-// mistaken for the host:path separator of scp-style SSH syntax, which would
-// otherwise turn a local filesystem path into a spurious "group/project".
 func isWindowsDrivePath(raw string) bool {
 	if len(raw) < 2 || raw[1] != ':' {
 		return false
@@ -111,10 +86,6 @@ func isWindowsDrivePath(raw string) bool {
 	return len(raw) == 2 || raw[2] == '\\' || raw[2] == '/'
 }
 
-// pipelineJobsArgs returns the glab invocation that lists a pipeline's jobs.
-// With a known project path it uses `glab api` (branch-independent, works in a
-// detached-HEAD worktree); otherwise it falls back to `glab ci get`, which
-// needs a current branch.
 func (h *Host) pipelineJobsArgs(pipelineID int) []string {
 	if h.projectPath != "" {
 		// --paginate walks every page; a pipeline with more jobs than fit on one
@@ -126,10 +97,6 @@ func (h *Host) pipelineJobsArgs(pipelineID int) []string {
 	return []string{"ci", "get", "--pipeline-id", fmt.Sprintf("%d", pipelineID), "--output", "json", "--with-job-details"}
 }
 
-// encodeProjectPath renders a "group/subgroup/project" path as the single
-// URL-encoded "group%2Fsubgroup%2Fproject" path parameter GitLab's REST API
-// expects. Each segment is escaped defensively and rejoined with %2F so a
-// reserved character inside a segment is encoded too, not just the separators.
 func encodeProjectPath(projectPath string) string {
 	segments := strings.Split(projectPath, "/")
 	for i, seg := range segments {
@@ -138,32 +105,16 @@ func encodeProjectPath(projectPath string) string {
 	return strings.Join(segments, "%2F")
 }
 
-// pipelineRouteArgs returns the glab invocation for a paginated pipeline REST
-// route ("trigger_jobs", "bridges"). It is only used with a known project path;
-// callers fall back to the job-only read when the path is unknown, because the
-// route cannot address the project any other way.
 func (h *Host) pipelineRouteArgs(pipelineID int, route string) []string {
 	return []string{"api", "--paginate", fmt.Sprintf("projects/%s/pipelines/%d/%s", encodeProjectPath(h.projectPath), pipelineID, route)}
 }
 
-// mergeRequestStatusChecksArgs returns the glab invocation that lists a merge
-// request's external status checks. Like the pipeline routes it needs a known
-// project path.
 func (h *Host) mergeRequestStatusChecksArgs(mrIID string) []string {
 	return []string{"api", "--paginate", fmt.Sprintf("projects/%s/merge_requests/%s/status_checks", encodeProjectPath(h.projectPath), url.PathEscape(mrIID))}
 }
 
 func (h *Host) Provider() scm.Provider { return scm.ProviderGitLab }
 
-// Capabilities declares review comments as well: the discussions API exposes
-// the unresolved notes a review bot leaves, and GetReviewComments reads them.
-// The check-identity half of the review-bot integration stays GitHub-only -
-// GitLab job objects name no publishing application - so a bot is identified
-// here by the login it comments as, never by a check.
-//
-// ClosingReferences is true because GitLab closes the issues named by a
-// closing keyword in the merge request description when it merges into the
-// default branch, which is what an explicit --closes reference relies on.
 func (h *Host) Capabilities() scm.Capabilities {
 	return scm.Capabilities{
 		MergeableState:    true,
@@ -193,10 +144,6 @@ func (h *Host) Available(ctx context.Context) error {
 	return nil
 }
 
-// parseMergeRequestURL accepts a separate web host only when the operator's
-// global glab configuration binds it to this remote's host. --global excludes
-// repository-local configuration; the MR response itself is never authority for
-// an alternate host. Use the command factory so forge-profile environments apply.
 func (h *Host) parseMergeRequestURL(ctx context.Context, raw string) (int, error) {
 	number, err := parseMergeRequestURL(raw, h.host, h.projectPath)
 	if err == nil || h.host == "" {
@@ -259,10 +206,6 @@ func parseMergeRequestURL(raw, expectedHost, expectedProject string) (int, error
 	return number, nil
 }
 
-// mergeRequestURLPath splits a parsed GitLab merge request URL into its project
-// path segments and IID. It owns the "<project>/-/merge_requests/<number>"
-// shape so the validated merge request read and the project-path extraction
-// cannot drift apart.
 func mergeRequestURLPath(parsed *url.URL) ([]string, int, bool) {
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	if len(segments) < 5 || segments[len(segments)-3] != "-" || segments[len(segments)-2] != "merge_requests" {
@@ -276,44 +219,25 @@ func mergeRequestURLPath(parsed *url.URL) ([]string, int, bool) {
 }
 
 type mrPayload struct {
-	Description         *string `json:"description"`
-	IID                 int     `json:"iid"`
-	Title               string  `json:"title"`
-	WebURL              string  `json:"web_url"`
-	URL                 string  `json:"url"`
-	State               string  `json:"state"`
-	HasConflicts        bool    `json:"has_conflicts"`
-	DetailedMergeStatus string  `json:"detailed_merge_status"`
-	MergeStatus         string  `json:"merge_status"`
-	TargetBranch        string  `json:"target_branch"`
-	// SHA is the head commit of the merge request's source branch.
-	SHA string `json:"sha"`
-	// DiffRefs names the head commit of the merge request's latest diff
-	// version. GitLab documents it as populating asynchronously after a push,
-	// so it is read only as a fallback for a merge request that does not report
-	// SHA yet. The fallback is unit-tested only: the GitLab instances exercised
-	// while adding it always reported sha, even for a merge request read 174 ms
-	// after creation.
-	DiffRefs mrDiffRefs `json:"diff_refs"`
-	// HeadPipeline is the raw "head_pipeline" value: the pipeline GitLab
-	// currently considers the merge request's own, or JSON null when the merge
-	// request has no pipeline. It stays raw so a payload that never names the
-	// field can be told apart from an explicit null: only the null is a
-	// readable "no checks" answer. The pipeline can also lag a new source
-	// commit - GitLab only replaces it once a pipeline matching the newer
-	// revision exists - so a reader that trusts it without checking the commit
-	// it ran at can grade an old pipeline against a newer head.
-	HeadPipeline json.RawMessage `json:"head_pipeline"`
+	Description         *string         `json:"description"`
+	IID                 int             `json:"iid"`
+	Title               string          `json:"title"`
+	WebURL              string          `json:"web_url"`
+	URL                 string          `json:"url"`
+	State               string          `json:"state"`
+	HasConflicts        bool            `json:"has_conflicts"`
+	DetailedMergeStatus string          `json:"detailed_merge_status"`
+	MergeStatus         string          `json:"merge_status"`
+	TargetBranch        string          `json:"target_branch"`
+	SHA                 string          `json:"sha"`
+	DiffRefs            mrDiffRefs      `json:"diff_refs"`
+	HeadPipeline        json.RawMessage `json:"head_pipeline"`
 }
 
 type mrDiffRefs struct {
 	HeadSHA string `json:"head_sha"`
 }
 
-// gitlabHeadPipeline is the subset of the pipeline entity that
-// `glab mr view --output json` exposes as head_pipeline: the commit the
-// pipeline ran at, the ref it ran for, and the aggregate result the check
-// reader reports next to the pipeline's jobs.
 type gitlabHeadPipeline struct {
 	ID         int    `json:"id"`
 	SHA        string `json:"sha"`
@@ -324,10 +248,6 @@ type gitlabHeadPipeline struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
-// completedAt is the pipeline's own completion time, used for the same re-run
-// freshness detection job completions feed. updated_at is the fallback: a
-// pipeline is re-created for a new head rather than re-run in place, so the
-// update time moves whenever its reported result could have changed.
 func (p gitlabHeadPipeline) completedAt() time.Time {
 	for _, raw := range []string{p.FinishedAt, p.UpdatedAt} {
 		if strings.TrimSpace(raw) == "" {
@@ -340,18 +260,10 @@ func (p gitlabHeadPipeline) completedAt() time.Time {
 	return time.Time{}
 }
 
-// awaitingManualJob reports whether the pipeline's own status says a person
-// must act before it can finish: GitLab reports `manual` for a pipeline stopped
-// at a blocking manual job. It is the aggregate form of the job-level rule, for
-// when no job or trigger-job row carries the wait itself.
 func (p gitlabHeadPipeline) awaitingManualJob() bool {
 	return strings.EqualFold(strings.TrimSpace(p.Status), "manual")
 }
 
-// sourceRevision is the source-branch commit the merge request currently points
-// at, or "" when neither of the fields that carry it was reported. Both fields
-// are read, never assumed: a check read that cannot name the revision it is
-// looking at cannot bind its result to one.
 func (p mrPayload) sourceRevision() string {
 	if sha := strings.TrimSpace(p.SHA); sha != "" {
 		return sha
@@ -359,14 +271,6 @@ func (p mrPayload) sourceRevision() string {
 	return strings.TrimSpace(p.DiffRefs.HeadSHA)
 }
 
-// headPipeline reads the merge request's "head_pipeline" field. GitLab (through
-// glab) sends `"head_pipeline": null` when the merge request has no pipeline:
-// that returns nil with no error, and callers read it as no pipeline. Every
-// other value without a positive numeric ID is an error - a payload that never
-// names the field, a value that is not an object, or an ID that is missing,
-// null, or not positive. Reading those as no pipeline would make an unexpected
-// response look like an empty pipeline, and a trusted `no_ci: true` would then
-// report a false no-CI result.
 func (p mrPayload) headPipeline() (*gitlabHeadPipeline, error) {
 	if len(p.HeadPipeline) == 0 {
 		return nil, errors.New(`response has no "head_pipeline" field`)
@@ -547,8 +451,6 @@ func (h *Host) SetPRBaseBranch(ctx context.Context, pr *scm.PR, baseBranch strin
 	return nil
 }
 
-// isDraftTitle reports whether an MR title carries a marker GitLab treats as
-// draft: "Draft:", "[Draft]", or "(Draft)", all case-insensitive.
 func isDraftTitle(title string) bool {
 	t := strings.ToLower(strings.TrimSpace(title))
 	return strings.HasPrefix(t, "draft:") || strings.HasPrefix(t, "[draft]") || strings.HasPrefix(t, "(draft)")
@@ -594,15 +496,10 @@ func (h *Host) GetMergeableState(ctx context.Context, pr *scm.PR) (scm.Mergeable
 	}
 }
 
-// viewMR reads the live merge request. Every caller that has to reason about
-// the source revision a pipeline belongs to goes through it, so the identity
-// fields are parsed in one place.
 func (h *Host) viewMR(ctx context.Context, id string) (mrPayload, error) {
 	return h.viewMRInRepository(ctx, id, "")
 }
 
-// viewMRInRepository shares the payload parser while letting the opt-in
-// verifier target a repository without changing the pipeline's default argv.
 func (h *Host) viewMRInRepository(ctx context.Context, id, repo string) (mrPayload, error) {
 	args := []string{"mr", "view", id, "--output", "json"}
 	if repo != "" {
@@ -620,18 +517,6 @@ func (h *Host) viewMRInRepository(ctx context.Context, id, repo string) (mrPaylo
 	return mr, nil
 }
 
-// GetChecks reads the merge request's head pipeline the way the GitLab UI
-// presents it, not just its job list: a pipeline's result is an aggregate of
-// ordinary jobs, trigger jobs (GitLab's bridge jobs, which carry a downstream
-// pipeline's result) and, on instances that license the feature, external
-// status checks. Reading only `/jobs` lets a nonempty list of green ordinary
-// jobs hide a failed or pending pipeline - a trigger stage that failed, or a
-// pipeline that failed before it created any job at all.
-//
-// An instance that does not serve a feature (external status checks are
-// Ultimate) reports that as an unavailable route and is read as having none,
-// never as an unreadable check; any other failure is a read failure and stays
-// one, because "unreadable" must not look green either.
 func (h *Host) GetChecks(ctx context.Context, pr *scm.PR) ([]scm.Check, error) {
 	pr.ObservedHeadSHA = ""
 	if headSHA := strings.TrimSpace(pr.HeadSHA); headSHA != "" {
@@ -652,17 +537,6 @@ func (h *Host) GetChecks(ctx context.Context, pr *scm.PR) ([]scm.Check, error) {
 	return h.pipelineChecks(ctx, pr, pipeline, nil)
 }
 
-// pipelineChecks composes the checks of a head pipeline: its ordinary jobs, its
-// trigger jobs, the pipeline's own aggregate status when no job or trigger job
-// already carries it, and the merge request's external status checks. A nil
-// pipeline means the merge request has no pipeline at all; external status
-// checks are keyed on the merge request rather than the pipeline, so they are
-// read even then.
-//
-// afterReads runs once every provider read is done, when the caller has to
-// re-establish that the whole observation still describes the same commit (the
-// bound path's stability check); its error is returned before any checks are,
-// so no part of a moved observation is graded.
 func (h *Host) pipelineChecks(ctx context.Context, pr *scm.PR, pipeline *gitlabHeadPipeline, afterReads func() error) ([]scm.Check, error) {
 	var checks []scm.Check
 	if pipeline != nil {
@@ -721,14 +595,6 @@ func (h *Host) pipelineChecks(ctx context.Context, pr *scm.PR, pipeline *gitlabH
 	return checks, nil
 }
 
-// hasNonPassingCheck reports whether any check is not a plain pass. It decides
-// whether a merge request with no head pipeline has an external requirement
-// worth reporting: passing checks alone must not read as an all-green head,
-// because the monitor would stop there and tell the user to merge while the
-// pipeline that has not registered yet could still fail. With nothing but
-// passes (or nothing at all) the caller returns no checks, and the CI step's
-// zero-check rule decides - wait for registration, or pass under a trusted
-// `no_ci: true`.
 func hasNonPassingCheck(checks []scm.Check) bool {
 	for _, check := range checks {
 		if check.Bucket != scm.CheckBucketPass {
@@ -738,24 +604,6 @@ func hasNonPassingCheck(checks []scm.Check) bool {
 	return false
 }
 
-// getChecksForHead reads the merge request's checks bound to headSHA, the exact
-// source commit the caller is delivering.
-//
-// GitLab's head pipeline is a pipeline object, not a per-commit check rollup:
-// GitLab only replaces it once a pipeline matching a newer source revision
-// exists, so the pointer can still name a pipeline an older commit ran at while
-// the merge request has already moved on. Reading its jobs unconditionally
-// would grade that older commit's result as if it belonged to headSHA. This
-// path therefore proves, before reading any job, that the merge request is at
-// headSHA and that its head pipeline is the pipeline for headSHA - either it
-// ran at that commit, or it is a merged-results/merge-train pipeline whose
-// temporary commit includes it (mirroring GitLab's own head-pipeline check; see
-// mergeResultIncludes). It then re-reads the merge request once every provider
-// read is done and rejects a source revision that moved mid-observation,
-// exactly as the GitHub adapter does. Everything the observation carries -
-// jobs, trigger jobs, aggregate, external status checks - is built from this
-// proven pipeline and merge request, so no part of it can describe another
-// commit.
 func (h *Host) getChecksForHead(ctx context.Context, pr *scm.PR, headSHA string) ([]scm.Check, error) {
 	mr, err := h.viewMR(ctx, pr.Number)
 	if err != nil {
@@ -792,16 +640,6 @@ func (h *Host) getChecksForHead(ctx context.Context, pr *scm.PR, headSHA string)
 	return h.pipelineChecks(ctx, pr, pipeline, after)
 }
 
-// headPipelineBoundTo resolves the merge request's head pipeline and proves it
-// belongs to headSHA. It returns a nil pipeline (and no error) only when the
-// merge request reports no head pipeline at all.
-//
-// Every refusal that means "the evidence in hand is not evidence for the
-// delivered commit" wraps scm.ErrHeadChanged, so a caller can tell it from a
-// provider or CLI read failure and wait for the pipeline instead of treating
-// the state as a broken integration. Failures that mean the response could not
-// be read or could not be checked at all - an omitted source commit or pipeline
-// commit, an unknown project path - stay plain errors.
 func (h *Host) headPipelineBoundTo(ctx context.Context, pr *scm.PR, mr mrPayload, headSHA string) (*gitlabHeadPipeline, error) {
 	revision := mr.sourceRevision()
 	if revision == "" {
@@ -842,12 +680,6 @@ func (h *Host) headPipelineBoundTo(ctx context.Context, pr *scm.PR, mr mrPayload
 	return pipeline, nil
 }
 
-// mergeResultRef reports whether ref names one of this merge request's
-// merged-results refs. GitLab builds both refs from a temporary commit that
-// merges the merge request's source revision into the target side, so a
-// pipeline running there carries a commit the source branch does not have:
-// refs/merge-requests/<iid>/merge for merged results and
-// refs/merge-requests/<iid>/train for merge trains.
 func mergeResultRef(ref, number string) bool {
 	number = strings.TrimSpace(number)
 	if number == "" {
@@ -862,13 +694,6 @@ func mergeResultRef(ref, number string) bool {
 	return false
 }
 
-// mergeResultIncludes proves that the temporary commit a merged-results
-// pipeline ran at contains revision. GitLab creates that commit by merging the
-// merge request's source revision into the target side
-// (MergeRequests::MergeToRefService), so the source commit is one of the merge
-// commit's parents; parentage is the provenance, and it is deliberately checked
-// against the repository rather than assumed from the SHA difference, so a
-// stale merged-results pipeline from before the latest push fails it.
 func (h *Host) mergeResultIncludes(ctx context.Context, mergedSHA, revision string) (bool, error) {
 	if h.projectPath == "" {
 		return false, errors.New("cannot verify a merged-results pipeline includes the delivered commit: GitLab project path unknown")
@@ -902,14 +727,10 @@ func (h *Host) mergeResultIncludes(ctx context.Context, mergedSHA, revision stri
 	return false, nil
 }
 
-// sameCommitSHA compares two commit identities, tolerating the surrounding
-// whitespace and letter case a provider response may carry.
 func sameCommitSHA(a, b string) bool {
 	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
-// isHexCommitSHA reports whether value is a full hexadecimal commit id: the
-// only shape allowed into a repository API path.
 func isHexCommitSHA(value string) bool {
 	if len(value) != 40 {
 		return false
@@ -924,13 +745,6 @@ func isHexCommitSHA(value string) bool {
 	return true
 }
 
-// readPipelineJobs lists every job of a pipeline. With a known project path it
-// goes through `glab api --paginate` (branch-independent); otherwise it falls
-// back to `glab ci get`, which needs a current branch.
-//
-// The JSON comes from stdout alone: glab prints notices (an update notice, for
-// example) on stderr, and merging the streams would splice that text into the
-// listing the strict parser reads.
 func (h *Host) readPipelineJobs(ctx context.Context, pipelineID int) ([]byte, error) {
 	jobsCmd := h.cmd(ctx, "glab", h.pipelineJobsArgs(pipelineID)...)
 	var stderr bytes.Buffer
@@ -942,14 +756,6 @@ func (h *Host) readPipelineJobs(ctx context.Context, pipelineID int) ([]byte, er
 	return jobsOut, nil
 }
 
-// pipelineTriggerJobs lists a pipeline's trigger jobs. GitLab 19.2 renamed the
-// route from "bridges" to "trigger_jobs" and deprecated the old name; neither
-// is removed. The current name is read first, and an instance that predates it
-// answers with GitLab's route-not-found response, so the deprecated name is
-// retried once for that instance rather than failing a read it can still serve.
-// glabStdout runs glab and returns stdout alone for the JSON decoder, plus
-// stdout and stderr together for failure classification and messages: glab
-// prints notices on stderr, which must not reach a successful read's decoder.
 func (h *Host) glabStdout(ctx context.Context, args []string) (stdout, combined []byte, err error) {
 	cmd := h.cmd(ctx, "glab", args...)
 	var stderr bytes.Buffer
@@ -973,17 +779,6 @@ func (h *Host) pipelineTriggerJobs(ctx context.Context, pipelineID int) ([]gitla
 	return triggerJobs, nil
 }
 
-// mergeRequestStatusChecks lists the external status check services that apply
-// to the merge request and their current state. External status checks are a
-// GitLab Ultimate capability: Community Edition does not mount the route at
-// all, and an Enterprise Edition instance without the license answers 401 from
-// the route's license guard. Those two mean "this instance has no external
-// status checks to report" and read as none - treating them as unreadable
-// would park every harness run on an instance where the feature simply was not
-// sold. Every other failure is a read failure, including 403: the license
-// guard answers 401 before a 403 is possible, so a 403 is a project that does
-// have the feature refusing this token, and reading it as "no checks" would
-// hide one.
 func (h *Host) mergeRequestStatusChecks(ctx context.Context, mrIID string) ([]scm.Check, error) {
 	out, combined, err := h.glabStdout(ctx, h.mergeRequestStatusChecksArgs(mrIID))
 	if err != nil {
@@ -1011,16 +806,6 @@ func (h *Host) FetchFailedCheckLogs(ctx context.Context, pr *scm.PR, branch, hea
 	return scm.CombineFailedCheckLogs(logs)
 }
 
-// FetchFailedCheckTargetLogs traces the selected failures on the same pipeline
-// identity the check observation was bound to. When the caller names the
-// delivered commit, the pipeline is proven to belong to it (see
-// headPipelineBoundTo) before any trace is read, so a selected check can never
-// be explained by a job of another commit's pipeline: GitLab's head pipeline
-// pointer lags a new source commit, and a same-named job in a newer or older
-// pipeline is not the check that failed. The merge request is then re-read, and
-// a source revision that moved while the traces were being fetched is rejected
-// exactly as in GetChecks. Without a named commit there is nothing to bind to,
-// and the legacy head-pipeline read is kept.
 func (h *Host) FetchFailedCheckTargetLogs(ctx context.Context, pr *scm.PR, _ string, headSHA string, targets []scm.CheckTarget) ([]scm.FailedCheckLog, error) {
 	if len(targets) == 0 {
 		return nil, nil
@@ -1119,34 +904,15 @@ func bytesTrimToJSON(out []byte) []byte {
 }
 
 type gitlabJob struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Stage      string `json:"stage"`
-	FinishedAt string `json:"finished_at"`
-	WebURL     string `json:"web_url"`
-	// AllowFailure marks a job GitLab lets fail without failing the pipeline
-	// (`allow_failure: true`). Such a job reports status "failed" but does not
-	// block the merge request.
-	AllowFailure bool `json:"allow_failure"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Stage        string `json:"stage"`
+	FinishedAt   string `json:"finished_at"`
+	WebURL       string `json:"web_url"`
+	AllowFailure bool   `json:"allow_failure"`
 }
 
-// bucket maps the job to a check bucket. A failed job with allow_failure set
-// is non-blocking in GitLab (the pipeline is green, shown as "passed with
-// warnings"), so it maps to CheckBucketSkip like other non-blocking outcomes
-// instead of CheckBucketFail.
-//
-// A manual job's bucket depends on the same flag, and the two readings are
-// opposites. A blocking manual job (`allow_failure: false`, the default for
-// `when: manual` inside `rules`) stops the pipeline at its stage until a person
-// runs it, and GitLab's own merge rules treat that pipeline as
-// unfinished; mapping it to a skip lets a merge request read as ready while
-// GitLab would refuse to merge it. It maps to CheckBucketPending instead - the
-// job is waiting on a person, not finished - and jobsToChecks marks it
-// AwaitingManualJob so the CI step names the wait and keeps it away from the
-// fix agent. An optional manual job (`allow_failure: true`, the default outside
-// `rules`) is one GitLab does not wait for - the pipeline can succeed without
-// it - so it stays a skip.
 func (j gitlabJob) bucket() scm.CheckBucket {
 	status := strings.ToLower(strings.TrimSpace(j.Status))
 	switch {
@@ -1161,16 +927,10 @@ func (j gitlabJob) bucket() scm.CheckBucket {
 	return gitlabStatusBucket(j.Status)
 }
 
-// awaitingManualJob reports whether the job is a blocking manual job: GitLab
-// holds the pipeline at it until a person runs it. It is the one
-// pending check that cannot progress on its own and that no rerun can clear.
 func (j gitlabJob) awaitingManualJob() bool {
 	return strings.EqualFold(strings.TrimSpace(j.Status), "manual") && !j.AllowFailure
 }
 
-// completedAt parses the job's finished_at timestamp, returning the zero time
-// when it is absent or unparseable. GitLab emits RFC3339 (often with
-// fractional seconds and a 'Z' offset), which time.RFC3339 handles.
 func (j gitlabJob) completedAt() time.Time {
 	if strings.TrimSpace(j.FinishedAt) == "" {
 		return time.Time{}
@@ -1181,10 +941,6 @@ func (j gitlabJob) completedAt() time.Time {
 	return time.Time{}
 }
 
-// gitlabTriggerJob is a pipeline trigger job (historically "bridge"): the job
-// that starts a downstream pipeline. It carries an ordinary job's fields plus
-// the downstream pipeline it created, whose result GitLab mirrors into the
-// trigger job's own status when the trigger asks for it (trigger:strategy).
 type gitlabTriggerJob struct {
 	gitlabJob
 	DownstreamPipeline *gitlabDownstreamPipeline `json:"downstream_pipeline"`
@@ -1196,8 +952,6 @@ type gitlabDownstreamPipeline struct {
 	WebURL string `json:"web_url"`
 }
 
-// gitlabExternalStatusCheck is one external status check service's verdict on
-// a merge request (GitLab Ultimate).
 type gitlabExternalStatusCheck struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
@@ -1205,20 +959,6 @@ type gitlabExternalStatusCheck struct {
 	Status      string `json:"status"`
 }
 
-// decodeGitlabJobs reads every job from glab output. The output may contain a
-// single bare job array, a pipeline object with nested .jobs, or - when
-// `glab api --paginate` walks multiple pages - several JSON documents
-// concatenated back to back (one array per page). A streaming decoder reads
-// each top-level value in turn and accumulates the jobs across all of them.
-//
-// Every page must read in full. Output with no JSON, a document that is
-// neither a job array nor a pipeline object with a "jobs" field, and a job
-// entry without a name or status each return an error. GitLab always sends
-// both fields, so a document without them is not a job listing. Skipping such
-// a page would hide any failed job on it, and an unreadable response would
-// read as an empty, green pipeline. io.EOF ends the stream cleanly; when a
-// later page is malformed or the wrong shape, the jobs from earlier pages are
-// returned along with the error.
 func decodeGitlabJobs(out []byte) ([]gitlabJob, error) {
 	trimmed := bytes.TrimSpace(out)
 	if len(trimmed) == 0 {
@@ -1245,12 +985,6 @@ func decodeGitlabJobs(out []byte) ([]gitlabJob, error) {
 	}
 }
 
-// decodeGitlabJobPage reads one top-level JSON document from glab output:
-// either a bare array of jobs (`glab api --paginate`) or a pipeline object
-// with a "jobs" field containing an array or null for a pipeline with no jobs
-// (`glab ci get --with-job-details`). A top-level null is invalid.
-// Every entry must be a job object with a non-empty name and status, or the
-// read fails.
 func decodeGitlabJobPage(raw json.RawMessage) ([]gitlabJob, error) {
 	trimmed := bytes.TrimSpace(raw)
 	var entries []json.RawMessage
@@ -1302,12 +1036,6 @@ func decodeGitlabJobPage(raw json.RawMessage) ([]gitlabJob, error) {
 	return jobs, nil
 }
 
-// decodeGitlabPages streams the top-level JSON documents of glab output, one
-// per paginated page, and hands each to decodePage. Output with no JSON at all
-// is unreadable rather than an empty listing: GitLab answers a route it serves
-// with at least one document, so reading silence as "nothing to report" would
-// hide a failed check. io.EOF ends the stream cleanly; a document that does not
-// decode returns the values collected so far with the error.
 func decodeGitlabPages(what string, out []byte, decodePage func(json.RawMessage) error) error {
 	trimmed := bytes.TrimSpace(out)
 	if len(trimmed) == 0 {
@@ -1329,11 +1057,6 @@ func decodeGitlabPages(what string, out []byte, decodePage func(json.RawMessage)
 	}
 }
 
-// decodeGitlabTriggerJobs reads every trigger job from the paginated REST
-// route, which emits one bare array per page. An entry without a name or status
-// is not a trigger job and fails the read, for the same reason the job decoder
-// refuses one: silently skipping it would hide the row that reports a failed
-// downstream pipeline.
 func decodeGitlabTriggerJobs(out []byte) ([]gitlabTriggerJob, error) {
 	var jobs []gitlabTriggerJob
 	err := decodeGitlabPages("trigger jobs", out, func(raw json.RawMessage) error {
@@ -1358,9 +1081,6 @@ func decodeGitlabTriggerJobs(out []byte) ([]gitlabTriggerJob, error) {
 	return jobs, err
 }
 
-// decodeGitlabExternalStatusChecks reads every external status check from the
-// paginated REST route, which emits one bare array per page. The same
-// strictness applies: an entry without a name or status is not a status check.
 func decodeGitlabExternalStatusChecks(out []byte) ([]gitlabExternalStatusCheck, error) {
 	var checks []gitlabExternalStatusCheck
 	err := decodeGitlabPages("external status checks", out, func(raw json.RawMessage) error {
@@ -1414,12 +1134,6 @@ func jobsToChecks(jobs []gitlabJob) []scm.Check {
 	return checks
 }
 
-// triggerJobsToChecks maps trigger jobs to checks. The status is the trigger
-// job's own - GitLab computes it from whether the downstream pipeline was
-// created, or, when the trigger asks for it, from the downstream pipeline's
-// result - so it is exactly the part of the downstream tree that the head
-// pipeline's aggregate reflects. The details link prefers the downstream
-// pipeline because that is where a failure has to be read.
 func triggerJobsToChecks(jobs []gitlabTriggerJob) []scm.Check {
 	checks := make([]scm.Check, 0, len(jobs))
 	for _, job := range jobs {
@@ -1443,10 +1157,6 @@ func triggerJobsToChecks(jobs []gitlabTriggerJob) []scm.Check {
 	return checks
 }
 
-// externalStatusChecksToChecks maps external status checks to checks. GitLab
-// reports one of passed, pending, or failed for each service that applies to
-// the merge request; a state this version does not recognize stays pending so
-// readiness waits instead of certifying a state it cannot classify.
 func externalStatusChecksToChecks(statusChecks []gitlabExternalStatusCheck) []scm.Check {
 	checks := make([]scm.Check, 0, len(statusChecks))
 	for _, status := range statusChecks {
@@ -1466,13 +1176,6 @@ func externalStatusChecksToChecks(statusChecks []gitlabExternalStatusCheck) []sc
 	return checks
 }
 
-// pipelineAggregateCheck returns the head pipeline's own status as a check when
-// no job or trigger job row already carries it, and no check when one does. The aggregate
-// is what the merge gate reads, so it must never be hidden by a job list that
-// happens to look green - a failed pipeline that created no job at all, or one
-// still running after its last job finished, has no row in the job list to
-// carry the state. A terminal pass or skip needs no row of its own: every row
-// that reports one already says the pipeline is not blocking.
 func pipelineAggregateCheck(pipeline gitlabHeadPipeline, checks []scm.Check) (scm.Check, bool) {
 	bucket := gitlabStatusBucket(pipeline.Status)
 	if bucket == "" {
@@ -1503,9 +1206,6 @@ func pipelineAggregateCheck(pipeline gitlabHeadPipeline, checks []scm.Check) (sc
 	}, true
 }
 
-// gitlabJobProviderID renders the provider identity of a job or trigger job,
-// empty when GitLab reported no id (an unidentified row must not collide with
-// another unnamed row in the fix-target bookkeeping).
 func gitlabJobProviderID(prefix string, id int) string {
 	if id == 0 {
 		return ""
@@ -1513,9 +1213,6 @@ func gitlabJobProviderID(prefix string, id int) string {
 	return prefix + ":" + strconv.Itoa(id)
 }
 
-// gitlabCheckState renders the provider's own status string the way the other
-// adapters do: uppercased and otherwise untouched, so a finding can say what
-// the provider reported without this package inventing vocabulary.
 func gitlabCheckState(state string) string {
 	return strings.ToUpper(strings.TrimSpace(state))
 }
@@ -1547,14 +1244,6 @@ func findFailedJobTargetIDs(out []byte, checkTargets []scm.CheckTarget) []int {
 	return matched
 }
 
-// gitlabStatusBucket maps a raw provider state - a job's or a pipeline's -
-// onto the shared bucket, ignoring job-level policy; gitlabJob.bucket applies
-// allow_failure on top for the jobs it maps. `manual` is a wait on a person,
-// not a finished state: a pipeline's own status is `manual` while it is
-// stopped at a blocking manual job, and reporting that as a skip would let a
-// blocked pipeline read green. Job-level manual states never reach this case -
-// gitlabJob.bucket splits them by allow_failure first - so this mapping serves
-// the pipeline-status reading, not the job reader.
 func gitlabStatusBucket(state string) scm.CheckBucket {
 	switch strings.ToLower(strings.TrimSpace(state)) {
 	case "success":
@@ -1572,12 +1261,6 @@ func gitlabStatusBucket(state string) scm.CheckBucket {
 	}
 }
 
-// gitlabExternalStatusCheckBucket maps an external status check's state. GitLab
-// reports passed, pending, or failed; anything else is a state this version
-// cannot classify, and waiting is the safe reading of an unknown state (a
-// failed external status check blocks merges, so it must never be missed, and
-// an unrecognized one must not be optimistically read as passed). Unlike a job,
-// it has no skipped or cancelled state to map.
 func gitlabExternalStatusCheckBucket(state string) scm.CheckBucket {
 	switch strings.ToLower(strings.TrimSpace(state)) {
 	case "passed":
@@ -1589,32 +1272,11 @@ func gitlabExternalStatusCheckBucket(state string) scm.CheckBucket {
 	}
 }
 
-// gitlabRouteUnavailable reports whether a failed glab call means the instance
-// does not serve the requested REST route at all, rather than answering it with
-// an error: GitLab responses to an unmounted route are a bare
-// `{"error":"404 Not Found"}`, which glab prints as `glab: HTTP 404`.
-// Distinguishing the two matters for routes that were added or renamed between
-// GitLab versions - a missing route is a version difference to work around,
-// while an answered error is a failed read. A resource-level 404 ("Project Not
-// Found") does not match: glab prints `glab: 404 Project Not Found (HTTP 404)`
-// for it, which is neither pattern, so it fails the read instead of being
-// mistaken for a version difference.
 func gitlabRouteUnavailable(out []byte) bool {
 	text := string(out)
 	return strings.Contains(text, `"error":"404 Not Found"`) || strings.Contains(text, "glab: HTTP 404")
 }
 
-// gitlabExternalStatusChecksUnavailable reports whether a failed status-checks
-// read means the instance does not serve external status checks rather than the
-// read failing. GitLab mounts the route only on Enterprise Edition with an
-// Ultimate license: Community Edition answers 404 with the unmounted-route body
-// (live-observed), and an unlicensed Enterprise Edition instance answers 401
-// from the route's own license guard (`unauthorized!`). A 403 is deliberately
-// not in this set: the license guard answers 401 first, so a 403 comes from a
-// project that does have the feature and refused this token (or from a
-// granular token without the read permission) - a failed read, not an absent
-// feature. A network error, 5xx, or malformed answer matches none of these and
-// must surface as well.
 func gitlabExternalStatusChecksUnavailable(out []byte) bool {
 	text := string(out)
 	if strings.Contains(text, `"error":"404 Not Found"`) {

@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// samePath decides whether the invoking worktree belongs to the registered
-// repository. Spellings of one directory must agree, whatever the volume's case
-// rule, and different directories must not.
 func TestSamePathFollowsFilesystemIdentity(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "Project")

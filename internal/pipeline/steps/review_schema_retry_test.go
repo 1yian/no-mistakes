@@ -20,10 +20,6 @@ const (
 	cleanReviewJSON    = `{"findings":[],"risk_level":"low","risk_rationale":"clean","risk_scope":"source-or-external","reviewed_paths":["feature.txt"]}`
 )
 
-// TestReviewStep_SchemaRejectionRerunsAFreshReview is issue #1045's Pi case:
-// the adapter rejects the reviewer's final JSON and returns no Result. Review
-// reruns the same session-free review, told only the validation error, and
-// takes its findings from the attempt that validates.
 func TestReviewStep_SchemaRejectionRerunsAFreshReview(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)

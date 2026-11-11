@@ -14,10 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// writeStdinCapturingPiAgent writes a fake pi binary that copies its stdin -
-// the prompt the adapter pipes to the process - into capturePath, then returns
-// a minimal agent_end payload so the invocation succeeds. It mirrors
-// writeCapturingPiAgent, which captures argv instead.
 func writeStdinCapturingPiAgent(t *testing.T, dir, capturePath string) string {
 	t.Helper()
 	const response = `{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"ok"}]}]}`
@@ -33,9 +29,6 @@ func writeStdinCapturingPiAgent(t *testing.T, dir, capturePath string) string {
 	return bin
 }
 
-// readCapturedPrompt returns the fake-pi stdin capture with newlines folded to
-// LF. writeStdinCapturingPiAgent's Windows branch uses `more > file`, which
-// writes CRLF; the production pipe still carries WorktreeSteering's LF text.
 func readCapturedPrompt(t *testing.T, capturePath string) string {
 	t.Helper()
 	captured, err := os.ReadFile(capturePath)
@@ -45,13 +38,6 @@ func readCapturedPrompt(t *testing.T, capturePath string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(string(captured), "\r\n", "\n"), "\r", "\n")
 }
 
-// TestNewPipelineAgent_SteersHostSearchBoundary is the production-wiring half of
-// the host-search contract. The step-level tests prove which step prompts carry
-// the boundary; this one builds the agent the daemon actually runs through
-// newPipelineAgent and proves the prompt delivered to the process carries the
-// workspace-boundary preamble's host-search rule. It fails if the production
-// wiring ever stops wrapping the agent in agent.WithSteering, which the
-// step-level tests alone cannot catch.
 func TestNewPipelineAgent_SteersHostSearchBoundary(t *testing.T) {
 	dir := t.TempDir()
 	evidenceRoot := filepath.Join(t.TempDir(), "evidence")
@@ -90,11 +76,6 @@ func TestNewPipelineAgent_SteersHostSearchBoundary(t *testing.T) {
 	}
 }
 
-// TestReadCapturedPrompt_NormalizesWindowsNewlines pins the windows-git failure
-// shape: `more > file` stores WorktreeSteering as CRLF, so a raw Contains of
-// the LF preamble misses even though the host-search text and evidence path
-// were delivered. Newline folding is the whole allowance; the path still has
-// to match the caller-supplied root.
 func TestReadCapturedPrompt_NormalizesWindowsNewlines(t *testing.T) {
 	evidenceRoot := filepath.Join(t.TempDir(), "evidence")
 	preamble := agent.WorktreeSteering(evidenceRoot)

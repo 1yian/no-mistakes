@@ -18,10 +18,6 @@ func piOutputEvents(output string) []string {
 
 const piStrictVersion = "0.99.1"
 
-// writePiOutputFixture fakes a Pi binary that answers --version with version,
-// records each run's argv and prompt in its working directory, and replays
-// strictEvents when launched with the output extension and promptEvents
-// otherwise.
 func writePiOutputFixture(t *testing.T, version string, strictEvents, promptEvents []string, session string) string {
 	t.Helper()
 	if session != "" {
@@ -317,11 +313,6 @@ func TestPiAgent_StrictRunWithoutTheOutputToolIsASchemaRejection(t *testing.T) {
 	}
 }
 
-// strictPiToolViolations walks the declaration the strict output tool carries
-// and reports every level that violates the provider's strict function
-// contract: objects must forbid additional properties and require every
-// declared property, because strict-capable pi-ai before 0.84.4 forwards these
-// parameters verbatim instead of normalizing them first.
 func strictPiToolViolations(value any, path string) []string {
 	schema, ok := value.(map[string]any)
 	if !ok {
@@ -358,8 +349,6 @@ func strictPiToolViolations(value any, path string) []string {
 	return violations
 }
 
-// piDeclaredToolSchema reads the parameters the generated output extension
-// declares, the exact schema Pi forwards to the provider.
 func piDeclaredToolSchema(t *testing.T, path string) map[string]any {
 	t.Helper()
 	content, err := os.ReadFile(path)

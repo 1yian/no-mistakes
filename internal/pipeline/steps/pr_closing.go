@@ -24,35 +24,11 @@ import (
 
 const issuesSectionHeading = "## Issues"
 
-// closingGrammar is the issue-closing language of the forge a PR body is
-// published to.
-//
-// One shared pattern cannot cover both dialects, because they differ in more
-// than vocabulary:
-//
-//   - GitHub's words are close/fix/resolve - no gerunds, no "implement" - and
-//     GitHub ignores a reference inside code, which is why its neutralizer may
-//     wrap a reference in an inline code span.
-//   - GitLab's default pattern (the documented server regex, replaceable by a
-//     self-managed administrator) adds the gerunds and "implements", and
-//     Gitlab::ClosingIssueExtractor applies it as a plain regexp to the raw
-//     merge request description and commit messages: code blocks and inline
-//     code are NOT exempt.
 type closingGrammar struct {
-	// keywordLine matches a line that is nothing but closing keywords and their
-	// targets, optionally as a bullet or ordered list item and with trailing
-	// sentence punctuation. A reference inside prose ("this fixes #4 partly")
-	// is deliberately not counted: it is not a standalone closing declaration.
 	keywordLine *regexp.Regexp
-	// reference extracts the targets of a closing-keyword line.
-	reference *regexp.Regexp
-	// neutralize breaks closing references in generated text under the
-	// supported grammar, which on GitLab is the default server pattern.
-	neutralize func(string) string
-	// codeAware reports whether the forge ignores a reference inside code. It
-	// decides whether the closing-line scan may skip fenced and indented blocks
-	// (a reference there is a closing reference only on a forge that does not).
-	codeAware bool
+	reference   *regexp.Regexp
+	neutralize  func(string) string
+	codeAware   bool
 }
 
 const githubClosingKeywordPattern = `(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved):?\s+(?:#[1-9][0-9]*|[A-Za-z0-9-]+/[A-Za-z0-9._-]+#[1-9][0-9]*)`
@@ -63,26 +39,12 @@ var closingReferencePattern = regexp.MustCompile(`(?i)(?:[A-Za-z0-9-]+/[A-Za-z0-
 
 var closingReferenceInTextPattern = regexp.MustCompile(`(?i)\b((?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved):?\s+)((?:[A-Za-z0-9-]+/[A-Za-z0-9._-]+)?#[1-9][0-9]*|https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/(?:issues|pull)/[1-9][0-9]*)\b`)
 
-// GitLab's default closing pattern, from
-// https://docs.gitlab.com/user/project/issues/managing_issues/#default-closing-pattern.
-// Its words are the [Cc]los/[Ff]ix/[Rr]esolv families plus the gerunds and
-// [Ii]mplement, and its references nest: "group/subgroup/project#12" and the
-// full "<host>/<path>/-/issues/12" URL are both closing references.
 const gitlabClosingKeywordPattern = `(?:[Cc]los(?:e[sd]?|ing)|[Ff]ix(?:e[sd]|ing)?|[Rr]esolv(?:e[sd]?|ing)|[Ii]mplement(?:s|ed|ing)?)`
 
-// gitlabClosingTargetPattern is the reference half of a closing-keyword line
-// without the URL form: a target is compared against the run's requested refs,
-// which are project paths or bare numbers.
 const gitlabClosingTargetPattern = `(?:[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*#[1-9][0-9]*|#[1-9][0-9]*)`
 
-// gitlabClosingReferenceList accepts the separators GitLab's pattern allows
-// between several references ("Fixes #1, #2 and #3").
 const gitlabClosingReferenceList = gitlabClosingTargetPattern + `(?:(?: *, *(?:and +)?| +and +)` + gitlabClosingTargetPattern + `)*`
 
-// gitlabClosingSeparator is the keyword-to-reference separator: an optional
-// colon, at least one space (GitLab's pattern is a literal ` +`, so a newline
-// does not join a keyword to a reference), and GitLab's optional literal
-// "issues" - "Closes issues #12" closes #12 too.
 const gitlabClosingSeparator = `(?::? +(?:issues? +)?)`
 
 var gitlabClosingKeywordLinePattern = regexp.MustCompile(`^(?:(?:[-*+]|[0-9]+[.)])[ \t]+)?` + gitlabClosingKeywordPattern + gitlabClosingSeparator + gitlabClosingReferenceList + `[.;!]?$`)
@@ -106,9 +68,6 @@ var (
 	}
 )
 
-// closingGrammarFor returns the closing grammar of the provider a PR body is
-// published to. Every provider other than GitLab keeps GitHub's grammar, which
-// is the behavior every existing body was rendered under.
 func closingGrammarFor(provider scm.Provider) closingGrammar {
 	if provider == scm.ProviderGitLab {
 		return gitlabClosingGrammar
@@ -116,10 +75,6 @@ func closingGrammarFor(provider scm.Provider) closingGrammar {
 	return githubClosingGrammar
 }
 
-// extractClosingKeywordLines returns the distinct standalone closing-keyword
-// lines of body. Code is skipped only for a provider that ignores references
-// inside code: on GitLab, where the closing pattern is applied to the raw text,
-// a fenced "Closes #95" is a live closing reference and is counted.
 func extractClosingKeywordLines(body string, grammar closingGrammar) []string {
 	seen := map[string]struct{}{}
 	var lines []string
@@ -146,12 +101,6 @@ func extractClosingKeywordLines(body string, grammar closingGrammar) []string {
 	return lines
 }
 
-// neutralizeGitHubClosingReferences puts every closing-keyword reference in
-// pipeline-generated PR text, including an issue or pull request URL, in an
-// inline code span ("Fixes `#12`"), outside fenced, indented, and inline code
-// and HTML <code>/<pre> elements (a tested command renders as <code>).
-// GitHub ignores a reference in code, so nothing the pipeline publishes can
-// close an issue; only the Issues section carries live ones.
 func neutralizeGitHubClosingReferences(s string) string {
 	if !closingReferenceInTextPattern.MatchString(s) {
 		return s
@@ -182,9 +131,6 @@ func neutralizeGitLabClosingReferences(s string) string {
 
 var htmlCodeTagPattern = regexp.MustCompile(`(?i)<(/?)(code|pre)\b[^>]*>`)
 
-// outsideHTMLCode applies rewrite to the parts of text outside HTML <code>
-// and <pre> elements. open names the element still open from earlier text
-// ("" when none), so an element may span lines.
 func outsideHTMLCode(text string, open *string, rewrite func(string) string) string {
 	var b strings.Builder
 	last := 0
@@ -212,8 +158,6 @@ func outsideHTMLCode(text string, open *string, rewrite func(string) string) str
 	return b.String()
 }
 
-// outsideInlineCode applies rewrite to the parts of line outside inline code
-// spans. A backtick run without a matching closing run is literal text.
 func outsideInlineCode(line string, rewrite func(string) string) string {
 	var b strings.Builder
 	text := 0
@@ -255,9 +199,6 @@ func outsideInlineCode(line string, rewrite func(string) string) string {
 	return b.String()
 }
 
-// closingTargets returns the canonical refs ("42", "owner/repo#42",
-// "group/subgroup/project#42") closed by the given closing-keyword lines. A
-// reference qualified with repo, the PR's own repository, is the bare number.
 func closingTargets(lines []string, repo string, grammar closingGrammar) map[string]struct{} {
 	targets := map[string]struct{}{}
 	for _, line := range lines {
@@ -269,10 +210,6 @@ func closingTargets(lines []string, repo string, grammar closingGrammar) map[str
 	return targets
 }
 
-// prRepository returns the project path the PR lives in, or "" when it is
-// unknown. GitHub needs owner/repository; GitLab needs the full project path,
-// which may nest under subgroups and is what a cross-project closing reference
-// is qualified with.
 func prRepository(sctx *pipeline.StepContext, provider scm.Provider) string {
 	if sctx == nil {
 		return ""
@@ -304,10 +241,6 @@ func closingLine(ref string) string {
 	return "Closes " + closingissues.Target(ref)
 }
 
-// issuesSection renders the stable Issues section, or "" when there is
-// nothing to render. Requested refs already closed by authorText (live author
-// content kept verbatim around it) are not repeated, so each reference
-// appears exactly once.
 func issuesSection(sctx *pipeline.StepContext, authorText string) string {
 	if sctx == nil {
 		return ""
@@ -330,7 +263,6 @@ func issuesSection(sctx *pipeline.StepContext, authorText string) string {
 	return issuesSectionHeading + "\n\n" + strings.Join(lines, "\n")
 }
 
-// appendIssuesSection appends section to body as its final block.
 func appendIssuesSection(body, section string) string {
 	if section == "" {
 		return body
@@ -341,10 +273,6 @@ func appendIssuesSection(body, section string) string {
 	return body + "\n\n" + section
 }
 
-// claimClosingIssueRefs samples the run's --closes references for this PR
-// body. The claim is what makes a late reattach (`axi run --closes` against a
-// run already composing its PR) fail closed instead of reporting a reference
-// that never reaches the body.
 func claimClosingIssueRefs(sctx *pipeline.StepContext, host scm.Host, provider scm.Provider) error {
 	if sctx.DB == nil {
 		return nil
@@ -393,9 +321,6 @@ func claimClosingIssueRefs(sctx *pipeline.StepContext, host scm.Host, provider s
 	return nil
 }
 
-// refuseSkipWithClosingIssues fails a PR step that would be skipped while the
-// run carries --closes references: skipping publishes no body that closes
-// them. The claim makes a concurrent reattach fail closed too.
 func refuseSkipWithClosingIssues(sctx *pipeline.StepContext, reason string) error {
 	if sctx.DB == nil {
 		return nil
@@ -410,10 +335,6 @@ func refuseSkipWithClosingIssues(sctx *pipeline.StepContext, reason string) erro
 	return fmt.Errorf("render closing issues: --closes requires publishing a pull request, but PR creation is unavailable: %s", reason)
 }
 
-// verifyClosingIssues re-reads the live PR body and fails unless it still
-// carries every requested reference. A missing reference is invisible at
-// review time (the issue simply stays open after merge), so the step must not
-// report success without this check.
 func verifyClosingIssues(ctx context.Context, host scm.Host, pr *scm.PR, sctx *pipeline.StepContext) error {
 	if sctx == nil || len(sctx.ClosingIssueRefs) == 0 {
 		return nil
@@ -447,9 +368,6 @@ func verifyClosingIssuesInBody(body string, sctx *pipeline.StepContext) error {
 	return nil
 }
 
-// assembleDraftPRBody assembles an ordinary drafted body and appends the
-// Issues section last, reserving its room up front so body-limit truncation
-// sheds generated evidence rather than a closing reference.
 func assembleDraftPRBody(sctx *pipeline.StepContext, whatChanged, riskLine, testingMD, pipelineMD, evidenceMD string, bodyLimit int, provider scm.Provider) string {
 	section := joinBlocks(neutralizeAttestationMarkers(provider, evidenceMD), issuesSection(sctx, ""))
 	reserve := 0

@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// Readback is independent of the stored body, like a stale forge read replica.
-// The embedded host records writes and refuses title changes.
 type settlingOwnershipHost struct {
 	*ownershipRaceHost
 	postReads int

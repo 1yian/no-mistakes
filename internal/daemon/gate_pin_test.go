@@ -39,10 +39,6 @@ gates:
 `
 )
 
-// gatePinFixture builds a daemon root whose repository's trusted default branch
-// carries defaultBranchYAML, plus a run parked at an approval gate whose step
-// rows are exactly the sequence pinnedGates produces. It returns the run
-// manager, the parked run, and the step names the run actually recorded.
 func gatePinFixture(t *testing.T, defaultBranchYAML string, pinnedGates []config.Gate) (*RunManager, *db.Run, []types.StepName) {
 	t.Helper()
 	p := paths.WithRoot(t.TempDir())
@@ -88,8 +84,6 @@ func gatePinFixture(t *testing.T, defaultBranchYAML string, pinnedGates []config
 	return NewRunManager(d, p, nil), stored, recorded
 }
 
-// commitDefaultBranchConfig publishes yaml as the repository's default-branch
-// .no-mistakes.yaml and returns the new commit.
 func commitDefaultBranchConfig(t *testing.T, workDir, yaml string) string {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(workDir, ".no-mistakes.yaml"), []byte(yaml), 0o644); err != nil {
@@ -101,8 +95,6 @@ func commitDefaultBranchConfig(t *testing.T, workDir, yaml string) string {
 	return gitOutput(t, workDir, "rev-parse", "HEAD")
 }
 
-// parkRunAtReviewGate records one step row per step in sequence, completes
-// everything up to review, and parks review itself the way the executor does.
 func parkRunAtReviewGate(t *testing.T, d *db.DB, runID string, sequence []pipeline.Step) []types.StepName {
 	t.Helper()
 	findings := `{"findings":[{"id":"review-1","severity":"warning","description":"needs a decision","action":"ask-user"}],"summary":"needs a decision"}`
@@ -144,11 +136,6 @@ func planStepNames(plan *recoveredRunPlan) []types.StepName {
 	return names
 }
 
-// TestPrepareRecoveredRun_ResumesWithTheGatesTheRunPinned is the crash-recovery
-// half of pinning a run's gates: the trusted default branch gains a second gate
-// while a run is parked, so re-resolving the gate list at recovery time would
-// rebuild a longer step sequence than the one the run recorded, and drop an
-// otherwise healthy parked run as a crash.
 func TestPrepareRecoveredRun_ResumesWithTheGatesTheRunPinned(t *testing.T) {
 	pinned := []config.Gate{{Name: "arch-fitness", After: types.StepReview, Command: "true"}}
 	m, run, recorded := gatePinFixture(t, oneGateYAML, pinned)
@@ -173,10 +160,6 @@ func TestPrepareRecoveredRun_ResumesWithTheGatesTheRunPinned(t *testing.T) {
 	}
 }
 
-// TestPrepareRecoveredRun_UnpinnedRunRecoversAsTheCorePipeline covers the run
-// written before gates were pinned at all: an absent pin means the bare core
-// pipeline, never "re-resolve from the current config", which is the drift the
-// pin exists to prevent.
 func TestPrepareRecoveredRun_UnpinnedRunRecoversAsTheCorePipeline(t *testing.T) {
 	m, run, recorded := gatePinFixture(t, oneGateYAML, nil)
 	if payload, err := m.db.GetRunGates(run.ID); err != nil || payload != "" {
@@ -197,9 +180,6 @@ func TestPrepareRecoveredRun_UnpinnedRunRecoversAsTheCorePipeline(t *testing.T) 
 	}
 }
 
-// TestPrepareRecoveredRun_UnusableGatePinFailsClosed proves a pin this build
-// cannot honor stops recovery with a reason instead of silently degrading the
-// run to a shorter pipeline than the one it recorded.
 func TestPrepareRecoveredRun_UnusableGatePinFailsClosed(t *testing.T) {
 	pinned := []config.Gate{{Name: "arch-fitness", After: types.StepReview, Command: "true"}}
 	m, run, _ := gatePinFixture(t, oneGateYAML, pinned)

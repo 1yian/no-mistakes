@@ -9,7 +9,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Stats summarizes historical no-mistakes usage across all repositories.
 type Stats struct {
 	TotalRepos       int
 	TotalRuns        int
@@ -27,14 +26,12 @@ type QuotaRoutingStats struct {
 	Record *quotarouting.Record
 }
 
-// StepStats summarizes reported and fixed findings for one pipeline step.
 type StepStats struct {
 	StepName         types.StepName
 	ReportedFindings int
 	FixedFindings    int
 }
 
-// RepoStats summarizes historical usage for one repository.
 type RepoStats struct {
 	RepoID           string
 	WorkingPath      string
@@ -44,7 +41,6 @@ type RepoStats struct {
 	FixedFindings    int
 }
 
-// DisplayName returns a compact repository name for terminal reports.
 func (r RepoStats) DisplayName() string {
 	name := filepath.Base(r.WorkingPath)
 	if name == "." || name == string(filepath.Separator) || name == "" {
@@ -53,7 +49,6 @@ func (r RepoStats) DisplayName() string {
 	return name
 }
 
-// GetStats aggregates historical usage across all repositories.
 func (d *DB) GetStats() (*Stats, error) {
 	repos, err := d.getRepos()
 	if err != nil {
@@ -177,7 +172,6 @@ func stepFindingStats(step *StepResult, rounds []*StepRound) StepStats {
 	return stats
 }
 
-// FixedFindingsByStep returns how many findings were resolved for a single step.
 func (d *DB) FixedFindingsByStep(step *StepResult) (int, error) {
 	stats, err := d.StepFindingStats(step)
 	if err != nil {
@@ -186,7 +180,6 @@ func (d *DB) FixedFindingsByStep(step *StepResult) (int, error) {
 	return stats.FixedFindings, nil
 }
 
-// StepFindingStats returns reported and fixed finding counts for a single step.
 func (d *DB) StepFindingStats(step *StepResult) (StepStats, error) {
 	rounds, err := d.GetRoundsByStep(step.ID)
 	if err != nil {
@@ -195,10 +188,6 @@ func (d *DB) StepFindingStats(step *StepResult) (StepStats, error) {
 	return stepFindingStats(step, rounds), nil
 }
 
-// findingItems returns the findings that count as mistakes. A Test budget cut
-// or an exhausted Review fix-round budget is an operator decision about a
-// budget, not a code mistake, so it is neither reported nor, when a later round
-// no longer carries it, fixed.
 func findingItems(raw *string) []types.Finding {
 	if raw == nil || *raw == "" {
 		return nil

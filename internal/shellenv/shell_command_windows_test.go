@@ -19,17 +19,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// consoleAllocationPolicyBuild is the first Windows build that honors the
-// manifest's consoleAllocationPolicy (Windows 11 24H2, Server 2025).
 const consoleAllocationPolicyBuild = 26100
 
-// TestIsTaskkillAlreadyGone pins down the locale-independent contract the
-// Windows cancel path relies on: taskkill exit code 128 (no matching PID) is
-// the only nonzero exit treated as "the child already exited", so every other
-// nonzero code falls through to the direct-child-kill backstop instead of
-// being swallowed as os.ErrProcessDone. It runs only on Windows; on Linux the
-// windows build tag excludes it from `go test ./...`, while `GOOS=windows go
-// vet` keeps it compile-checked.
 func TestIsTaskkillAlreadyGone(t *testing.T) {
 	tests := []struct {
 		name string
@@ -79,12 +70,6 @@ func TestConfigureCooperativeShellCommandCancelAllowsCleanup(t *testing.T) {
 	assertCooperativeCancelAllowsCleanup(t)
 }
 
-// Issue #1653: the shipped no-mistakes.exe carries the manifest's
-// consoleAllocationPolicy=detached, which also overrides the CREATE_NEW_CONSOLE
-// the cooperative helper is started with. The real binary as helper must still
-// share a console with its target, or CTRL_BREAK never reaches the command and
-// cancellation force-kills it without its cleanup window. The test binary
-// carries no manifest, so only the real build shows this.
 func TestConfigureCooperativeShellCommandCancelAllowsCleanupWithShippedHelper(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds no-mistakes.exe")
@@ -345,8 +330,6 @@ func TestStartShellCommandFailsWhenJobAssignmentFails(t *testing.T) {
 	}
 }
 
-// exitCodeErr runs `cmd /c exit N` and returns the resulting *exec.ExitError so
-// the helper is exercised against a real ProcessState with the chosen code.
 func exitCodeErr(t *testing.T, code int) error {
 	t.Helper()
 	err := exec.Command("cmd", "/c", "exit", strconv.Itoa(code)).Run()
@@ -370,10 +353,6 @@ func (w wrappedErr) Unwrap() error { return w.e }
 
 func wrapErr(e error) error { return wrappedErr{e: e} }
 
-// TestShellCommandGroupActiveAcceptsCleanChildlessExit is the regression for
-// the completion check refusing a leader that exited cleanly and started
-// nothing: the job can still list the console host the leader's console got, or
-// a stale entry for the leader, and neither is a child.
 func TestShellCommandGroupActiveAcceptsCleanChildlessExit(t *testing.T) {
 	cmd := exec.CommandContext(context.Background(), "cmd.exe", "/d", "/c", "exit", "0")
 	ConfigureShellCommand(cmd)
@@ -398,10 +377,6 @@ func TestShellCommandGroupActiveAcceptsCleanChildlessExit(t *testing.T) {
 	}
 }
 
-// TestShellCommandGroupActiveRefusesChildAlivePastWindow keeps the check
-// fail-closed under the re-probe: a child the leader left running is probed
-// until the window ends, then refused - and the verdict names it so the
-// failure identifies the offending process (issue #1614).
 func TestShellCommandGroupActiveRefusesChildAlivePastWindow(t *testing.T) {
 	dir := t.TempDir()
 	ready := filepath.Join(dir, "ready")
@@ -462,10 +437,6 @@ func TestShellCommandGroupActiveRefusesChildAlivePastWindow(t *testing.T) {
 	}
 }
 
-// TestShellCommandGroupActiveAcceptsChildFinishingInsideWindow is the issue
-// #1614 regression on the job-object path: a child that is merely finishing
-// when the leader exits leaves the job inside the settle window, so the
-// bounded re-probe accepts the leader's exit.
 func TestShellCommandGroupActiveAcceptsChildFinishingInsideWindow(t *testing.T) {
 	dir := t.TempDir()
 	ready := filepath.Join(dir, "ready")

@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// appendQuestionLine appends ONE verbatim questions.ndjson line, which is the
-// only way that file is ever written in production: the reviewer agent appends
-// it with its own file tools, so there is no Go writer to reuse. Fixtures spell
-// the JSON out so the shape under test - in particular which fields are ABSENT
-// - is visible at the call site.
 func appendQuestionLine(t *testing.T, dir, line string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -169,10 +164,6 @@ func TestMalformedMinorAndOrphanLinesAreNotedNotFatal(t *testing.T) {
 	}
 }
 
-// TestAppendAnswerRoundTripsAndValidates covers the one writer this package
-// owns. There is deliberately no question-writing counterpart: the reviewer
-// appends questions itself (see the package comment), so the question side's
-// contract is the READER's tolerance, covered by the Load tests.
 func TestAppendAnswerRoundTripsAndValidates(t *testing.T) {
 	dir := Dir(t.TempDir())
 	// The line the reviewer's prompt actually produces: no asked_at, which
@@ -241,16 +232,6 @@ func TestDirIsUnderTheRunEvidenceDirectory(t *testing.T) {
 	}
 }
 
-// TestLoadSupersedingQuestionReopensAnAnsweredEntry is the regression for the
-// way a major question could be silently discarded.
-//
-// Question ids are chosen by the agent - the protocol's worked example is
-// literally "q1" - and the conversation directory is per RUN, so every review
-// turn of a run appends to one file. A cold rereview in a fix round is shown
-// only the OPEN questions, so it reuses "q1" for a genuinely different
-// question. While the edit branch kept the earlier answer attached, that new
-// question arrived pre-answered: Open() was empty, no ask-user finding was
-// emitted, the gate never parked, and the reviewer's question reached nobody.
 func TestLoadSupersedingQuestionReopensAnAnsweredEntry(t *testing.T) {
 	dir := t.TempDir()
 
@@ -304,9 +285,6 @@ func TestLoadSupersedingQuestionReopensAnAnsweredEntry(t *testing.T) {
 	}
 }
 
-// Re-asking a question the reviewer had retracted still revives it, and it
-// comes back OPEN rather than carrying whatever answer preceded the
-// retraction.
 func TestLoadReAskAfterRetractionComesBackOpen(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"keep the legacy route?","options":["keep","remove"],"weight":"major"}`)
@@ -329,10 +307,6 @@ func TestLoadReAskAfterRetractionComesBackOpen(t *testing.T) {
 	}
 }
 
-// TestSettledAsksKeepEveryDecisionForAReusedID is the load half of the
-// re-used-id defect. Entry collapses an id to its latest state, which is what
-// the gate needs, so it cannot supply the earlier (question, answer) pair - and
-// the durable store has to, or a human's decision disappears.
 func TestSettledAsksKeepEveryDecisionForAReusedID(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"Is the legacy route deliberate?","options":["yes","no"],"weight":"major"}`)
@@ -366,8 +340,6 @@ func TestSettledAsksKeepEveryDecisionForAReusedID(t *testing.T) {
 	}
 }
 
-// A correction to the SAME ask still replaces rather than accumulating, so the
-// contract the intent states is unchanged.
 func TestSettledAsksTreatASurplusAnswerAsACorrection(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"keep it?","options":["keep","drop"],"weight":"major"}`)
@@ -392,9 +364,6 @@ func TestSettledAsksTreatASurplusAnswerAsACorrection(t *testing.T) {
 	}
 }
 
-// An id asked twice with only one answer settles NOTHING: the re-ask is still
-// open and the gate must park again, so the earlier ask is not reported settled
-// off the strength of an answer that belongs to it alone.
 func TestSettledAsksLeaveAReAskShortOfAnAnswerOpen(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"first","options":["a","b"],"weight":"major"}`)
@@ -416,18 +385,6 @@ func TestSettledAsksLeaveAReAskShortOfAnAnswerOpen(t *testing.T) {
 	}
 }
 
-// TestASurplusAnswerBindsToItsOwnAskAndLeavesTheReAskOpen is the regression for
-// the hole the ask/answer counting alone left open. A correction sent after an
-// ask was already settled is an ordinary thing to do - axi answer advertises
-// it - and it used to make asks and answers match, so the NEXT re-ask of that
-// id (a cold rereview is shown only the OPEN questions, so it starts numbering
-// at q1 again for a genuinely different question) arrived pre-answered: nothing
-// was open, no question finding was emitted, the gate never parked, and a major
-// question reached nobody.
-//
-// TestSettledAsksTreatASurplusAnswerAsACorrection has the surplus answer with
-// no re-ask, and TestSettledAsksLeaveAReAskShortOfAnAnswerOpen has the re-ask
-// with no surplus; neither exercises the two together.
 func TestASurplusAnswerBindsToItsOwnAskAndLeavesTheReAskOpen(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"Is the legacy route deliberate?","options":["yes","no"],"weight":"major"}`)
@@ -463,15 +420,6 @@ func TestASurplusAnswerBindsToItsOwnAskAndLeavesTheReAskOpen(t *testing.T) {
 	}
 }
 
-// TestAnOrphanAnswerNeverSettlesALaterAskOfThatID is the regression for the
-// last path that pre-answered a genuinely different question. An answer for an
-// id nobody has asked is written UNSTAMPED - there is no ask to stamp - and the
-// positional fallback then handed it to the first LATER ask of that id: the
-// gate never parked and the reviewer's question reached nobody.
-//
-// Ids are the agent's own tiny space, so a mistyped `axi answer --question q7`
-// names an id the reviewer is likely to use later, and the orphan is recorded
-// with no error by design.
 func TestAnOrphanAnswerNeverSettlesALaterAskOfThatID(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"keep the legacy route?","options":["keep","remove"],"weight":"major"}`)
@@ -516,15 +464,6 @@ func TestAnOrphanAnswerNeverSettlesALaterAskOfThatID(t *testing.T) {
 	}
 }
 
-// TestARetractedAskIsNeverSettled covers the answer that lands on a question
-// the reviewer has just withdrawn. The retract line marks the entry retracted
-// but adds no ask and removes none, so the answer is stamped with that ask's
-// ordinal and paired with it - which used to make the withdrawn question a
-// SETTLED one: it was written to review_questions as a standing branch
-// decision nothing deletes, and rendered twice in the PR body, once as an
-// answered pair and once as withdrawn.
-//
-// The answer is still recorded. This is a settling rule, not a refusal.
 func TestARetractedAskIsNeverSettled(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"keep the legacy route?","options":["keep","remove"],"weight":"major"}`)
@@ -552,12 +491,6 @@ func TestARetractedAskIsNeverSettled(t *testing.T) {
 	}
 }
 
-// TestARetractionLeavesAnEarlierSettledAskAlone is the precision half of the
-// rule above. Skipping every ask of a retracted id would drop a decision a
-// human really gave: an id asked, answered, re-asked and then withdrawn inside
-// one turn is recorded once, at the end of that turn, so ask 1's answer would
-// reach no store at all - the same silent loss the ask ordinal joined the
-// durable key to prevent.
 func TestARetractionLeavesAnEarlierSettledAskAlone(t *testing.T) {
 	dir := t.TempDir()
 	appendQuestionLine(t, dir, `{"id":"q1","kind":"question","question":"keep the legacy route?","options":["keep","remove"],"weight":"major"}`)
@@ -583,12 +516,6 @@ func TestARetractionLeavesAnEarlierSettledAskAlone(t *testing.T) {
 	}
 }
 
-// TestLineCapDroppingAQuestionLineSettlesNothing drives the real retention
-// path: the file passes maxLines and its leading lines are dropped, so the
-// history can no longer be read in full and no stamped answer may settle an
-// ask. The dropped prefix may hold an OPEN question that has no Entry here at
-// all, so reporting anything as settled could release the gate on a major
-// question nobody saw.
 func TestLineCapDroppingAQuestionLineSettlesNothing(t *testing.T) {
 	dir := t.TempDir()
 	lines := []string{`{"id":"q1","question":"first ask","options":["a","b"]}`}
@@ -628,10 +555,6 @@ func TestLineCapDroppingAQuestionLineSettlesNothing(t *testing.T) {
 	}
 }
 
-// TestLoadSettlesNothingWhenTheQuestionFileWasNotReadToTheEnd covers the other
-// truncation: a scan that stopped short cannot know an id's later asks, so the
-// last line it saw is not provably the last ask and a stamped answer must not
-// be allowed to report a live question as answered. Fails toward OPEN.
 func TestLoadSettlesNothingWhenTheQuestionFileWasNotReadToTheEnd(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, QuestionsFile,
@@ -657,14 +580,6 @@ func TestLoadSettlesNothingWhenTheQuestionFileWasNotReadToTheEnd(t *testing.T) {
 	}
 }
 
-// TestLoadSettlesNothingWhenTheLineCapDroppedAQuestion is the line bound's half
-// of the same rule. The byte bound stops the scan, so the tail is unseen; the
-// line cap keeps the NEWEST lines and drops a prefix, and Entries are built
-// only from what is retained - so a question whose only line is in that prefix
-// has no Entry, is missing from Open(), is never emitted as a finding, and is
-// absent from the omission marker's id list too, because that list comes from
-// Open(). Both release paths would then see nothing open and release the gate
-// with a major question unanswered.
 func TestLoadSettlesNothingWhenTheLineCapDroppedAQuestion(t *testing.T) {
 	dir := t.TempDir()
 	var lines []string

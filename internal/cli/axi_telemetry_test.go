@@ -7,11 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/telemetry"
 )
 
-// TestAxiMutationCommandsEmitPageviews verifies that state-changing axi
-// commands keep full-fidelity telemetry: a pageview at entry (agent usage
-// parity with the human /tui and /wizard surfaces) plus the command event.
-// The commands fail fast here because the repo is uninitialized, but the
-// pageview fires at command entry before any of that, so it is still recorded.
 func TestAxiMutationCommandsEmitPageviews(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -51,9 +46,6 @@ func TestAxiMutationCommandsEmitPageviews(t *testing.T) {
 	}
 }
 
-// TestAxiReadSurfacesEmitNoTelemetry verifies high-frequency read-only axi
-// surfaces emit neither a pageview nor a command event. Agent polling of
-// these commands was the dominant remote telemetry volume.
 func TestAxiReadSurfacesEmitNoTelemetry(t *testing.T) {
 	cases := []struct {
 		name string
@@ -83,10 +75,6 @@ func TestAxiReadSurfacesEmitNoTelemetry(t *testing.T) {
 	}
 }
 
-// TestReadSurfacesEmitZeroTelemetryUnderPolling reproduces the telemetry
-// firehose: an agent polling axi status/home (and a human looping status/runs)
-// every few seconds. These read-only commands must emit nothing, even across
-// dozens of unchanged polls.
 func TestReadSurfacesEmitZeroTelemetryUnderPolling(t *testing.T) {
 	cases := [][]string{
 		{"axi"},
@@ -116,9 +104,6 @@ func TestReadSurfacesEmitZeroTelemetryUnderPolling(t *testing.T) {
 	}
 }
 
-// TestAxiRunPageviewCarriesFlags verifies the run pageview includes the
-// flag-derived context an analytics surface can segment on, mirroring how the
-// TUI pageview carries entrypoint/run_status.
 func TestAxiRunPageviewCarriesFlags(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("NM_HOME", t.TempDir())
@@ -145,7 +130,6 @@ func TestAxiRunPageviewCarriesFlags(t *testing.T) {
 	}
 }
 
-// Supplied PR text is user content: telemetry records only that it was given.
 func TestAxiRunPageviewRecordsPRTextAsBooleansOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("NM_HOME", t.TempDir())

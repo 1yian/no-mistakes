@@ -13,16 +13,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// consoleAllocationPolicyBuild is the first Windows build that honors the
-// manifest's consoleAllocationPolicy (Windows 11 24H2, Server 2025).
 const consoleAllocationPolicyBuild = 26100
 
-// Issue #1653: Task Scheduler starts the managed daemon without a console to
-// inherit, so Windows used to allocate a visible console window for the
-// console-subsystem binary. The manifest's detached policy must leave the real
-// no-mistakes.exe console-less when a console-less parent starts it without
-// creation flags. The probe observes that from outside, so the product needs
-// no test hook.
 func TestNoMistakesGetsNoConsoleFromAConsolelessParent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds no-mistakes.exe and a GUI-subsystem probe")

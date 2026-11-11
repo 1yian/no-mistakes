@@ -5,14 +5,6 @@ import (
 	"testing"
 )
 
-// fakeGitHubPAT and fakeAWSKey reconstruct GitHub-PAT- and AWS-access-key-
-// shaped test values at runtime via string concatenation instead of storing
-// a literal secret-shaped token in the source tree (a repo-wide public-push
-// scanner flags any contiguous ghp_<20+ alnum> / AKIA<16 alnum> match
-// regardless of context). Concatenation still yields the exact same full
-// string RedactSecrets sees at runtime, so tests using them still prove the
-// redactor catches a genuine, unsplit credential-shaped value - see
-// internal/pipeline/steps/intent_test.go for the sibling fixture.
 var (
 	fakeGitHubPAT = "ghp_" + "abcdefghijklmnopqrstuvwx12"
 	fakeAWSKey    = "AKIA" + "IOSFODNN7EXAMPLE"
@@ -40,16 +32,6 @@ func TestRedactSecrets(t *testing.T) {
 	}
 }
 
-// TestFakeCredentialFixturesStillMatchRealShapes pins that fakeGitHubPAT and
-// fakeAWSKey, despite being built from split literals in source, still
-// reconstruct a full-length, unsplit credential-shaped value at runtime -
-// each fed alone to the production redactSecrets, whole-string redaction
-// (not just a partial match somewhere inside it) proves the concatenated
-// value is recognized as a genuine credential, the same as a real GitHub PAT
-// or AWS access key would be. If a future edit shortens or further splits
-// either fixture so it stops matching the real secretPatterns entries, this
-// fails loudly instead of the redaction tests above silently degrading into
-// testing nothing.
 func TestFakeCredentialFixturesStillMatchRealShapes(t *testing.T) {
 	if got := redactSecrets(fakeGitHubPAT); got != "[REDACTED]" {
 		t.Errorf("fakeGitHubPAT = %q no longer matches a real GitHub PAT shape whole (redactSecrets = %q)", fakeGitHubPAT, got)
@@ -75,10 +57,6 @@ func TestClampMessages_UnderBudget(t *testing.T) {
 	}
 }
 
-// The middle of a long conversation is usually exploratory; the start
-// (original ask) and end (latest state) carry the most signal. With a
-// tight budget that only fits the very ends, the algorithm must keep
-// "first" and "last" and drop everything in between.
 func TestClampMessages_KeepsStartAndEnd(t *testing.T) {
 	const middleSize = 200 // each middle message is 200 bytes
 	msgs := []Message{
@@ -119,10 +97,6 @@ func TestClampMessages_KeepsStartAndEnd(t *testing.T) {
 	}
 }
 
-// With a generous budget, the alternating-from-edges fill should reach
-// inward and keep more than just first/last. Sanity-check that the
-// algorithm uses available budget rather than always stopping at the
-// outermost pair.
 func TestClampMessages_FillsBudgetFromEdges(t *testing.T) {
 	msgs := []Message{
 		{Role: RoleUser, Text: "AAA"},
@@ -167,8 +141,6 @@ func TestClampMessages_NoMarkerWhenNothingDropped(t *testing.T) {
 	}
 }
 
-// Pathological case: a single message larger than the entire budget.
-// Falls back to the last message, byte-truncated.
 func TestClampMessages_SingleHugeMessage(t *testing.T) {
 	huge := strings.Repeat("x", 10_000)
 	msgs := []Message{{Text: huge}}
@@ -181,9 +153,6 @@ func TestClampMessages_SingleHugeMessage(t *testing.T) {
 	}
 }
 
-// Synthetic markers must preserve the semantic ordering: kept prefix,
-// then marker, then kept suffix. Anything else would scramble the
-// chronology the LLM relies on.
 func TestClampMessages_MarkerSitsBetweenPrefixAndSuffix(t *testing.T) {
 	msgs := []Message{
 		{Role: RoleUser, Text: "FIRST"},

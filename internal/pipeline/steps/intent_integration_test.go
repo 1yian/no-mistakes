@@ -17,7 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// fakeIntentAgent always returns a canned summary - bypasses any real LLM.
 type fakeIntentAgent struct{}
 
 func (f *fakeIntentAgent) Name() string { return "fake" }
@@ -29,9 +28,6 @@ func (f *fakeIntentAgent) Run(_ context.Context, _ agent.RunOpts) (*agent.Result
 }
 func (f *fakeIntentAgent) Close() error { return nil }
 
-// initIntentRepo creates a real git repo with two commits and writes a
-// matching Claude transcript fixture into a fake $HOME so the default
-// intent extractor has something to discover.
 func initIntentRepo(t *testing.T) (repoDir, fakeHome, base, head string) {
 	t.Helper()
 	repoDir = t.TempDir()
@@ -385,11 +381,6 @@ func TestIntentStep_Integration_UsesPipelineWorkDirForGitState(t *testing.T) {
 	}
 }
 
-// After a force push, Run.BaseSHA is the prior remote tip of the branch, which
-// may be unreachable in the worktree (rewritten away or never fetched). The
-// step must fall back to merge-base against the default branch instead of
-// trusting the orphaned SHA, otherwise `git diff <orphaned>..<head>` fails
-// with "Invalid revision range" and intent silently skips.
 func TestIntentStep_Integration_ForcePushedOrphanedBaseSHA(t *testing.T) {
 	repoDir, fakeHome, _, _ := initIntentRepo(t)
 	withFakeHome(t, fakeHome)
@@ -401,8 +392,6 @@ func TestIntentStep_Integration_ForcePushedOrphanedBaseSHA(t *testing.T) {
 	gitCmd(t, repoDir, "commit", "-m", "feature head")
 	branchHead := gitCmd(t, repoDir, "rev-parse", "HEAD")
 
-	// Simulate a force-pushed branch: BaseSHA is a non-zero, non-existent
-	// commit (the previous remote tip that got rewritten away).
 	const orphanedBaseSHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	cfg := &config.Config{Intent: config.Intent{Enabled: true, Threshold: 0.1, SlackDays: 3}}
 	sctx := newIntentIntegrationContext(t, repoDir, orphanedBaseSHA, branchHead, cfg)
@@ -424,7 +413,6 @@ func TestIntentStep_Integration_ForcePushedOrphanedBaseSHA(t *testing.T) {
 	}
 }
 
-// Ensure the step honors its internal timeout by not hanging beyond it.
 func TestIntentStep_Integration_RespectsTimeout(t *testing.T) {
 	repoDir, fakeHome, base, head := initIntentRepo(t)
 	withFakeHome(t, fakeHome)

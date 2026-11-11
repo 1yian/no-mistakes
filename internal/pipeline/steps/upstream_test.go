@@ -12,8 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 )
 
-// minimalStepContext builds a StepContext with just enough fields for the
-// upstream-resolution helpers, without spinning up a database.
 func minimalStepContext(t *testing.T, workDir, upstreamURL string) *pipeline.StepContext {
 	t.Helper()
 	return &pipeline.StepContext{
@@ -23,11 +21,6 @@ func minimalStepContext(t *testing.T, workDir, upstreamURL string) *pipeline.Ste
 	}
 }
 
-// TestResolveUpstreamURL_PreservesCredential is the "pushes keep working" half
-// of the redaction fix: the DB stores a redacted URL, but the credential must
-// still reach the git push/ls-remote argv. The credential is recovered from the
-// worktree's "origin" remote (inherited from the gate's bare repo), so
-// resolveUpstreamURL must return the full credentialled URL verbatim.
 func TestResolveUpstreamURL_PreservesCredential(t *testing.T) {
 	t.Parallel()
 	const token = "ghp_secret_DO_NOT_LEAK"
@@ -128,10 +121,6 @@ func TestRunUpstreamFetchUsesRefreshedRegistration(t *testing.T) {
 	}
 }
 
-// TestResolveUpstreamURL_FallsBackToRecordedURL verifies that when a worktree
-// has no resolvable "origin" remote, resolveUpstreamURL falls back to the repo
-// record's upstream URL (the path old gates whose DB still carries the full URL
-// take).
 func TestResolveUpstreamURL_FallsBackToRecordedURL(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -146,14 +135,6 @@ func TestResolveUpstreamURL_FallsBackToRecordedURL(t *testing.T) {
 	}
 }
 
-// TestResolveBranchBaseSHA_FetchesFreshBaseTipBeforeMergeBase reproduces
-// kunchenguid/no-mistakes#997: a worktree's cached origin/<base> ref can be
-// stale relative to the live base branch, so computing merge-base against it
-// picks an ancestor further back than the branch's real cut point and pulls
-// commits that already landed on the base into the PR's drafted diff.
-// resolveBranchBaseSHA must fetch the base branch's current remote tip first
-// (the same pattern resolveRunDefaultBranchTip already uses) and compute
-// merge-base against that fresh tip, not the worktree's stale cached ref.
 func TestResolveBranchBaseSHA_FetchesFreshBaseTipBeforeMergeBase(t *testing.T) {
 	t.Parallel()
 
@@ -224,12 +205,6 @@ func TestResolveBranchBaseSHA_FetchesFreshBaseTipBeforeMergeBase(t *testing.T) {
 	}
 }
 
-// TestResolveBranchBaseSHA_FetchFailureIsRefusedNotStaleFallback covers the
-// gap kunchenguid flagged on PR #1147 (issue #997's follow-up): a base-branch
-// fetch failure (network/auth/etc) must not silently fall back to whatever
-// stale origin/<base> ref is already cached in the worktree, since that
-// reintroduces the exact stale-base bug this helper exists to eliminate, one
-// layer down. resolveBranchBaseSHA must surface the fetch error instead.
 func TestResolveBranchBaseSHA_FetchFailureIsRefusedNotStaleFallback(t *testing.T) {
 	t.Parallel()
 
@@ -285,9 +260,6 @@ func TestResolveBranchBaseSHA_FetchFailureIsRefusedNotStaleFallback(t *testing.T
 	}
 }
 
-// TestResolvePushURL_ForkWinsOverCredential confirms the fork URL takes
-// precedence when set (fork-based contribution flow), since fork URLs carry no
-// embedded credentials today.
 func TestResolvePushURL_ForkWinsOverCredential(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -302,17 +274,6 @@ func TestResolvePushURL_ForkWinsOverCredential(t *testing.T) {
 	}
 }
 
-// TestResolveBranchBaseSHA_EvalReplayResolvesWithoutAnUpstreamFetch pins the
-// guard that keeps eval replay off the network. An eval replay worktree is
-// restored from a captured case with the base pinned in
-// refs/remotes/origin/main and no configured remote behind it, so #1147's
-// unconditional fetchRunUpstreamBranch (first shipped in v1.83.0) made every
-// replayed review step fail with `git fetch --no-tags "" +refs/heads/main:
-// refs/remotes/origin/main: exit status 128` - reported as all codex cases
-// failing case-material prep. bff2d06 (v1.85.3, #1236) skipped the fetch for
-// EvalReplay contexts but landed without a test, so this pins both sides: the
-// replay resolves against the pinned ref, and a live gate context still
-// refuses to resolve rather than trusting a stale ref when the fetch fails.
 func TestResolveBranchBaseSHA_EvalReplayResolvesWithoutAnUpstreamFetch(t *testing.T) {
 	t.Parallel()
 	seed := t.TempDir()

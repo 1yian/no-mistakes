@@ -11,8 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// wantBlock builds the exact rendered block for one rule so assertions compare
-// full expected output rather than checking that a substring is present.
 func wantBlock(path, files, instructions string) string {
 	return config.ReviewPathInstructionsPathLabel + path + "\n" +
 		config.ReviewPathInstructionsFilesLabel + files + "\n" +
@@ -187,10 +185,6 @@ func assertIDs(t *testing.T, label string, got, want []string) {
 	}
 }
 
-// Selection of trusted rules must not depend on ignore_patterns, which comes
-// from the pushed branch. Without this, a contributor suppresses a maintainer's
-// rule from the review of their own branch by adding that rule's glob to their
-// ignore list.
 func TestMatchPathInstructions_PushedIgnorePatternsCannotSuppressTrustedRule(t *testing.T) {
 	t.Parallel()
 
@@ -240,17 +234,6 @@ func TestChangedPathList(t *testing.T) {
 	}
 }
 
-// TestChangedPathList_RenameAndUnusualNames runs real git for the two properties
-// only real git output can prove: --no-renames emits both endpoints of a rename,
-// so a file moved out of a governed subtree still runs that subtree's rule, and
-// -z emits raw paths, so a name git would C-quote for display reaches path.Match
-// as the name itself.
-//
-// The strongest unusual name also carries a control character, which is what
-// breaks splitting the payload on newlines. Win32 forbids characters 1-31 in file
-// names, so on Windows that name cannot exist on disk and the non-ASCII half
-// carries the case; the escaping contract for a control-character name is pinned
-// on every platform by TestMatchedFilesSummary_EscapesNonGraphicPaths.
 func TestChangedPathList_RenameAndUnusualNames(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := setupGitRepo(t)
@@ -300,10 +283,6 @@ func TestChangedPathList_RenameAndUnusualNames(t *testing.T) {
 	}
 }
 
-// The renderer escapes a path only when it carries a non-graphic character and
-// leaves every other path byte for byte. Windows cannot hold a control-character
-// file name, so this is where that half of the contract is pinned on every
-// platform.
 func TestMatchedFilesSummary_EscapesNonGraphicPaths(t *testing.T) {
 	t.Parallel()
 
@@ -316,10 +295,6 @@ func TestMatchedFilesSummary_EscapesNonGraphicPaths(t *testing.T) {
 	}
 }
 
-// TestReviewPathInstructionsSection_EmptyWithoutMatches pins the no-op
-// guarantee: with nothing configured, or nothing matching, the section is the
-// empty string exactly, so the prompt gains no heading, no blank line, and no
-// trailing whitespace.
 func TestReviewPathInstructionsSection_EmptyWithoutMatches(t *testing.T) {
 	t.Parallel()
 
@@ -351,9 +326,6 @@ func TestReviewPathInstructionsSection_EmptyWithoutMatches(t *testing.T) {
 	}
 }
 
-// Every injected block must name the glob it came from and the files it matched,
-// so a rule scoped to one directory can never read as a repository-wide
-// instruction in a mixed diff.
 func TestReviewPathInstructionsSection_LabelsEveryBlockWithItsScope(t *testing.T) {
 	t.Parallel()
 
@@ -401,9 +373,6 @@ func TestReviewPathInstructionsSection_SingleMatchRendersExactly(t *testing.T) {
 	}
 }
 
-// A broad glob must not push the section past the size the config was validated
-// against, so the file list truncates deterministically and says how many files
-// it left out.
 func TestMatchedFilesSummary_TruncatesWithinAllowance(t *testing.T) {
 	t.Parallel()
 
@@ -437,9 +406,6 @@ func TestMatchedFilesSummary_TruncatesWithinAllowance(t *testing.T) {
 	}
 }
 
-// The config-time byte cap has to measure the real assembled section, otherwise
-// it does not bound what is injected. This is the drift check between the
-// accounting in internal/config and this renderer.
 func TestReviewPathInstructionsSectionStaysWithinAccountedBytes(t *testing.T) {
 	t.Parallel()
 
@@ -475,9 +441,6 @@ func TestReviewPathInstructionsSectionStaysWithinAccountedBytes(t *testing.T) {
 	}
 }
 
-// The combined budget check measures every source under its own heading, so the
-// sections the review step renders for all sources together must stay within
-// config.Review.PathInstructionsPromptBytes.
 func TestReviewPathInstructionSourcesStayWithinAccountedBytes(t *testing.T) {
 	t.Parallel()
 
@@ -524,11 +487,6 @@ func TestReviewPathInstructionSourcesStayWithinAccountedBytes(t *testing.T) {
 	}
 }
 
-// Instruction text config accepts must survive prompt rendering, and text config
-// rejects must be exactly the text that would render empty. This pins the
-// agreement between validation in internal/config and the sanitizer this package
-// applies, which is what makes an empty-rendering rule fail closed at parse time
-// rather than vanish from the prompt.
 func TestPathInstructionRenderingAgreesWithConfigValidation(t *testing.T) {
 	t.Parallel()
 
@@ -639,7 +597,6 @@ func TestLogPathInstructions(t *testing.T) {
 		}
 	}
 
-	// Nothing configured logs nothing, so a quiet step log means no rules.
 	var quiet []string
 	logPathInstructions(func(s string) { quiet = append(quiet, s) }, "trusted", pathInstructionMatches{})
 	if len(quiet) != 0 {
@@ -647,9 +604,6 @@ func TestLogPathInstructions(t *testing.T) {
 	}
 }
 
-// TestEvidence_ReviewPathInstructionsMatchedPrompt records the assembled review
-// prompt section for a mixed diff: one glob matches, a second matches a
-// different file, and a third matches nothing. Every block names its own scope.
 func TestEvidence_ReviewPathInstructionsMatchedPrompt(t *testing.T) {
 	t.Parallel()
 	rules := []config.PathInstruction{

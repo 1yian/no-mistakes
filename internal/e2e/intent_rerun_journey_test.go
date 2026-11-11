@@ -11,10 +11,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestRerunIntentProvenanceJourney drives the public CLI through both rerun
-// defaults and both explicit overrides. The assertions inspect the persisted
-// intent and the intent-step log so a rerun cannot silently switch from
-// inheritance to transcript inference.
 func TestRerunIntentProvenanceJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: writeIntentScenario(t)})
 	if out, err := h.Run("init"); err != nil {

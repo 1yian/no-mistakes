@@ -515,14 +515,6 @@ func TestGetChecksFetchesJobsForMatchingHeadRun(t *testing.T) {
 	}
 }
 
-// TestGetChecksIgnoresAnotherBranchsRunThatSharesTheHeadSHA guards against
-// cross-branch/cross-PR misattribution: a higher-ID push-triggered run on an
-// unrelated branch must never be treated as a match candidate for this PR,
-// even though runJobsMatchingHeadSHA would otherwise try it first (highest
-// ID first). The unrelated run's jobs endpoint is deliberately left
-// unstubbed, so if the branch pre-filter in runJobsMatchingHeadSHA failed to
-// drop it, this test would fail on the resulting "unexpected command" error
-// instead of just picking the wrong result.
 func TestGetChecksIgnoresAnotherBranchsRunThatSharesTheHeadSHA(t *testing.T) {
 	t.Parallel()
 
@@ -551,19 +543,6 @@ func TestGetChecksIgnoresAnotherBranchsRunThatSharesTheHeadSHA(t *testing.T) {
 	}
 }
 
-// TestGetChecksWithMissingHeadSHANeverMatchesAnotherPRsRun guards the one
-// case highest-ID-first search cannot disambiguate by commit at all: the
-// PR's own head SHA is unavailable (view.HeadSHA empty), so
-// runJobsMatchingHeadSHA falls back to the newest run in its already-scoped
-// candidate list. Before matching scoped on pull_requests[].number, that
-// candidate list was every pull_request-triggered run in the repo (branch
-// name cannot screen them - see listRuns), so a higher-ID run belonging to a
-// completely different PR (11) could be selected and reported as PR 7's own
-// checks, including a green PR 11 did not earn for PR 7. PR 11's run is the
-// higher id and is listed first, and its jobs endpoint is deliberately left
-// unstubbed: if PR-number scoping ever regressed back to a bare highest-ID
-// search, this test fails on an "unexpected command" error rather than
-// silently reporting the wrong PR's result.
 func TestGetChecksWithMissingHeadSHANeverMatchesAnotherPRsRun(t *testing.T) {
 	t.Parallel()
 
@@ -589,16 +568,6 @@ func TestGetChecksWithMissingHeadSHANeverMatchesAnotherPRsRun(t *testing.T) {
 	}
 }
 
-// TestGetChecksFindsPullRequestTriggeredRunByPRNumber reproduces a real
-// Gitea instance's behavior for a pull_request-triggered Actions run: the
-// run carries no usable branch name of its own (Gitea's run-list endpoints
-// either report head_branch as the literal "#<PR number>" or omit it
-// entirely - confirmed against a live Gitea 1.27.3 server), so the one
-// authoritative signal Gitea provides for this case is the run's own
-// pull_requests[].number. Before listRuns started reading that field, such a
-// run was invisible to GetChecks no matter how long the PR's checks ran,
-// which read as "no CI checks reported yet" forever rather than a passing or
-// failing result.
 func TestGetChecksFindsPullRequestTriggeredRunByPRNumber(t *testing.T) {
 	t.Parallel()
 
@@ -957,8 +926,6 @@ func TestGenerationProbeRunsOnce(t *testing.T) {
 	}
 }
 
-// countProbes wraps factory and counts the generation probes (the two
-// `--help` argvs) it is asked to build.
 func countProbes(factory CmdFactory, probes *atomic.Int32) CmdFactory {
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		if key := name + " " + strings.Join(args, " "); key == tea0Probe || key == tea1Probe {
@@ -971,9 +938,6 @@ func countProbes(factory CmdFactory, probes *atomic.Int32) CmdFactory {
 func TestGenerationProbeRunsOnceAcrossConcurrentCalls(t *testing.T) {
 	t.Parallel()
 
-	// Every PR/CI operation on a shared Host resolves the generation first,
-	// so concurrent first calls must share one probe, not race to run their
-	// own (or race on the cached answer, which -race reports).
 	var probes atomic.Int32
 	host := New(countProbes(giteaTestCmdFactory(map[string]giteaTestResponse{
 		tea1Probe: {},
@@ -1008,10 +972,6 @@ func TestGenerationProbeRunsOnceAcrossConcurrentCalls(t *testing.T) {
 func TestGenerationProbeCancelledIsNotCached(t *testing.T) {
 	t.Parallel()
 
-	// A probe cut short by its caller's cancellation says nothing about the
-	// binary: it must surface the context error (not "unrecognized tea CLI",
-	// and not fall through to the tea 0.x probe), and the next call with a
-	// live context must probe again rather than reuse that failed attempt.
 	var probes atomic.Int32
 	factory := countProbes(giteaTestCmdFactory(map[string]giteaTestResponse{
 		tea1Probe: {},
@@ -1043,9 +1003,6 @@ func TestGenerationProbeCancelledIsNotCached(t *testing.T) {
 func TestGenerationProbeUnrecognizedIsNotCached(t *testing.T) {
 	t.Parallel()
 
-	// "unrecognized tea CLI" must not stick: once the binary answers a probe
-	// (e.g. the operator installed a real tea), the next call re-probes and
-	// proceeds instead of refusing for the rest of the Host's life.
 	var probes atomic.Int32
 	var answering atomic.Bool
 	unrecognized := giteaTestCmdFactory(map[string]giteaTestResponse{
@@ -1201,10 +1158,6 @@ const (
 	tea0Probe = "tea pulls list --output json --help"
 )
 
-// giteaTestCmdFactory answers each command from responses and fails any other
-// with exit 1. tea 0.x's generation probe succeeds unless responses overrides
-// it, so a test that names no generation exercises tea 0.x; a tea 1.0 test
-// answers tea1Probe, which is tried first.
 func giteaTestCmdFactory(responses map[string]giteaTestResponse) CmdFactory {
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		key := strings.TrimSpace(name + " " + strings.Join(args, " "))

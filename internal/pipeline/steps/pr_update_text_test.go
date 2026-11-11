@@ -380,8 +380,6 @@ func mustRead(t *testing.T, path string) []byte {
 	return data
 }
 
-// Keep mode with no template owns the created body's appendix, so the public
-// Intent section must survive whichever drafting path produced the narrative.
 func TestPRUpdateTextKeepOnCreatePublishesIntentOnEveryDraftPath(t *testing.T) {
 	t.Parallel()
 	const intent = "Keep the published intent on every path."
@@ -432,7 +430,6 @@ const (
 	suppliedPRBodyText  = "Detects plaintext cf profiles.\n\n## Testing\n\nRan it against a keyring profile by hand.\n"
 )
 
-// suppliedPRContext is a create-path PR step whose run carries supplied text.
 func suppliedPRContext(t *testing.T, ag *mockAgent, title, body string, branches ...string) (*pipeline.StepContext, []string, string) {
 	t.Helper()
 	dir, baseSHA, headSHA := setupGitRepo(t)

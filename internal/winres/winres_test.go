@@ -41,11 +41,6 @@ type resource struct {
 	data          []byte
 }
 
-// readResources walks the three-level resource tree (type, name, language)
-// that starts at rva inside the PE or COFF section sect and returns every
-// leaf. Directory entry offsets are relative to the tree's start; a data
-// entry's OffsetToData is an RVA, which in an unlinked object is the
-// section-relative addend of its ADDR32NB relocation.
 func readResources(t *testing.T, sect *pe.Section, rva uint32) []resource {
 	t.Helper()
 	raw, err := sect.Data()
@@ -141,10 +136,6 @@ func TestObjectCarriesOnlyTheManifest(t *testing.T) {
 	}
 }
 
-// The committed objects are binary blobs that every Windows build links, so a
-// plain `go test` run must catch drift too, not only `make lint`. They were
-// rendered in another process at another time, so this test (with
-// `genwinres --check`) is also the determinism oracle for the generator.
 func TestCommittedObjectsMatchGenerator(t *testing.T) {
 	for _, target := range Targets {
 		got, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(target.ObjectPath())))
@@ -195,8 +186,6 @@ var (
 	buildCache = map[string]string{}
 )
 
-// buildNoMistakes builds cmd/no-mistakes for windows/goarch once per test
-// process, exactly as `make dist` does apart from version stamping.
 func buildNoMistakes(t *testing.T, goarch string) string {
 	t.Helper()
 	buildMu.Lock()

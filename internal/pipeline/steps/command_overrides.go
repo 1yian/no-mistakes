@@ -19,8 +19,6 @@ func declareCommandOverrides(sctx *pipeline.StepContext, name string) {
 	}
 }
 
-// declareStepCommandOverrides declares a Test or Lint step's overrides once per
-// step: a fix round re-executes the step into the same step log.
 func declareStepCommandOverrides(sctx *pipeline.StepContext, name string) {
 	if !sctx.Fixing {
 		declareCommandOverrides(sctx, name)
@@ -31,8 +29,6 @@ func executeRepositoryCommand(sctx *pipeline.StepContext, name, command string) 
 	return runShellCommandWithPriority(sctx.Ctx, sctx.WorkDir, configuredCommandEnvironment(sctx), command, sctx.Config.CommandOverrides[name].Nice)
 }
 
-// commandOverrideDeclaration states every machine-local override applied to a
-// command so a result produced under one is never presented as a plain run.
 func commandOverrideDeclaration(name string, override config.CommandOverride) string {
 	var parts []string
 	if override.Nice != 0 {
@@ -51,8 +47,6 @@ func commandOverrideDeclaration(name string, override config.CommandOverride) st
 	return fmt.Sprintf("machine-local overrides applied to commands.%s: %s", name, strings.Join(parts, "; "))
 }
 
-// checkResult is one configured check's own outcome, so a machine-local
-// check's failure is never attributed to the repository's command.
 type checkResult struct {
 	Command  string
 	Local    bool
@@ -77,8 +71,6 @@ func failedChecks(results []checkResult) []checkResult {
 	return failed
 }
 
-// runConfiguredChecks runs the repository command (when nonempty) followed by
-// the operator's machine-local additional checks for name.
 func runConfiguredChecks(sctx *pipeline.StepContext, name, command string) (string, []checkResult, error) {
 	override := sctx.Config.CommandOverrides[name]
 	checks := []checkResult{}

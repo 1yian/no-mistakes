@@ -85,9 +85,6 @@ func TestGetMergeableStateTreatsBlockedStatusesAsResolved(t *testing.T) {
 	}
 }
 
-// checksFixture is the command map a project-scoped GitLab checks read needs:
-// the merge request view carrying the head pipeline, the pipeline's job page,
-// the pipeline's trigger jobs, and the merge request's external status checks.
 func checksFixture(headPipeline, jobs, triggerJobs, statusChecks string) map[string]gitlabTestResponse {
 	return map[string]gitlabTestResponse{
 		"glab mr view 123 --output json": {
@@ -696,12 +693,6 @@ func TestFindPRWithoutIIDKeepsNumberEmptyAndUpdatesByNumberFromURL(t *testing.T)
 	}
 }
 
-// TestUpdatePRDoesNotPassUnsupportedYesFlag guards against reintroducing
-// -y/--yes on `glab mr update`: unlike `glab mr create`, glab v1.5x's
-// `mr update` has no such flag, so passing it fails the whole command with
-// "unknown flag: --yes" and every UpdatePR call errors. The fake CmdFactory
-// below matches by exact command string, so a regression here would hit the
-// "unexpected command" fallback and surface as an UpdatePR error.
 func TestUpdatePRDoesNotPassUnsupportedYesFlag(t *testing.T) {
 	t.Parallel()
 
@@ -1002,13 +993,6 @@ func TestFetchFailedCheckLogsParsesMRJSONAfterPreamble(t *testing.T) {
 	}
 }
 
-// A blocking manual job (`when: manual` with `allow_failure: false`) stops the
-// pipeline at its stage until a person runs it, and GitLab's merge
-// rules treat that pipeline as unfinished. Reading it as a skip let a merge
-// request report ready while GitLab would refuse to merge it, so it is a
-// pending check marked as the human wait it is. An optional manual job
-// (`allow_failure: true`, the default outside `rules`) is one GitLab does not
-// wait for and keeps its skip.
 func TestParseGitlabJobsHonorsManualJobPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -1045,10 +1029,6 @@ func TestParseGitlabJobsHonorsManualJobPolicy(t *testing.T) {
 	}
 }
 
-// A pipeline stopped at a blocking manual job reports `manual`, and the
-// aggregate row built for it carries the same human wait as the job row: named,
-// pending, and never read as work in flight. The row is still omitted when
-// another check already reports the same bucket.
 func TestPipelineAggregateCarriesTheManualJobWait(t *testing.T) {
 	t.Parallel()
 
@@ -1068,10 +1048,6 @@ func TestPipelineAggregateCarriesTheManualJobWait(t *testing.T) {
 	}
 }
 
-// A trigger job that starts a downstream pipeline can itself be a blocking
-// manual job, and GitLab reports its status like any other job's. It carries
-// the same human wait, so the CI step waits on the person instead of treating
-// it as work in flight; an optional manual trigger job stays a skip.
 func TestTriggerJobsCarryTheManualJobWait(t *testing.T) {
 	t.Parallel()
 
@@ -1381,11 +1357,6 @@ func TestGetChecksSurfacesErrorWhenPaginatedPageIsCorrupt(t *testing.T) {
 	}
 }
 
-// unboundChecksFixture is the command map an unbound checks read (no delivered
-// commit to bind to) needs: the merge request with its head pipeline, and the
-// job list on either the paginated REST route (project path known) or the
-// porcelain one. The REST route also answers the trigger-job and external
-// status-check reads the composed observation makes.
 func unboundChecksFixture(jobsOutput string, rest bool) map[string]gitlabTestResponse {
 	responses := map[string]gitlabTestResponse{
 		"glab mr view 123 --output json": {stdout: `{"iid":123,"head_pipeline":{"id":77,"status":"success"}}`},
@@ -1400,9 +1371,6 @@ func unboundChecksFixture(jobsOutput string, rest bool) map[string]gitlabTestRes
 	return responses
 }
 
-// withEmptyCoverageRoutes adds the answers an instance with neither trigger
-// jobs nor external status checks reports, for a bound fixture map whose check
-// read runs with a known project path.
 func withEmptyCoverageRoutes(responses map[string]gitlabTestResponse) map[string]gitlabTestResponse {
 	responses["glab api --paginate projects/group%2Fproject/pipelines/77/trigger_jobs"] = gitlabTestResponse{stdout: "[]"}
 	responses["glab api --paginate projects/group%2Fproject/merge_requests/123/status_checks"] = gitlabTestResponse{stdout: "[]"}
@@ -1503,8 +1471,6 @@ func TestGetChecksRequiresExplicitPipelineMetadata(t *testing.T) {
 	}
 }
 
-// The subprocess stream contract keeps diagnostics out of successful job JSON
-// and retains them on failure. Mixing the streams would reject the build job.
 func TestGetChecksSeparatesJobJSONFromStderr(t *testing.T) {
 	t.Parallel()
 
@@ -1543,9 +1509,6 @@ func TestGetChecksSeparatesJobJSONFromStderr(t *testing.T) {
 	}
 }
 
-// The commit identities the head-binding tests reason about: the commit a run
-// is delivering, one it is not, one the source branch moved to mid-read, and
-// the temporary merged commit GitLab builds a merged-results pipeline on.
 const (
 	deliveredSHA = "aaaa000000000000000000000000000000000001"
 	otherSHA     = "bbbb000000000000000000000000000000000002"
@@ -1554,9 +1517,6 @@ const (
 	targetSHA    = "eeee000000000000000000000000000000000005"
 )
 
-// gitlabMRAtHead renders a merge request whose source commit is sourceSHA and
-// whose head pipeline (77) ran at pipelineSHA for pipelineRef. An empty
-// pipelineSHA omits the pipeline entirely.
 func gitlabMRAtHead(sourceSHA, pipelineSHA, pipelineRef string) gitlabTestResponse {
 	pipeline := "null"
 	if pipelineSHA != "" {
@@ -1565,12 +1525,6 @@ func gitlabMRAtHead(sourceSHA, pipelineSHA, pipelineRef string) gitlabTestRespon
 	return gitlabTestResponse{stdout: fmt.Sprintf(`{"iid":123,"sha":%q,"head_pipeline":%s}`+"\n", sourceSHA, pipeline)}
 }
 
-// TestGetChecksRejectsAHeadPipelineThatRanAtADifferentCommit is the reported
-// case in its simplest shape: the merge request's source commit is the head
-// being delivered, but its head pipeline ran at another commit and holds green
-// jobs. GitLab only replaces the head-pipeline pointer once a pipeline for the
-// newer revision exists, so an old pipeline's green jobs must never be
-// reported as the delivered commit's checks.
 func TestGetChecksRejectsAHeadPipelineThatRanAtADifferentCommit(t *testing.T) {
 	t.Parallel()
 
@@ -1955,11 +1909,6 @@ func TestGetChecksRejectsAMergedResultsPipelineWhoseCommitIsNotACommitID(t *test
 	}
 }
 
-// TestGetChecksRejectsAHeadPipelineStrandedByAHeadMoveWithoutAPipeline mirrors a
-// live reproduction: the branch head moved to a commit for which the project's
-// CI rules created no pipeline at all, so GitLab left the merge request's
-// head_pipeline on the pipeline the previous commit ran at. A run delivering
-// the new head must not read that pipeline's verdict or its failed job's trace.
 func TestGetChecksRejectsAHeadPipelineStrandedByAHeadMoveWithoutAPipeline(t *testing.T) {
 	t.Parallel()
 
@@ -2000,11 +1949,6 @@ func TestGetChecksRejectsAHeadPipelineStrandedByAHeadMoveWithoutAPipeline(t *tes
 	}
 }
 
-// TestFetchFailedCheckTargetLogsRejectsAHeadMoveDuringLogRetrieval covers the
-// second read: the traces are fetched for a pipeline proven to belong to the
-// delivered commit, and a source revision that moved while they were being
-// fetched must invalidate them rather than leave the caller with another
-// commit's logs.
 func TestFetchFailedCheckTargetLogsRejectsAHeadMoveDuringLogRetrieval(t *testing.T) {
 	t.Parallel()
 
@@ -2051,10 +1995,6 @@ func gitlabTestCmdFactory(responses map[string]gitlabTestResponse) CmdFactory {
 	}
 }
 
-// gitlabSequenceCmdFactory serves a queue of responses per command line: a
-// command with several queued responses gets them in order, and the last one
-// repeats after the queue is exhausted. Tests that must observe two different
-// reads of the same command within one call use it.
 func gitlabSequenceCmdFactory(t *testing.T, responses map[string][]gitlabTestResponse) CmdFactory {
 	t.Helper()
 	var mu sync.Mutex
@@ -2079,8 +2019,6 @@ func gitlabSequenceCmdFactory(t *testing.T, responses map[string][]gitlabTestRes
 	}
 }
 
-// gitlabTestHelperCmd re-executes the test binary as its own fake glab, so the
-// adapter runs a real process with the faked stdout/stderr/exit code.
 func gitlabTestHelperCmd(ctx context.Context, key string, response gitlabTestResponse) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestGitlabHelperProcess", "--", key)
 	cmd.Env = append(os.Environ(),

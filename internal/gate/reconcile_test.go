@@ -472,10 +472,6 @@ func TestReconcileStaleBranchDecision41AExactSubmittedHeadOnly(t *testing.T) {
 	}
 }
 
-// After a run's first publication the mirror carries its last pushed head, not
-// the submitted one. Decision 41-A exempts that exact head too, so a reviewed
-// conflict rebase of a published run can replace it; everything else on the
-// mirror keeps the full preservation proof.
 func TestReconcileStaleBranchDecision41AExactLastPushedHead(t *testing.T) {
 	for _, variant := range []string{"exact", "submitted_only", "abbreviated", "external_on_published", "divergent", "descendant_of_live", "fresh_submission"} {
 		t.Run(variant, func(t *testing.T) {
@@ -615,15 +611,6 @@ func TestReconcileStaleBranchRefusesPatchesDiscardedByOursMerge(t *testing.T) {
 	}
 }
 
-// TestReconcileStaleBranchRebasedEquivalentsSurviveALaterEdit covers a private
-// head whose commits were rebased onto a moved base and then edited by a later
-// live commit. Merging the private head into the live head conflicts, which
-// alone used to refuse every commit, although the rebased copies carry the
-// same stable patch IDs and the later commit only changed their lines. A later
-// commit that reverts the rebased copy instead still refuses: a hunk that
-// merges cleanly is content the live head lacks. So does a rebased copy found
-// only on a side branch an ours merge discarded while the mainline wrote the
-// same lines differently: survival is proven on first-parent history only.
 func TestReconcileStaleBranchRebasedEquivalentsSurviveALaterEdit(t *testing.T) {
 	for _, later := range []string{"edit", "revert", "merged_away"} {
 		t.Run(later, func(t *testing.T) {
@@ -687,11 +674,6 @@ func reconcileGitAllowFail(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// TestReconcileStaleBranchRebasedAcrossContextDrift covers a private commit
-// rebased cleanly onto a base that edited its file within diff context. The
-// rebased copy's stable patch ID differs, but merging the private head into the
-// live head is clean and leaves the live tree unchanged, which proves it
-// contained. A live head that then reverted the rebased copy still refuses.
 func TestReconcileStaleBranchRebasedAcrossContextDrift(t *testing.T) {
 	for _, later := range []string{"kept", "reverted"} {
 		t.Run(later, func(t *testing.T) {
@@ -742,14 +724,6 @@ func TestReconcileStaleBranchRebasedAcrossContextDrift(t *testing.T) {
 	}
 }
 
-// TestReconcileStaleBranchContextDriftThenLaterEdit covers the field case from
-// PR #1238: a rebase gave the private commits' copies different stable patch
-// IDs because the new base edited nearby context, and a later live commit then
-// edited the copied lines, so the direct merge conflicts and no live patch
-// matches. The rebased copy on first-parent history still passes the direct
-// proof, so every private commit survives and none is at risk. A later live
-// commit that instead drops the copied lines while a second private commit's
-// content never reached live still refuses, naming the whole private-only range.
 func TestReconcileStaleBranchContextDriftThenLaterEdit(t *testing.T) {
 	for _, later := range []string{"edited", "dropped"} {
 		t.Run(later, func(t *testing.T) {
@@ -813,11 +787,6 @@ func TestReconcileStaleBranchContextDriftThenLaterEdit(t *testing.T) {
 	}
 }
 
-// TestReconcileStaleBranchSurvivalPointPastTheBoundFailsClosed places the only
-// first-parent survival point for a drifted, later-edited private commit
-// exactly at and just past maxSurvivalCandidates. Inside the bound it
-// reconciles; past it the proof fails closed and the whole private-only range
-// is refused with the private ref untouched.
 func TestReconcileStaleBranchSurvivalPointPastTheBoundFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -868,10 +837,6 @@ func TestReconcileStaleBranchSurvivalPointPastTheBoundFailsClosed(t *testing.T) 
 	}
 }
 
-// setupAnchoredPrivateBranch builds the recover -> rerun -> push shape from
-// issue #1233: a private branch holding two private-only commits, a live head
-// carrying unrelated work so neither commit is contained, and a bare gate whose
-// branch ref still points at the pre-rebase private head.
 func setupAnchoredPrivateBranch(t *testing.T) (work, gateDir, privateHead, firstPrivateHead, liveHead string) {
 	t.Helper()
 	work = initReconcileRepo(t)
@@ -898,9 +863,6 @@ func setupAnchoredPrivateBranch(t *testing.T) (work, gateDir, privateHead, first
 	return work, gateDir, privateHead, firstPrivateHead, liveHead
 }
 
-// The recover -> rerun -> push loop writes refs/no-mistakes/recover/<run> to
-// declare the unpublished chain preserved. Reconciliation must credit that
-// anchor instead of refusing against the very evidence the loop just wrote.
 func TestPlanStaleBranchReconciliationCreditsRecoveryAnchoredCommits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -933,9 +895,6 @@ func TestPlanStaleBranchReconciliationCreditsRecoveryAnchoredCommits(t *testing.
 	t.Logf("Reconciled against recovery anchor %s; archive %s", anchor, result.ArchivedTag)
 }
 
-// The credit is a preservation credit, not a blanket bypass: a private commit
-// no anchor reaches is still refused, and the refusal names every satisfier so
-// it is actionable rather than a dead end.
 func TestPlanStaleBranchReconciliationStillRefusesUnanchoredCommitsAndNamesTheSatisfier(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -973,9 +932,6 @@ func TestPlanStaleBranchReconciliationStillRefusesUnanchoredCommitsAndNamesTheSa
 	t.Logf("Preserved private branch; refusal: %v", err)
 }
 
-// A refusal lists only satisfiers the call shape can actually take: the
-// publication variant supplied with a run-owned head names Decision 41-A, while
-// the fresh-submission shape (no run-owned head) never does.
 func TestPlanStaleBranchReconciliationNamesRunOwnedSatisfierOnlyWhenSupplied(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -999,8 +955,6 @@ func TestPlanStaleBranchReconciliationNamesRunOwnedSatisfierOnlyWhenSupplied(t *
 	t.Logf("Run-owned satisfier listed only when supplied; refusal: %v", err)
 }
 
-// A symbolic recovery ref is not preservation evidence. It is never
-// dereferenced, and it must not credit anything.
 func TestPlanStaleBranchReconciliationIgnoresSymbolicRecoveryAnchors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1027,7 +981,6 @@ func TestPlanStaleBranchReconciliationIgnoresSymbolicRecoveryAnchors(t *testing.
 	t.Logf("Symbolic anchor credited nothing; refusal: %v", err)
 }
 
-// An empty or missing anchor namespace must not error, and must credit nothing.
 func TestPreservedByRecoveryAnchorsWithoutAnchorsCreditsNothing(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1053,10 +1006,6 @@ func TestPreservedByRecoveryAnchorsWithoutAnchorsCreditsNothing(t *testing.T) {
 	}
 }
 
-// A candidate set larger than one scan batch is scanned in successive
-// batches, never truncated or refused: a long, fully anchored private history
-// must still earn its preservation credit, including for a commit that only
-// the last batch examines.
 func TestPreservedByRecoveryAnchorsScansOversizedCandidateSetsInBatches(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1078,8 +1027,6 @@ func TestPreservedByRecoveryAnchorsScansOversizedCandidateSetsInBatches(t *testi
 	}
 }
 
-// The scan answers only about the candidates it is handed: an anchor holding
-// unrelated history never changes the answer for a candidate it cannot reach.
 func TestPreservedByRecoveryAnchorsIsBoundedToTheCandidateCommits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

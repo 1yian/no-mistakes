@@ -8,8 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// GetPRContent reads glab's single-MR JSON description, never rendered HTML.
-// A missing/null description is unproven, not an empty author narrative.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	if pr == nil {
 		return scm.PRContent{}, fmt.Errorf("missing merge request identity")

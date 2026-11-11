@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// A JSON string escape right after a repo-level worktrees path is the escape,
-// not a separator plus a run id, so the next word survives.
 func TestRedactWorktrees_KeepsJSONEscapeAfterRepoLevelPath(t *testing.T) {
 	worktrees := filepath.Join(t.TempDir(), "worktrees")
 	for _, esc := range []string{`\n`, `\r`, `\t`} {
@@ -19,9 +17,6 @@ func TestRedactWorktrees_KeepsJSONEscapeAfterRepoLevelPath(t *testing.T) {
 	}
 }
 
-// In text that spells the root with single backslashes (native Windows
-// output), a backslash before a run id that starts with n, r or t is still a
-// separator.
 func TestRedactWorktrees_SingleBackslashRootKeepsBackslashSeparators(t *testing.T) {
 	worktrees := filepath.Join(t.TempDir(), "worktrees")
 	native := strings.ReplaceAll(worktrees, "/", `\`)

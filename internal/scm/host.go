@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// ExtractHost returns the lowercased host (without any port) from a git
-// remote URL. It handles both scp-like syntax (git@host:group/project) and
-// URL forms (https://host/group/project, ssh://git@host:22/group/project).
-// It returns "" when no host can be determined.
 func ExtractHost(remote string) string {
 	s := strings.TrimSpace(remote)
 	if s == "" {
@@ -48,8 +44,6 @@ func ExtractHost(remote string) string {
 	return strings.ToLower(s)
 }
 
-// stripPort removes a trailing :port from a host, leaving bare hosts and
-// bracketed IPv6 literals intact.
 func stripPort(host string) string {
 	if strings.HasPrefix(host, "[") {
 		// IPv6 literal: [::1]:22 -> [::1]
@@ -67,10 +61,6 @@ func stripPort(host string) string {
 	return host
 }
 
-// ExtractPRNumber returns the trailing numeric segment from a PR/MR URL.
-// Supports GitHub (/pull/N), GitLab (/-/merge_requests/N), Forgejo
-// (/pulls/N), Bitbucket (/pull-requests/N), and Azure DevOps (/pullrequest/N)
-// URLs; all of them end in a digit path segment.
 func ExtractPRNumber(prURL string) (string, error) {
 	trimmed := strings.TrimRight(prURL, "/")
 	parts := strings.Split(trimmed, "/")
@@ -87,32 +77,19 @@ func ExtractPRNumber(prURL string) (string, error) {
 	return num, nil
 }
 
-// PR identifies a pull/merge request on a provider.
 type PR struct {
-	Number string
-	URL    string
-	// HeadSHA scopes provider check discovery to the exact commit currently
-	// being certified. Providers that expose CI outside the PR check rollup
-	// use it to include those runs.
-	HeadSHA string
-	// ObservedHeadSHA is set by head-reporting adapters only after obtaining
-	// provider evidence during GetChecks, even if a later discovery read fails.
-	// It must never be copied from the requested HeadSHA on a failed lookup.
-	// Callers clear it before each read; an empty value supplies no observation.
+	Number          string
+	URL             string
+	HeadSHA         string
 	ObservedHeadSHA string
-	// BaseBranch is the forge's actual target branch for this PR. It is
-	// authoritative once a PR exists and protects resumed CI repair from a
-	// later configuration change.
-	BaseBranch string
+	BaseBranch      string
 }
 
-// PRContent is the title + body for creating or updating a PR.
 type PRContent struct {
 	Title string
 	Body  string
 }
 
-// PRState is the normalized lifecycle state of a PR.
 type PRState string
 
 const (
@@ -121,7 +98,6 @@ const (
 	PRStateClosed PRState = "CLOSED"
 )
 
-// MergeableState is the normalized merge-conflict status of a PR.
 type MergeableState string
 
 const (
@@ -129,25 +105,17 @@ const (
 	MergeableConflict MergeableState = "CONFLICTING"
 	MergeablePending  MergeableState = "PENDING"
 	MergeableUnknown  MergeableState = "UNKNOWN"
-	// MergeableBehind is a conflict-free PR the forge still refuses to merge
-	// because its base requires branches to be up to date. Only GitHub
-	// reports it (mergeStateStatus BEHIND).
-	MergeableBehind MergeableState = "BEHIND"
+	MergeableBehind   MergeableState = "BEHIND"
 )
 
-// Conflict reports whether the state indicates a known merge conflict.
 func (s MergeableState) Conflict() bool { return s == MergeableConflict }
 
-// Behind reports whether the PR must be brought up to date with its base
-// before the forge will merge it.
 func (s MergeableState) Behind() bool { return s == MergeableBehind }
 
-// Resolved reports whether the state is final (MERGEABLE, BEHIND or CONFLICTING).
 func (s MergeableState) Resolved() bool {
 	return s == MergeableOK || s == MergeableBehind || s == MergeableConflict
 }
 
-// CheckBucket is the normalized outcome of a CI check.
 type CheckBucket string
 
 const (
@@ -165,113 +133,48 @@ const (
 	CheckKindStatus CheckKind = "status"
 )
 
-// Check is a single CI check result on a PR.
 type Check struct {
-	// ExternalReview is set only by the local required-review gate, never forge prose.
 	ExternalReview string
 
-	Name       string
-	ProviderID string `json:"provider_id,omitempty"`
-	Bucket     CheckBucket
-	Kind       CheckKind
-	// State is the provider's own outcome string for the check (GitHub
-	// conclusions such as FAILURE, TIMED_OUT, CANCELLED). Buckets collapse
-	// several outcomes into one value, so callers that must tell an
-	// infrastructure outcome from a real job failure read this. Empty when the
-	// provider reported no state.
-	State       string
-	CompletedAt time.Time // zero when unknown; used to detect CI re-runs between polls
-	ExecutionID string    // provider execution discriminator when completion time is unavailable
-	// StartedAt is when this specific check run began. It is the ordering key
-	// backends use to collapse superseded same-name check runs (e.g. a raw
-	// commit rollup that keeps every run a commit ever had) down to the
-	// latest one; zero when the provider did not report it.
-	StartedAt time.Time
-	// WorkflowID identifies the provider workflow that emitted the check. It
-	// distinguishes independent same-name workflows while allowing reruns of
-	// one workflow to use latest-wins ordering. Zero when unavailable.
-	WorkflowID int64
-	// Link is the provider's details URL for this check. It may identify an
-	// individual job or a provider-side workflow run for targeted reruns. Empty
-	// when the provider reported no link.
-	Link string
-	// PreRunFailure marks a check the provider failed before the repository's own
-	// steps ran - its setup/action-resolution phase failed (e.g. a GitHub Actions
-	// action-download outage), so no repository step executed. It is an
-	// infrastructure outcome, not a verdict on the code, and the CI step treats it
-	// as re-runnable rather than a code failure. A PreRunFailureDetector sets it;
-	// it can never be true for a genuine test or lint failure, whose job cleared
-	// setup and failed a later step.
-	PreRunFailure bool
-	// AwaitingApproval marks a check the provider is holding until a human
-	// approves it - GitHub holds a first-time contributor's workflows that
-	// way, concluding the run action_required without running a single job.
-	// Nothing about the commit produced it and no rerun can clear it, so it
-	// is a wait on a maintainer rather than a verdict on the code: such a
-	// check is reported pending, never failing, so the CI step waits for the
-	// approval instead of spending auto-fix rounds on work that never ran.
-	AwaitingApproval bool
-	// AwaitingManualJob marks a check the provider is holding on a manual job
-	// a person must run before the pipeline can finish - GitLab's
-	// blocking manual job (`when: manual` with `allow_failure: false`), which
-	// stops the pipeline at its stage. Like AwaitingApproval it is a wait on a
-	// human rather than a verdict on the commit, so it is reported pending and
-	// never sent to the fix agent; unlike a skipped job, it keeps the pipeline
-	// from reading green while the pipeline is still stopped, and no rerun can
-	// clear it.
+	Name              string
+	ProviderID        string `json:"provider_id,omitempty"`
+	Bucket            CheckBucket
+	Kind              CheckKind
+	State             string
+	CompletedAt       time.Time // zero when unknown; used to detect CI re-runs between polls
+	ExecutionID       string    // provider execution discriminator when completion time is unavailable
+	StartedAt         time.Time
+	WorkflowID        int64
+	Link              string
+	PreRunFailure     bool
+	AwaitingApproval  bool
 	AwaitingManualJob bool
-	// App identifies the provider application that published the check, when
-	// the provider reports one: on GitHub it is the check suite's app slug
-	// ("github-actions" for every Actions job, "greptile-apps" for Greptile's
-	// review check). It is structural provider identity, never a check name,
-	// so the CI step can tell a third-party review bot's verdict from the
-	// repository's own CI without matching names. Empty when unknown.
-	App string
-	// AppID is the immutable publisher identity on this forge, when available.
-	AppID   int64
-	AppHost string
-	HeadSHA string
+	App               string
+	AppID             int64
+	AppHost           string
+	HeadSHA           string
 }
 
-// Failing reports whether the check is in a failed bucket.
 func (c Check) Failing() bool { return c.Bucket == CheckBucketFail }
 
-// ReviewBot describes a third-party review bot whose pull request check is an
-// opinion about the change rather than a job verdict on it. The CI step routes
-// such a check's failure to a human decision carrying the bot's unresolved
-// review comments, instead of spending an auto-fix round on it, and the
-// GitHub backend collects only these bots' review-thread comments.
 type ReviewBot struct {
-	// AppID and AuthorID pin the GitHub.com identities when nonzero. Legacy
-	// providers keep their existing slug/login matching contract.
-	AppID    int64
-	AuthorID int64
-	// RequiredReview names the ci.required_reviews entry an opt-in bot needs;
-	// without it such a bot is never recognized.
+	AppID          int64
+	AuthorID       int64
 	RequiredReview string
 
-	// AppSlug is the provider app slug the bot publishes its check under.
-	AppSlug string
-	// Logins are the account logins the bot posts review comments as.
+	AppSlug      string
 	Logins       []string
 	GitLabLogins []string
 }
 
-// Immutable GitHub.com identities from GET /apps/coderabbitai and
-// GET /users/coderabbitai[bot]. Other GitHub hosts have independent identities.
 const CodeRabbitAppID int64 = 347564
 const CodeRabbitAuthorID int64 = 136622811
 
-// ReviewBots is the registry of supported review bots. Both halves of the
-// integration - check identity and comment authorship - read it, so adding a
-// bot is one entry here.
 var ReviewBots = []ReviewBot{
 	{AppSlug: "greptile-apps", Logins: []string{"greptile-apps[bot]", "greptile-apps"}, GitLabLogins: []string{"greptileai"}},
 	{AppSlug: "coderabbitai", RequiredReview: "coderabbit", AppID: CodeRabbitAppID, AuthorID: CodeRabbitAuthorID, Logins: []string{"coderabbitai", "coderabbitai[bot]"}},
 }
 
-// ReviewBotsFor returns the registered bots a run recognizes: every bot that
-// needs no opt-in, plus each opt-in bot that requiredReviews names.
 func ReviewBotsFor(requiredReviews []string) []ReviewBot {
 	var bots []ReviewBot
 	for _, bot := range ReviewBots {
@@ -282,9 +185,6 @@ func ReviewBotsFor(requiredReviews []string) []ReviewBot {
 	return bots
 }
 
-// ReviewBotForCheck authenticates the check publisher among bots. CodeRabbit
-// requires GitHub.com's fixed app ID or a verified required-review check carrying
-// its trusted GHES instance ID; Greptile retains slug matching.
 func ReviewBotForCheck(bots []ReviewBot, check Check) (ReviewBot, bool) {
 	for _, bot := range bots {
 		if bot.AppID != 0 {
@@ -303,8 +203,6 @@ func ReviewBotForCheck(bots []ReviewBot, check Check) (ReviewBot, bool) {
 	return ReviewBot{}, false
 }
 
-// ReviewBotForLogin returns the registered review bot that posts review
-// comments as login.
 func ReviewBotForLogin(provider Provider, login string) (ReviewBot, bool) {
 	login = strings.ToLower(strings.TrimSpace(login))
 	if login == "" {
@@ -327,48 +225,28 @@ func ReviewBotForLogin(provider Provider, login string) (ReviewBot, bool) {
 	return ReviewBot{}, false
 }
 
-// IsReviewBotLogin reports whether login belongs to a registered review bot.
 func IsReviewBotLogin(provider Provider, login string) bool {
 	_, ok := ReviewBotForLogin(provider, login)
 	return ok
 }
 
-// Pending reports whether the check is still running or queued.
 func (c Check) Pending() bool { return c.Bucket == CheckBucketPending }
 
-// HeldForHuman reports whether the provider is holding the check on a person -
-// a maintainer approval or a manual job - so it will not progress on its own
-// no matter how long the monitor waits. Such a check is pending, but it never
-// defers escalation of the other checks' failures.
 func (c Check) HeldForHuman() bool { return c.AwaitingApproval || c.AwaitingManualJob }
 
-// Capabilities declares which optional Host methods return meaningful data.
-// Callers must consult Capabilities before invoking optional methods.
 type Capabilities struct {
-	MergeableState  bool
-	FailedCheckLogs bool
-	MergedProof     bool
-	ReviewComments  bool
-	// ClosingReferences declares that the provider closes issues from a
-	// closing keyword in the pull request body ("Closes #42"), which is what
-	// makes an explicitly requested --closes reference render and verify. False
-	// keeps the step failing closed rather than publishing a reference the
-	// forge would ignore, leaving the issue silently open.
+	MergeableState    bool
+	FailedCheckLogs   bool
+	MergedProof       bool
+	ReviewComments    bool
 	ClosingReferences bool
 }
 
 var (
-	// ErrUnsupported is returned by optional Host methods that the provider
-	// cannot fulfil. Callers should gate calls on Capabilities rather than
-	// relying on this error, but implementations return it as a fallback.
 	ErrUnsupported = errors.New("operation not supported by this provider")
-	// ErrHeadChanged rejects results for a different PR head than the run is
-	// monitoring. It prevents a late status or already-merged race from proving
-	// the wrong commit.
 	ErrHeadChanged = errors.New("pull request head changed")
 )
 
-// ReviewComment represents a code review comment or bot finding on a pull request.
 type CheckTarget struct {
 	Name       string `json:"name"`
 	ProviderID string `json:"provider_id,omitempty"`
@@ -418,22 +296,14 @@ type ReviewComment struct {
 	URL       string
 }
 
-// ReviewCommentsHost is an optional interface for SCM hosts that support fetching
-// unresolved review comments on a pull request.
 type ReviewCommentsHost interface {
 	GetReviewComments(ctx context.Context, pr *PR) ([]ReviewComment, error)
 }
 
-// PRContentReader is an optional interface for hosts that can read the current
-// title and raw body of an existing PR. Readers must distinguish an explicitly
-// empty body from missing, null, or malformed content and reject the latter.
-// Author-preserving publication and pre-push/CI attestation refresh depend on
-// this distinction to avoid replacing author text after an incomplete read.
 type PRContentReader interface {
 	GetPRContent(ctx context.Context, pr *PR) (PRContent, error)
 }
 
-// MergedProof is provider evidence that a specific PR head was merged.
 type MergedProof struct {
 	Merged         bool
 	Number         string
@@ -444,28 +314,16 @@ type MergedProof struct {
 	MergedBy       string
 }
 
-// MergedProofHost is implemented by hosts that can prove which exact PR head
-// was merged. The expected head must be checked even when the PR is already
-// merged, because merge and monitor polling can race.
 type MergedProofHost interface {
 	GetMergedProof(ctx context.Context, pr *PR, expectedHead string) (MergedProof, error)
 }
 
-// Host is the provider-agnostic interface to a PR-hosting service.
-// Transport (CLI vs HTTP API) is an implementation detail.
 type Host interface {
 	Provider() Provider
 	Capabilities() Capabilities
 
-	// Available returns nil when the host is ready to use, or a descriptive
-	// error explaining why it is not (missing CLI, unauthenticated, etc).
 	Available(ctx context.Context) error
 
-	// FindPR returns the open PR for the source branch, or nil only when a
-	// successfully decoded and validated PR listing contains no matching PR. It
-	// returns an error for lookup, response-decoding, or validation failures
-	// (including empty, malformed, null, or incoherent payloads) so callers do
-	// not create a duplicate PR after an indeterminate lookup.
 	FindPR(ctx context.Context, branch, base string) (*PR, error)
 	CreatePR(ctx context.Context, branch, base string, content PRContent) (*PR, error)
 	UpdatePR(ctx context.Context, pr *PR, content PRContent) (*PR, error)
@@ -473,25 +331,15 @@ type Host interface {
 	GetPRState(ctx context.Context, pr *PR) (PRState, error)
 	GetChecks(ctx context.Context, pr *PR) ([]Check, error)
 
-	// GetMergeableState is optional; implementations without Capabilities().MergeableState
-	// must return ErrUnsupported. Callers should consult Capabilities first.
 	GetMergeableState(ctx context.Context, pr *PR) (MergeableState, error)
 
-	// FetchFailedCheckLogs is optional; returns "" when no logs can be retrieved
-	// and ErrUnsupported when the provider has no log-fetching support at all.
 	FetchFailedCheckLogs(ctx context.Context, pr *PR, branch, headSHA string, failingNames []string) (string, error)
 }
 
-// PRBaseBranchReader is implemented by providers that can read the target
-// branch of an existing PR by its durable identity. CI uses it when a run is
-// resumed after repository configuration changes.
 type PRBaseBranchReader interface {
 	GetPRBaseBranch(ctx context.Context, pr *PR) (string, error)
 }
 
-// PRHeadVerifier proves from a fresh provider read that the exact review object
-// is open in the configured repository and has the configured source repository,
-// owner, branch and pushed head.
 type PRHeadVerifier interface {
 	VerifyPRHead(ctx context.Context, pr *PR, branch, pushedHead string) error
 }
@@ -506,55 +354,18 @@ func (e *PRHeadChangedError) Error() string {
 
 func (e *PRHeadChangedError) Unwrap() error { return ErrHeadChanged }
 
-// PRBaseRetargeter is implemented by providers that can change an existing
-// PR's target branch. The PR step uses it when a per-run --base-branch override
-// disagrees with the live forge base of an already-open PR. A host that does
-// not implement this, including when the live base is unread, must fail closed
-// rather than rewrite title and body against a base it did not move. A
-// repo-config pr.base_branch change still does not retarget; that path updates
-// title and body only so a still-open PR is not orphaned behind a duplicate.
 type PRBaseRetargeter interface {
 	SetPRBaseBranch(ctx context.Context, pr *PR, baseBranch string) error
 }
 
-// PreRunFailureDetector reports which failed checks the provider failed before
-// the repository's own steps ran - a setup/action-resolution outcome (for GitHub
-// Actions, an action-download outage) rather than a verdict on the code. It
-// reads the provider's own step-level conclusions, never log text, so a flagged
-// check is one whose job never executed a repository step. A genuine test or
-// lint failure can never be flagged, because that job cleared setup and failed a
-// later step: this is what keeps the transient-rerun path from masking real
-// failures.
-//
-// Like CheckRerunner it is optional: a backend whose provider exposes no
-// step-level phase simply does not implement it, and the CI step consults it
-// only when transient reruns are enabled.
 type PreRunFailureDetector interface {
-	// PreRunFailures returns a slice parallel to checks: entry i is true when
-	// checks[i] failed before any repository step ran. Check names are not unique
-	// on a PR, so the result is positional rather than name-keyed - a same-named
-	// genuine failure must never inherit another check's infrastructure flag. It
-	// must fail closed - leaving false any check whose phase it cannot determine -
-	// so an unreadable job stays a genuine failure rather than being masked as
-	// infrastructure.
 	PreRunFailures(ctx context.Context, checks []Check) ([]bool, error)
 }
 
-// CheckRerunner re-runs the provider-side work behind a failed check without
-// changing the commit under test. It is deliberately a separate interface
-// rather than a Host method: a backend whose provider exposes no rerun
-// primitive simply does not implement it, and callers type-assert
-// (host.(CheckRerunner)) before use, so those backends keep compiling and keep
-// their existing behavior.
 type CheckRerunner interface {
-	// RerunCheck asks the provider to run check again for the same commit. It
-	// returns an error when the request could not be made, including when the
-	// check names no job or workflow run the provider can re-run.
 	RerunCheck(ctx context.Context, pr *PR, check Check) error
 }
 
-// RepoPath extracts a repository path from a git remote or web URL. Nested
-// namespaces are preserved. Azure DevOps remotes use project/repository.
 func RepoPath(remoteURL string) string {
 	raw := strings.TrimSpace(remoteURL)
 	if raw == "" {

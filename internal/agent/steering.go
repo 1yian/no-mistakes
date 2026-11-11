@@ -5,39 +5,6 @@ import (
 	"fmt"
 )
 
-// WorktreeSteering renders the preamble prepended to every pipeline agent
-// prompt. It keeps the agent's writes inside the git worktree and steers it
-// away from mutating system state outside the workspace (installing/upgrading
-// system packages, modifying apps in /Applications, changing global config).
-// Those out-of-tree writes are what trigger macOS "App Management" / Privacy
-// notifications and risk surprising side effects on the user's machine.
-//
-// The read half of that boundary is deliberately bounded. An agent may still
-// read outside the worktree and run read-only commands, but it must never turn
-// that into a filesystem-wide search of the host. A real Test run spent its
-// entire 30-minute budget on an agent-authored `find / -maxdepth 4` that blocked
-// at 0% CPU in a macOS directory-service automount under /home, so the suite
-// never started; `-maxdepth` (and `-xdev`) do not make a whole-root search
-// bounded on such a host. `find /` and `mdfind /` are therefore named as
-// disallowed, hunting the machine for an installed tool is disallowed, and the
-// missing-tool fallback is explicit: report the missing tool and the work it
-// blocked in the role's normal result, with the concrete reason, instead of
-// searching for it. That fallback stays role-neutral because only the Test step
-// has scenarios and an "untested" state; the Test prompt adds its own
-// scenario-shaped version of the same rule.
-//
-// History is append-only for the same reason the pipeline's own correction
-// commits are (issue #642): a fix agent that amended or squashed a commit left
-// HEAD off the recorded head, assertPipelineHeadContinuity correctly refused
-// the run, and recovery had no way back. The rule lives here because every
-// pipeline agent is steered; the one exception is a rebase or merge that the
-// step's own prompt asks for (the Rebase step and CI's base-branch repair).
-//
-// evidenceRoot is the one out-of-worktree location the preamble permits, and it
-// is supplied by the caller rather than computed here. This used to be a
-// package-level string that rebuilt the evidence path from os.TempDir()
-// independently of the test step - two copies of one fact, either of which
-// could move without the other. The caller owns the path; this owns the wording.
 func WorktreeSteering(evidenceRoot string) string {
 	location := evidenceRoot
 	if location == "" {
@@ -57,14 +24,11 @@ func WorktreeSteering(evidenceRoot string) string {
 `, location)
 }
 
-// steeredAgent wraps an Agent and prepends the steering preamble to each prompt.
 type steeredAgent struct {
 	Agent
 	preamble string
 }
 
-// Run prepends the worktree steering preamble before delegating to the
-// wrapped agent. All other RunOpts fields pass through unchanged.
 func (s steeredAgent) Run(ctx context.Context, opts RunOpts) (*Result, error) {
 	opts.Prompt = s.preamble + opts.Prompt
 	return s.Agent.Run(ctx, opts)
@@ -86,10 +50,6 @@ func (s steeredAgent) NeutralizesGateInstructions() bool {
 	return NeutralizesGateInstructions(s.Agent)
 }
 
-// WithSteering wraps an agent so every invocation is steered to keep writes
-// inside the worktree, naming evidenceRoot as the one permitted out-of-worktree
-// destination. Wrapping is idempotent: an already-steered agent is returned
-// unchanged so the preamble is never added twice.
 func WithSteering(a Agent, evidenceRoot string) Agent {
 	if a == nil {
 		return nil

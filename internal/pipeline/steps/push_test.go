@@ -28,10 +28,6 @@ func setupGateMirror(t *testing.T, sctx *pipeline.StepContext) string {
 	return gateDir
 }
 
-// TestPushStep_RefusesPostReviewClobberWithoutLaterPipelineCommit reproduces
-// the end-user incident at the real push boundary. Review approved R, then an
-// out-of-band reset replaced HEAD with divergent D and no pipeline-owned commit
-// ran afterward. Push must refuse before changing the remote.
 func TestPushStep_RefusesPostReviewClobberWithoutLaterPipelineCommit(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -575,12 +571,6 @@ func TestPushStep_RedactsForkURLInGitErrors(t *testing.T) {
 	}
 }
 
-// TestPushStep_CommitsLeftoverChangesWhenLegacyHuskyRuntimeIsMissing pins the
-// Push step's leftover-worktree commit against the same fresh-worktree hook
-// failure the correction-commit helper exists to survive: core.hooksPath=.husky
-// with a tracked pre-commit hook sourcing the generated .husky/_/husky.sh that
-// this worktree never had. The formatter or the Test step's evidence agent left
-// an uncommitted edit behind, and the run must still deliver it.
 func TestPushStep_CommitsLeftoverChangesWhenLegacyHuskyRuntimeIsMissing(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -649,12 +639,6 @@ func TestPushStep_CommitsLeftoverChangesWhenLegacyHuskyRuntimeIsMissing(t *testi
 	}
 }
 
-// TestPushStep_AllowsForcePushAfterMidRunRebaseOverPriorPushedGeneration (Issue #837)
-// reproduces the exact pipeline sequence:
-// 1. Generation 1 pushed gen1Head to the remote.
-// 2. Upstream main advanced mid-run.
-// 3. The worktree rebased onto the new main, dropping duplicate fix hunks.
-// 4. PushStep must allow force-pushing the new rebased head over the pipeline's own prior push.
 func TestPushStep_AllowsForcePushAfterMidRunRebaseOverPriorPushedGeneration(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")
@@ -715,10 +699,6 @@ func TestPushStep_AllowsForcePushAfterMidRunRebaseOverPriorPushedGeneration(t *t
 	}
 }
 
-// TestPushStep_AllowsForcePushOnRerunOverPriorRunPushedGeneration (Issue #837)
-// reproduces a `rerun` where Run1 pushed gen1Head, then Run2 (with LastPushedSHA==nil)
-// validates a rebased head. PushStep must look up the branch's prior pushed head
-// from durable DB records and allow the force-push over the prior run's push.
 func TestPushStep_AllowsForcePushOnRerunOverPriorRunPushedGeneration(t *testing.T) {
 	upstream := t.TempDir()
 	gitCmd(t, upstream, "init", "--bare")

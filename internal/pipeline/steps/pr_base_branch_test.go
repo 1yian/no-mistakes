@@ -355,8 +355,6 @@ func TestRetargetExistingPRIfNeeded_ProviderWithoutRetargetFailsClosed(t *testin
 	}
 }
 
-// recordingRetargetHost records SetPRBaseBranch calls so identity-mismatch
-// tests can prove the discovered PR was not moved.
 type recordingRetargetHost struct {
 	scm.Host
 	calls      int
@@ -383,9 +381,6 @@ func (h *recordingRetargetHost) GetPRState(_ context.Context, _ *scm.PR) (scm.PR
 
 func strptr(s string) *string { return &s }
 
-// nonRetargetHost is a scm.Host that does not implement PRBaseRetargeter, so
-// a per-run --base-branch override cannot silently skip when the live forge
-// base is missing or disagrees.
 type nonRetargetHost struct{ scm.Host }
 
 func TestPRStep_SkipsWhenBranchEqualsPerRunBase(t *testing.T) {

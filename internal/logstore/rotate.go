@@ -1,4 +1,3 @@
-// Package logstore owns byte bounds and deterministic retention for process logs.
 package logstore
 
 import (
@@ -12,16 +11,11 @@ import (
 	"sync"
 )
 
-// Policy defines the hard size of the current file and how many same-sized
-// backups are retained. Backups use the suffixes .1 (newest) through .N.
 type Policy struct {
 	MaxBytes int64
 	Backups  int
 }
 
-// Log bounds have one owner so lifecycle, managed dependency, and bootstrap
-// sinks cannot silently drift apart. Functions return values so callers cannot
-// mutate process-wide policy.
 func LifecyclePolicy() Policy {
 	return Policy{MaxBytes: 32 << 20, Backups: 3}
 }
@@ -34,10 +28,6 @@ func BootstrapPolicy() Policy {
 	return Policy{MaxBytes: 1 << 20, Backups: 2}
 }
 
-// RotatingWriter is a concurrent-safe, byte-bounded writer. Rotation copies
-// the current file into the backup chain and truncates the current inode in
-// place. Keeping the inode is important for service managers and subprocesses
-// that may still hold an open descriptor for the current path.
 type RotatingWriter struct {
 	mu     sync.Mutex
 	path   string
@@ -47,8 +37,6 @@ type RotatingWriter struct {
 	closed bool
 }
 
-// Open opens path for append and immediately brings any pre-existing files
-// under policy. Directories are created with the project-standard mode.
 func Open(path string, policy Policy) (*RotatingWriter, error) {
 	if err := validatePolicy(policy); err != nil {
 		return nil, err
@@ -78,9 +66,6 @@ func validatePolicy(policy Policy) error {
 	return nil
 }
 
-// Write appends all of p, rotating before each chunk that would exceed the
-// current-file bound. A single oversized write is split across rotations, so
-// no file exceeds MaxBytes even transiently after Write returns.
 func (w *RotatingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -114,8 +99,6 @@ func (w *RotatingWriter) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-// RotateNow snapshots a non-empty current file and truncates its inode in
-// place. It is used at process start for the small pre-logger crash sink.
 func (w *RotatingWriter) RotateNow() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -128,7 +111,6 @@ func (w *RotatingWriter) RotateNow() error {
 	return w.rotateLocked()
 }
 
-// Close closes the writer. It is safe to call more than once.
 func (w *RotatingWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -139,9 +121,6 @@ func (w *RotatingWriter) Close() error {
 	return w.file.Close()
 }
 
-// RotateAtStartup bounds existing bootstrap/crash output, moves the latest
-// non-empty process output into retention, and leaves the current inode empty
-// for descriptors the service manager already opened.
 func RotateAtStartup(path string, policy Policy) error {
 	w, err := Open(path, policy)
 	if err != nil {

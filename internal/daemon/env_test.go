@@ -82,10 +82,6 @@ func TestPrepareDaemonEnvironment_PreservesExistingNMHome(t *testing.T) {
 	}
 }
 
-// TestPrepareDaemonEnvironment_LogsPathSummary locks in observability for
-// #143-style failures. Silent PATH regressions were the reason this bug
-// took a forensic dive to diagnose - future bugs should be readable from
-// the daemon log alone.
 func TestPrepareDaemonEnvironment_LogsPathSummary(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
 

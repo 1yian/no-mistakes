@@ -67,21 +67,15 @@ type updater struct {
 	includePrereleases bool
 	assumeYes          bool
 	force              bool
-	// whenIdle is the --when-idle request. restartWhenIdle is set when it was
-	// requested and the running daemon can wait: the update then installs the
-	// new version and schedules the daemon's restart instead of restarting it
-	// now.
-	whenIdle        bool
-	restartWhenIdle bool
-	runsWereActive  bool
+	whenIdle           bool
+	restartWhenIdle    bool
+	runsWereActive     bool
 }
 
 type RunOptions struct {
-	Beta  bool
-	Yes   bool
-	Force bool
-	// WhenIdle lets active runs finish on the current version and restarts
-	// the daemon on the new one once no run is executing.
+	Beta     bool
+	Yes      bool
+	Force    bool
 	WhenIdle bool
 	Stdin    io.Reader
 }

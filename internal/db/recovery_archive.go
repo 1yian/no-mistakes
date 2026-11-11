@@ -5,9 +5,6 @@ import (
 	"fmt"
 )
 
-// RecoveryArchive is an immutable provenance snapshot for an existing Git
-// archive ref. OwnerRunID associates the record with the recovery lookup;
-// RunID is repeated evidence and must independently match before use.
 type RecoveryArchive struct {
 	ID               string
 	OwnerRunID       string
@@ -27,10 +24,6 @@ func recoveryArchiveScanTargets(record *RecoveryArchive) []any {
 		&record.RequiredHeadSHA, &record.PreservedHeadSHA, &record.ArchiveRef, &record.CreatedAt}
 }
 
-// RecordRecoveryArchive appends one archive binding. Repeating the exact same
-// binding is idempotent, while reusing its owner-run/ref identity with changed
-// provenance fails closed. Semantic and Git-object verification belong to the
-// branch synchronization service, immediately before this method is called.
 func (d *DB) RecordRecoveryArchive(record RecoveryArchive) (*RecoveryArchive, error) {
 	if record.ID == "" {
 		record.ID = newID()
@@ -72,9 +65,6 @@ func (d *DB) RecordRecoveryArchive(record RecoveryArchive) (*RecoveryArchive, er
 	return &record, nil
 }
 
-// GetRecoveryArchivesByRun returns every record associated with a recovery
-// run. Callers require exactly one verified record before it can affect branch
-// custody classification.
 func (d *DB) GetRecoveryArchivesByRun(ownerRunID string) ([]*RecoveryArchive, error) {
 	columns, err := d.readProjection("recovery_archives", recoveryArchiveReadColumns, recoveryArchiveScanTargets(&RecoveryArchive{})...)
 	if err != nil {

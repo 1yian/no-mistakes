@@ -12,9 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// `axi respond --action abort` hands the executor's existing gate abort the
-// parked gate's identity and the operator's reason, and reports the rejection
-// ahead of the terminal failed outcome it leads to.
 func TestAxiRespond_AbortForwardsTheGateAbortWithItsReason(t *testing.T) {
 	var got ipc.RespondParams
 	var responded atomic.Bool
@@ -59,8 +56,6 @@ func TestAxiRespond_AbortForwardsTheGateAbortWithItsReason(t *testing.T) {
 	}
 }
 
-// An abort records a rejection, so the reason is not optional, and a missing
-// one is refused before anything reaches the daemon.
 func TestAxiRespond_AbortRequiresAReason(t *testing.T) {
 	for name, args := range map[string][]string{
 		"absent": {"axi", "respond", "--action", "abort", "--wait", "3s"},
@@ -91,8 +86,6 @@ func TestAxiRespond_AbortRequiresAReason(t *testing.T) {
 	}
 }
 
-// The abort contract is the gate's: a run that is not parked there, or an
-// unknown run, is refused without a response being sent.
 func TestAxiRespond_AbortRefusesARunThatIsNotAtAGate(t *testing.T) {
 	var responded atomic.Bool
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
@@ -116,8 +109,6 @@ func TestAxiRespond_AbortRefusesARunThatIsNotAtAGate(t *testing.T) {
 	}
 }
 
-// --reason keeps its old contract for the other actions: only a Test approval
-// exception carries one.
 func TestAxiRespond_ReasonStillRefusedOutsideTestApprovalAndAbort(t *testing.T) {
 	var responded atomic.Bool
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
@@ -155,10 +146,6 @@ func TestAxiRespond_UnknownActionListsAbort(t *testing.T) {
 	}
 }
 
-// A CLI upgraded under a still-running older daemon must say so: that daemon
-// refuses the abort's reason with a message about Test approval, which would
-// otherwise read as the operator's mistake. It refused before recording
-// anything, and the restart needs --force while the gate's run is active.
 func TestAxiRespond_AbortExplainsAnOlderDaemonThatCannotRecordTheReason(t *testing.T) {
 	fx := newAxiTimeoutFixture(t, axiTimeoutOpts{
 		respond: func(context.Context, json.RawMessage) (interface{}, error) {

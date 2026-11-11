@@ -26,11 +26,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// ReplayOptions controls one isolated candidate comparison. The optional
-// callbacks observe progress for interactive rendering: OnPlan fires once the
-// case set is reserved and the session is recorded, OnResult after each
-// replay's evaluation is persisted. Both run synchronously on the replay
-// goroutine and may be nil.
 type ReplayOptions struct {
 	Set       string
 	Candidate Candidate
@@ -39,7 +34,6 @@ type ReplayOptions struct {
 	OnResult  func(evaluation Evaluation, completed, total int)
 }
 
-// Session records the immutable local plan used for one replay batch.
 type Session struct {
 	ID        string    `json:"id"`
 	StartedAt time.Time `json:"started_at"`
@@ -55,11 +49,6 @@ const (
 	replayReservationRefresh = time.Minute
 )
 
-// Replay runs exactly the captured review pass. It does not start a daemon or
-// use the production NM_HOME: every case is restored into a fresh temp gate and
-// worktree. Candidates inherit the caller's HOME so harness sign-in matches
-// an ordinary pipeline agent spawn. Push, PR, CI, and all fix loops are
-// intentionally absent from the MVP subject under test.
 func Replay(ctx context.Context, store *Store, opts ReplayOptions) (Session, []Evaluation, error) {
 	if store == nil {
 		return Session{}, nil, fmt.Errorf("eval replay requires a store")
@@ -490,14 +479,10 @@ func replayConfig(ctx context.Context, c Case, workDir string) (*config.Config, 
 }
 
 type observedAgent struct {
-	inner      agent.Agent
-	ownership  *e2edaemon.Ownership
-	result     *agent.Result
-	durationMS int64
-	// A review can rerun, so usage sums every attempt, fresh input per attempt
-	// as the captured baseline does. usageMissing marks an attempt with no
-	// reported usage, which makes the sum incomplete rather than a smaller
-	// cost.
+	inner            agent.Agent
+	ownership        *e2edaemon.Ownership
+	result           *agent.Result
+	durationMS       int64
 	usage            agent.TokenUsage
 	freshInputTokens int
 	usageMissing     bool

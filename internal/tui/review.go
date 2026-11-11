@@ -8,13 +8,10 @@ import (
 	nmtypes "github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// finding mirrors pipeline/steps.Finding for TUI rendering.
 type finding = nmtypes.Finding
 
-// findings mirrors pipeline/steps.Findings for TUI rendering.
 type findings = nmtypes.Findings
 
-// parseFindings decodes a JSON-encoded findings string.
 func parseFindings(raw string) (*findings, error) {
 	if raw == "" {
 		return nil, nil
@@ -26,7 +23,6 @@ func parseFindings(raw string) (*findings, error) {
 	return &f, nil
 }
 
-// severityIcon returns the visual indicator for a finding severity.
 func severityIcon(severity string) string {
 	switch severity {
 	case "error":
@@ -40,7 +36,6 @@ func severityIcon(severity string) string {
 	}
 }
 
-// riskLevelStyle returns the lipgloss style for a risk level.
 func riskLevelStyle(level string) lipgloss.Style {
 	switch strings.ToLower(level) {
 	case "low":
@@ -54,7 +49,6 @@ func riskLevelStyle(level string) lipgloss.Style {
 	}
 }
 
-// severityStyle returns the lipgloss style for a finding severity.
 func severityStyle(severity string) lipgloss.Style {
 	switch severity {
 	case "error":
@@ -183,8 +177,6 @@ func logLineStyle(line string) lipgloss.Style {
 	}
 }
 
-// styleLogLine applies PASS/FAIL-aware coloring to a single log line.
-// PASS lines are green, FAIL lines are red, everything else is dim.
 func styleLogLine(line string) string {
 	return logLineStyle(line).Render(line)
 }
@@ -207,7 +199,6 @@ func renderLogTail(logs []string, width int, maxLines int) []string {
 	return lines
 }
 
-// renderFindings renders a findings list for display in the TUI.
 func renderFindings(raw string, width int) string {
 	f, err := parseFindings(raw)
 	if err != nil || f == nil {
@@ -458,10 +449,6 @@ func renderParsedFindingsHeight(f *findings, width int, cursor int, selected map
 	return trimRenderedLines(content, maxLines), footer
 }
 
-// renderFindingsWithSelection renders findings with cursor, selection state, and optional
-// viewport limiting. maxVisible <= 0 means show all items (no viewport).
-// Returns (content, scrollFooter) where scrollFooter is a hint for the bottom border
-// (non-empty when items exist below the viewport).
 func renderFindingsWithSelection(raw string, width int, cursor int, selected map[string]bool, maxVisible int) (string, string) {
 	f, err := parseFindings(raw)
 	if err != nil || f == nil {

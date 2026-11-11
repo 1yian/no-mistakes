@@ -9,9 +9,6 @@ import (
 	"sync"
 )
 
-// The V2 fixture is intentionally independent of the recorded V1 envelopes.
-// Its prompt response is only admission; the wait and projection endpoints
-// expose the eventual scenario result through the published V2 contract.
 type fakeOpencodeV2Server struct {
 	base     *fakeOpencodeServer
 	password string

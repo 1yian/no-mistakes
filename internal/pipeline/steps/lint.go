@@ -10,7 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// LintStep runs linters and asks the agent to fix issues.
 type LintStep struct{}
 
 func (s *LintStep) Name() types.StepName { return types.StepLint }
@@ -160,7 +159,6 @@ Previous lint findings to address:
 		}, nil
 	}
 
-	// In fix mode, ask agent to fix lint issues first
 	var fixSummary string
 	if sctx.Fixing {
 		historySection := executionContextPromptSection(sctx.WorkDir) + roundHistoryPromptSection(sctx) + userIntentPromptSection(sctx)
@@ -239,10 +237,6 @@ Previous lint findings to address:
 	return &pipeline.StepOutcome{FixSummary: fixSummary}, nil
 }
 
-// lintOutcomeFromHousekeeping reports the lint findings the combined
-// document+lint pass produced, with the same gate semantics as the lint
-// step's own agent path: blocking (error/warning) findings park for a
-// decision, info findings pass through.
 func lintOutcomeFromHousekeeping(sctx *pipeline.StepContext, stash pipeline.HousekeepingLintResult) (*pipeline.StepOutcome, error) {
 	findings, err := types.ParseFindingsJSON(stash.FindingsJSON)
 	if err != nil {

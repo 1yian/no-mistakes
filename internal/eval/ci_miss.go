@@ -15,18 +15,8 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// goldSourceCIFalseNegative marks false-negative gold auto-ingested from a CI
-// finding that a green Review missed and the pipeline then fixed in-run. Any
-// real code defect CI surfaces, that is confirmed and fixed, is by definition a
-// Review false negative: Review passed green and missed it.
 const goldSourceCIFalseNegative = "recorded-ci-false-negative"
 
-// isCIFalseNegativeCategory reports whether a CI finding category names a real
-// code defect Review could have caught: a failing check the provider attributes
-// to the job (ci-check) or a review bot's comment about the change
-// (ci-review-bot). A ci-transient failure is a provider/infra outcome no code
-// change clears, and a merge conflict is not a defect Review reads for, so both
-// are excluded.
 func isCIFalseNegativeCategory(category string) bool {
 	switch category {
 	case types.FindingCategoryCICheck, types.FindingCategoryCIReviewBot:
@@ -36,25 +26,6 @@ func isCIFalseNegativeCategory(category string) bool {
 	}
 }
 
-// CIFalseNegativesFromRun reads a finished run's persisted CI findings and
-// returns false-negative gold for every ci-check / ci-review-bot finding the
-// run surfaced, confirmed, and fixed.
-//
-// The CI step already persists its structured findings on each round
-// (FindingsJSON), the IDs selected for repair (SelectedFindingIDs), and whether
-// the following fix round published a repair; this reads them back. A finding
-// counts as confirmed and fixed only when it was selected by auto-fix or an
-// explicit user fix, the immediately following fix round records a published
-// repair, and the run has positive post-repair check readiness. Findings that
-// were never selected, repairs that produced or published no change,
-// ci-transient / provider-infra failures, merge conflicts, no-CI declarations,
-// and terminal PR completion before checks passed are excluded.
-//
-// It never fabricates: a run that did not finish, whose CI step did not
-// complete cleanly green, or that has no such fixed finding yields nothing. It
-// makes no head/commit provenance, same-head, or cross-run judgement - a real
-// defect that slipped a green Review is a valid case regardless of which commit
-// introduced it.
 func CIFalseNegativesFromRun(database *db.DB, runID string) ([]FindingGold, error) {
 	if database == nil {
 		return nil, fmt.Errorf("ci false-negative ingest requires a database")
@@ -136,15 +107,6 @@ func repairLandedAfter(rounds []*db.StepRound, selectedIndex int) bool {
 	return repair.IsFixRound() && repair.RepairPublished
 }
 
-// AutoIngestCIFalseNegatives writes false-negative gold for a finished run's
-// fixed CI findings onto its green review case. It is the CI-side counterpart
-// of AutoCapture: the caller owns the timeout and the decision to run. It opens
-// its own store, does its work, and closes it, so a failure here cannot reach
-// the run that triggered it.
-//
-// Skipped is true, with no error, when the run has no fixed ci-check /
-// ci-review-bot finding, or when its review did not pass green (there is no
-// green review case to attach the misses to) - both are ordinary outcomes.
 func AutoIngestCIFalseNegatives(ctx context.Context, p *paths.Paths, database *db.DB, runID string) (IngestResult, bool, error) {
 	if p == nil || database == nil {
 		return IngestResult{}, false, fmt.Errorf("eval ci false-negative ingest requires paths and a database")
@@ -174,10 +136,6 @@ func AutoIngestCIFalseNegatives(ctx context.Context, p *paths.Paths, database *d
 	return result, false, nil
 }
 
-// ciFindingGold converts one persisted CI finding into false-negative gold. It
-// carries only what the structured finding actually gives - file, line,
-// description - and never enriches from log text, so it cannot fabricate a
-// location the finding did not record.
 func ciFindingGold(finding types.Finding) FindingGold {
 	severity := types.NormalizeFindingSeverity(finding.Severity)
 	if !types.IsKnownFindingSeverity(severity) {
@@ -194,9 +152,6 @@ func ciFindingGold(finding types.Finding) FindingGold {
 	}
 }
 
-// ciFalseNegativeID derives a deterministic gold ID from the finding's semantic
-// identity so re-ingesting the same run is a no-op (the corpus dedupes gold by
-// ID) and two identical findings across rounds collapse to one case.
 func ciFalseNegativeID(finding types.Finding) string {
 	h := sha256.Sum256([]byte(strings.Join([]string{
 		finding.Category,

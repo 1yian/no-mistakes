@@ -60,8 +60,6 @@ func replaceExecutableOnWindows(target string, binaryData []byte, perm os.FileMo
 	return nil
 }
 
-// CleanupOldExecutable removes the backup left by a successful Windows update.
-// The running process no longer holds that image open on the next startup.
 func CleanupOldExecutable() error {
 	if currentGOOS != "windows" {
 		return nil

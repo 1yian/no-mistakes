@@ -105,9 +105,6 @@ func TestDaemonRestartRefusesWithActiveRuns(t *testing.T) {
 	}
 }
 
-// TestDaemonStartRefusesToRestartForDriftWithActiveRuns covers #1425: a
-// running daemon whose service definition drifted is restarted by
-// `daemon start`, so that restart must pass the same active-run guard.
 func TestDaemonStartRefusesToRestartForDriftWithActiveRuns(t *testing.T) {
 	nmHome := makeSocketSafeTempDir(t)
 	t.Setenv("NM_HOME", nmHome)

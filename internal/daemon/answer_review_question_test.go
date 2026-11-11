@@ -17,9 +17,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// answerFixture registers a real Executor for one run id, which is what the
-// answer handler needs: the executor is the single owner of where the run's
-// review conversation lives, because that path depends on effective config.
 func answerFixture(t *testing.T) (*RunManager, *paths.Paths, string) {
 	t.Helper()
 	return answerFixtureWithConversation(t, true)
@@ -44,11 +41,6 @@ func answerFixtureWithConversation(t *testing.T, conversation bool) (*RunManager
 	return m, p, runID
 }
 
-// appendAgentQuestionLine appends one verbatim questions.ndjson line, standing
-// in for the reviewer's own file tools - the only writer of that file in
-// production, since internal/reviewqa deliberately owns no question writer. The
-// raw JSON keeps the shape under test visible, including the fields the
-// reviewer's prompt leaves out of its worked example.
 func appendAgentQuestionLine(t *testing.T, dir, line string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -68,10 +60,6 @@ func conversationDir(p *paths.Paths, runID string) string {
 	return reviewqa.Dir(p.RunEvidenceDir("", runID))
 }
 
-// TestAnswerReviewQuestionRecordsBeforeItDecidesToRelease is the property that
-// makes the answer channel safe: the answer is on disk before anything is
-// attempted with the gate, so a reviewer that is still mid-pass reads it at its
-// next checkpoint and an unreleasable gate never costs the operator the answer.
 func TestAnswerReviewQuestionRecordsBeforeItDecidesToRelease(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	dir := conversationDir(p, runID)
@@ -138,8 +126,6 @@ func TestAnswerReviewQuestionRecordsBeforeItDecidesToRelease(t *testing.T) {
 	}
 }
 
-// A correction is another append, and the last one wins - matching the file
-// protocol, so the operator never has to undo an answer.
 func TestAnswerReviewQuestionCorrectionReplacesTheEarlierAnswer(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	dir := conversationDir(p, runID)
@@ -174,10 +160,6 @@ func TestAnswerReviewQuestionRefusesIncompleteOrUnknownInput(t *testing.T) {
 	}
 }
 
-// An answer for a question nobody asked is recorded and ignored rather than
-// failing: the writer may be racing a question it has not read yet. It must not
-// be counted as open, or it would park a run on a question the reviewer never
-// asked.
 func TestAnswerReviewQuestionForAnUnknownQuestionDoesNotOpenOne(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	result, err := m.HandleAnswerReviewQuestion(runID, "ghost", "a", "captain")
@@ -199,12 +181,6 @@ func TestAnswerReviewQuestionForAnUnknownQuestionDoesNotOpenOne(t *testing.T) {
 	}
 }
 
-// TestAnswerReviewQuestionRefusesWhenTheConversationIsOff is the opt-in half of
-// the answer channel. A repository that has not set review.conversation has no
-// reviewer that was ever told to ask, so an answer has nothing to settle and
-// nothing to release - and the refusal has to name the setting that would
-// accept one, or an operator reading "no review conversation directory" would
-// go looking for a missing directory instead of an unset key.
 func TestAnswerReviewQuestionRefusesWhenTheConversationIsOff(t *testing.T) {
 	m, p, runID := answerFixtureWithConversation(t, false)
 
@@ -228,15 +204,6 @@ func TestAnswerReviewQuestionRefusesWhenTheConversationIsOff(t *testing.T) {
 	}
 }
 
-// TestAnswerReviewQuestionOnDiskQuestionSurvivesTheSettingBeingTurnedOff pins
-// the one exception to the opt-in refusal above.
-//
-// The reviewer asked while the channel was open - the file on disk is the proof
-// - and review.conversation was turned off, or a trusted-config fetch failed
-// and recovery resolved it the same way, before the answer landed. Refusing
-// then strands a parked run for good. The review step reads the same
-// conversation from disk for its finalize turn, so the answer reaches the
-// agent rather than merely unsticking the gate.
 func TestAnswerReviewQuestionOnDiskQuestionSurvivesTheSettingBeingTurnedOff(t *testing.T) {
 	m, p, runID := answerFixtureWithConversation(t, false)
 
@@ -258,9 +225,6 @@ func TestAnswerReviewQuestionOnDiskQuestionSurvivesTheSettingBeingTurnedOff(t *t
 	}
 }
 
-// parkingReviewStep parks a review gate on one ordinary ask-user CODE finding -
-// no review question involved - which is the gate an orphan answer used to be
-// able to steal.
 type parkingReviewStep struct{ entered chan struct{} }
 
 func (s *parkingReviewStep) Name() types.StepName { return types.StepReview }
@@ -275,10 +239,6 @@ func (s *parkingReviewStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepO
 	}, nil
 }
 
-// liveParkedGateFixture stands up a REAL executor parked at a review gate, so
-// "was the gate released" is observable rather than inferred. answerFixture's
-// bare executor is never waiting, so exec.Respond fails there for every input
-// and could not tell a correct refusal from the bug.
 func liveParkedGateFixture(t *testing.T) (*RunManager, *paths.Paths, string, *pipeline.Executor) {
 	t.Helper()
 	p := paths.WithRoot(t.TempDir())
@@ -347,18 +307,6 @@ func liveParkedGateFixture(t *testing.T) (*RunManager, *paths.Paths, string, *pi
 	return m, p, run.ID, exec
 }
 
-// TestAnswerReviewQuestionOrphanAnswerLeavesAParkedGateAlone is the regression
-// for the release rule. The handler used to decide purely from
-// len(conv.Open()) == 0 after the append, so an answer for an id nobody asked -
-// a typo, or an id carried over from a previous run - was recorded as an orphan,
-// left the open count at zero, and still fired
-// exec.Respond(StepReview, ActionAnswer). When the gate was parked on ordinary
-// ask-user CODE findings that released it: the step re-executed as a finalize
-// turn, burned a review round, the operator's verdict never happened, and their
-// follow-up axi respond failed with "no step awaiting approval".
-//
-// TestAnswerReviewQuestionForAnUnknownQuestionDoesNotOpenOne cannot catch this,
-// because its fixture has no parked gate at all.
 func TestAnswerReviewQuestionOrphanAnswerLeavesAParkedGateAlone(t *testing.T) {
 	m, p, runID, exec := liveParkedGateFixture(t)
 
@@ -385,10 +333,6 @@ func TestAnswerReviewQuestionOrphanAnswerLeavesAParkedGateAlone(t *testing.T) {
 	}
 }
 
-// TestAnswerReviewQuestionDuplicateAnswerLeavesAParkedGateAlone covers the same
-// rule for the other way the open count reaches zero without this answer
-// closing anything: a correction or a resend arriving after the last question
-// was already answered.
 func TestAnswerReviewQuestionDuplicateAnswerLeavesAParkedGateAlone(t *testing.T) {
 	m, p, runID, exec := liveParkedGateFixture(t)
 	dir := conversationDir(p, runID)
@@ -425,9 +369,6 @@ func TestAnswerReviewQuestionDuplicateAnswerLeavesAParkedGateAlone(t *testing.T)
 	}
 }
 
-// TestAnswerReviewQuestionClosingAnswerOnAParkedGateResumesAndClosesLast is the
-// ordinary release: the last open question answered while the review is parked
-// resumes it and reports closed_last, so axi answer follows the run.
 func TestAnswerReviewQuestionClosingAnswerOnAParkedGateResumesAndClosesLast(t *testing.T) {
 	m, p, runID, exec := liveParkedGateFixture(t)
 	appendAgentQuestionLine(t, conversationDir(p, runID), `{"id":"q1","question":"keep the legacy route?","options":["keep","remove"]}`)
@@ -455,17 +396,6 @@ func TestAnswerReviewQuestionClosingAnswerOnAParkedGateResumesAndClosesLast(t *t
 	}
 }
 
-// TestAnswerReviewQuestionCorrectionDoesNotPreAnswerAReAsk drives the whole
-// answer path for the sequence every step of which is ordinary: the reviewer
-// asks q1, the operator answers it, the operator then corrects that answer -
-// which axi answer advertises as recorded for the reviewer's next checkpoint -
-// and a later cold rereview, shown only the still-OPEN questions, re-uses q1
-// for a genuinely different question.
-//
-// Before the answer carried the ask it settles, that left two asks and two
-// answers, which reviewqa.Load could only read as "settled": the new question
-// arrived pre-answered, no question finding was emitted, and the gate never
-// parked on it.
 func TestAnswerReviewQuestionCorrectionDoesNotPreAnswerAReAsk(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	dir := conversationDir(p, runID)
@@ -493,17 +423,6 @@ func TestAnswerReviewQuestionCorrectionDoesNotPreAnswerAReAsk(t *testing.T) {
 	}
 }
 
-// TestAnswerReviewQuestionRefusesWhenTheConversationCannotBeRead closes the one
-// path that still reproduced the defect the ask ordinal exists to close. The
-// stamp comes from the pre-append snapshot, so a conversation that could not be
-// read used to fall through and append an UNSTAMPED answer - and an unstamped
-// answer settles nothing at all, so the question it was meant for parks forever
-// while the operator is told it was recorded.
-//
-// The refusal must also name the read failure. "It answered no open question" is
-// the truthful report for a conversation that reads fine with nothing open, and
-// telling an operator that about a conversation nobody could read sends them
-// looking for the wrong thing.
 func TestAnswerReviewQuestionRefusesWhenTheConversationCannotBeRead(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	dir := conversationDir(p, runID)
@@ -535,13 +454,6 @@ func TestAnswerReviewQuestionRefusesWhenTheConversationCannotBeRead(t *testing.T
 	}
 }
 
-// TestAnswerReviewQuestionRefusesAnIncompleteQuestionHistory is the write-side
-// half of the rule the reader already applies: a questions.ndjson the scan
-// cannot reach the end of settles nothing, ever, so an answer stamped against
-// it could never close its question and the gate would park forever with the
-// operator told they had answered it. The refusal must name THAT cause rather
-// than the ordinary "no question was open", which is a different, non-error
-// outcome, and it must write nothing at all.
 func TestAnswerReviewQuestionRefusesAnIncompleteQuestionHistory(t *testing.T) {
 	m, p, runID := answerFixture(t)
 	dir := conversationDir(p, runID)

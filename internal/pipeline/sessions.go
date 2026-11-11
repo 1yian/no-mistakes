@@ -9,38 +9,13 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/db"
 )
 
-// SessionRole identifies which durable review-loop session an invocation
-// belongs to. The fixer role spans every review-fix turn of a run. The
-// reviewer role spans one review PASS - its initial turn plus the finalize
-// turn that answers its own open questions - and nothing more: a rereview
-// certifies fixes implementing the previous review turn's findings, so
-// resuming a review session across a code change would seat the prescriber of
-// those fixes as their certifier and degrade the rereview into checking that
-// its own prescription was implemented.
 type SessionRole string
 
 const (
-	// SessionRoleReviewer spans ONE review pass: the initial turn, and the
-	// finalize turn that resumes it once the operator has answered every
-	// question that turn left open. It never spans a code change - the review
-	// step Forgets it before any fix round, and a new run gets a new manager -
-	// so a reviewer is never seated as the certifier of its own prescription.
-	// See docs/src/content/docs/concepts/review-conversation.md.
 	SessionRoleReviewer SessionRole = "reviewer"
 	SessionRoleFixer    SessionRole = "review-fixer"
 )
 
-// RunSessions manages the per-run, per-role durable agent sessions of the
-// review loop. It is strictly scoped to one run: identities are keyed by
-// (run, role), persisted as minimum resume metadata (run, role, agent,
-// session id - never prompts or transcripts), and never shared across runs,
-// branches, repositories, or roles.
-//
-// Correctness always wins over reuse: adapters without session support run
-// cold, a failed resume drops the identity and re-runs the same turn in a
-// fresh same-role session, and any persistence failure degrades to cold
-// invocations. A nil *RunSessions runs everything cold, preserving the
-// pre-session behavior for steps outside the review loop and for tests.
 type RunSessions struct {
 	db      *db.DB
 	runID   string
@@ -51,10 +26,6 @@ type RunSessions struct {
 	ids map[SessionRole]agent.SessionRef
 }
 
-// NewRunSessions creates the manager for one run, loading any persisted
-// session identities recorded by a previous process for the same run and
-// agent. Identities stored for a different adapter are ignored: a session id
-// is only meaningful to the adapter that minted it.
 func NewRunSessions(database *db.DB, runID string, sessionAgent agent.Agent, enabled bool) *RunSessions {
 	rs := &RunSessions{
 		db:      database,
@@ -75,9 +46,6 @@ func NewRunSessions(database *db.DB, runID string, sessionAgent agent.Agent, ena
 	return rs
 }
 
-// Run executes one turn of the given role, reusing the role's durable
-// session when the adapter supports it. logf (optional) receives operator-
-// visible notes about session reuse and fallbacks.
 func (rs *RunSessions) Run(ctx context.Context, a agent.Agent, role SessionRole, opts agent.RunOpts, logf func(string)) (*agent.Result, error) {
 	if rs == nil || !rs.enabled || !agent.SupportsSessionResume(a) {
 		if rs != nil && rs.enabled && logf != nil {
@@ -128,9 +96,6 @@ func (rs *RunSessions) id(role SessionRole) agent.SessionRef {
 	return rs.ids[role]
 }
 
-// remember stores the role's latest session identity in memory and persists
-// it so the run can resume the session across daemon process boundaries.
-// Persistence failures are ignored: reuse degrades, correctness does not.
 func (rs *RunSessions) remember(role SessionRole, sessionID, provider string) {
 	if sessionID == "" {
 		return
@@ -158,14 +123,6 @@ func sessionProvider(a agent.Agent, result *agent.Result) string {
 	return a.Name()
 }
 
-// Forget drops a role's session identity, in memory and in the durable store,
-// so the role's next turn starts cold.
-//
-// The review loop needs it for the independence guarantee: a reviewer session
-// may span the questions and answers of ONE pass, but never a code change. The
-// review step calls this before any fix round, so the turn that judges a fix
-// can never be the session that prescribed it. A nil manager is a no-op, which
-// is already cold.
 func (rs *RunSessions) Forget(role SessionRole) {
 	if rs == nil {
 		return

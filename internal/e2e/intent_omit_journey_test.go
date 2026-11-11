@@ -14,9 +14,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// omitIntentSlowBranch is a branch whose step prompts the scenario answers
-// slowly, so the run stays observably active long enough for the reattach
-// conflict check to be exercised against it.
 const omitIntentSlowBranch = "feature/omit-reattach"
 
 func writeOmitIntentScenario(t *testing.T) string {
@@ -75,19 +72,6 @@ func writeOmitIntentScenario(t *testing.T) string {
 	return path
 }
 
-// TestOmitIntentJourney drives the contributor-side Intent publication
-// controls through the real binary, daemon, gate hook, and a fork-routed PR
-// creation captured by the gh stub:
-//
-//   - a plain `axi run --intent` publishes the `## Intent` section (baseline);
-//   - `axi run --intent --no-publish-intent` keeps the section and the intent
-//     text out of the PR body while the review and PR-drafting prompts still
-//     receive the full intent;
-//   - a bare `rerun` after an omitting run inherits the omission;
-//   - `intent.publish_intent: false` in global config omits the section for a
-//     run started without the flag;
-//   - `axi run --no-publish-intent` against an active run started without it
-//     is refused rather than silently discarded.
 func TestOmitIntentJourney(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude", Scenario: writeOmitIntentScenario(t)})
 	ctx := context.Background()
@@ -162,7 +146,6 @@ func TestOmitIntentJourney(t *testing.T) {
 		}
 	}
 
-	// Baseline: publication is the default.
 	const publishedIntent = "publish this baseline intent on the PR body"
 	h.CommitChange("feature/omit-baseline", "feature.txt", "baseline\n", "add baseline feature")
 	baselineWT := h.AddWorktree("feature/omit-baseline")
@@ -181,7 +164,6 @@ func TestOmitIntentJourney(t *testing.T) {
 		t.Fatalf("baseline PR body must publish the Intent section:\n%s", baselineBody)
 	}
 
-	// Per-run flag: section gone, prompts unchanged.
 	const secretIntent = "SECRET-INTENT keep this contributor context off the public PR"
 	h.CommitChange("feature/omit-flag", "feature.txt", "flag\n", "add flag feature")
 	flagWT := h.AddWorktree("feature/omit-flag")

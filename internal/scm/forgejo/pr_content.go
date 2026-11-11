@@ -8,11 +8,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/scm"
 )
 
-// forgejo-axi 1.3.0 (source bb2d38c9803dd6ee841ffc84a4627be6b4de6474,
-// src/cli.ts handleApi / src/forgejo.ts rawApi) emits {status,data} for
-// `api GET PATH --json`. Unlike pr view, this neither previews the body nor
-// normalizes an absent body to empty. Existing connection/auth flags still go
-// through runJSON. pr update omits absent title all the way to its PATCH.
 func (h *Host) GetPRContent(ctx context.Context, pr *scm.PR) (scm.PRContent, error) {
 	number, err := h.validateInputPR(pr)
 	if err != nil {

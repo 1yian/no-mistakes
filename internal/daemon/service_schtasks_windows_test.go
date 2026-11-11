@@ -10,14 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestInstallWindowsTaskRegistersUserScopedLogonTask registers the real task
-// with Task Scheduler (issue #1192). From a non-elevated token the old unscoped
-// /SC ONLOGON registration failed with Access is denied; this asserts the
-// registered task's logon trigger is scoped to the current user and runs on a
-// limited interactive token. The task is disposable (unique per-root name,
-// deleted on cleanup) and its action is a nonexistent executable, so a task
-// leaked by a killed test process fails silently at logon instead of running
-// anything. Task Scheduler does not validate the action path at registration.
 func TestInstallWindowsTaskRegistersUserScopedLogonTask(t *testing.T) {
 	if testing.Short() {
 		t.Skip("registers a real scheduled task")

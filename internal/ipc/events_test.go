@@ -7,8 +7,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/ipc"
 )
 
-// The taxonomy is the single owner of "may this event be dropped?". Every
-// broker and consumer reads it from here instead of re-deriving it from names.
 func TestClassOfPartitionsEventsByLossTolerance(t *testing.T) {
 	tests := []struct {
 		event ipc.EventType
@@ -29,8 +27,6 @@ func TestClassOfPartitionsEventsByLossTolerance(t *testing.T) {
 	}
 }
 
-// D7: an event type this build does not recognise must never be treated as
-// droppable. A future producer's state transition has to fail safe.
 func TestClassOfUnknownEventFailsSafeToState(t *testing.T) {
 	if got := ipc.ClassOf(ipc.EventType("some_future_event")); got != ipc.ClassState {
 		t.Fatalf("ClassOf(unknown) = %v, want ClassState", got)
@@ -40,8 +36,6 @@ func TestClassOfUnknownEventFailsSafeToState(t *testing.T) {
 	}
 }
 
-// The gap frame and the revision must survive the wire, and both stay absent
-// from frames that do not carry them so older peers see no change.
 func TestStreamGapAndStateRevRoundTrip(t *testing.T) {
 	gap := ipc.Event{Type: ipc.EventStreamGap, RunID: "run-1", RepoID: "repo-1", StateRev: 71}
 	raw, err := json.Marshal(gap)

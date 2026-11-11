@@ -10,7 +10,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/config"
 )
 
-// fileAtRef reports whether path exists in the tree at ref in the given repo.
 func fileAtRef(t *testing.T, dir, ref, path string) bool {
 	t.Helper()
 	cmd := exec.Command("git", "cat-file", "-e", ref+":"+path)
@@ -18,17 +17,6 @@ func fileAtRef(t *testing.T, dir, ref, path string) bool {
 	return cmd.Run() == nil
 }
 
-// Issue #281: after no-mistakes opens a PR, a reviewed commit is pushed to
-// origin only (not through the gate). When main moves and the CI monitor
-// auto-fixes the merge conflict, it rebases from the gate's stale local state
-// and force-pushes - discarding the origin-only commit. The lease was anchored
-// to a freshly-read ls-remote SHA, which never refuses.
-//
-// The out-of-band commit must survive under BOTH ci.revalidate_repairs
-// policies, for two different reasons, so the guarantee is pinned on each:
-// with revalidation the repair never leaves the worktree at all, and without
-// it the shared guarded publication path refuses the force-push rather than
-// discarding a commit this run never incorporated.
 func TestCIStep_CommitAndPush_DoesNotClobberUnseenUpstreamCommit(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -128,10 +116,6 @@ func TestCIStep_CommitAndPush_DoesNotClobberUnseenUpstreamCommit(t *testing.T) {
 	}
 }
 
-// Issue #305: no-mistakes rebased onto a stale view of upstream and then the
-// push step force-pushed the result over an origin head that had advanced
-// out-of-band, dropping the commits that landed upstream in the meantime. The
-// push step must refuse to force-push over commits it never incorporated.
 func TestPushStep_RefusesToClobberAdvancedUpstreamBranch(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()
@@ -195,16 +179,6 @@ func TestPushStep_RefusesToClobberAdvancedUpstreamBranch(t *testing.T) {
 	}
 }
 
-// review-1 regression: a force-push run must not clobber an out-of-band commit
-// on the PR branch. The hazard is the lease fast-path: if the rebase step
-// refreshes origin/<branch> on a force push, the push step's lastSeen anchor
-// equals the live remote head, so resolveForcePushDecision accepts
-// `current == lastSeen` WITHOUT the patch-id content check and overwrites the
-// out-of-band commit. The fix is twofold: the rebase step leaves the
-// remote-tracking ref stale on a force push (so lastSeen stays the last
-// *observed* head), and the content check excludes only history reachable from
-// the run base. This exercises rebase + push together, the way the daemon runs
-// them, so it covers the fast-path the unit tests cannot.
 func TestForcePushRun_RefusesToClobberOutOfBandBranchCommit(t *testing.T) {
 	t.Parallel()
 	upstream := t.TempDir()

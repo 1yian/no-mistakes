@@ -6,22 +6,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// renderBox renders content inside a rounded-border box with a styled title
-// embedded in the top border, per DESIGN.md Boxed Sections spec.
 func renderBox(title, content string, width int) string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ansiCyan))
 	return renderBoxWithStyledTitle(titleStyle.Render(title), content, width, "")
 }
 
-// renderBoxWithFooter renders a box with an optional hint embedded in the bottom border.
-// Per DESIGN.md Diff View: ╰──── ↓ 23 more lines (j/k) ─────────────╯
 func renderBoxWithFooter(title, content string, width int, footer string) string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ansiCyan))
 	return renderBoxWithStyledTitle(titleStyle.Render(title), content, width, footer)
 }
 
-// renderBoxWithStyledTitle renders a box with a pre-styled title and optional footer.
-// Unlike renderBoxWithFooter, the title is used as-is (caller handles styling).
 func renderBoxWithStyledTitle(styledTitle string, content string, width int, footer string) string {
 	if width < 6 {
 		width = 6
@@ -43,7 +37,6 @@ func renderBoxWithStyledTitle(styledTitle string, content string, width int, foo
 		contentWidth = 1
 	}
 
-	// Content lines.
 	var lines []string
 	contentLines := strings.Split(content, "\n")
 	if len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
@@ -62,7 +55,6 @@ func renderBoxWithStyledTitle(styledTitle string, content string, width int, foo
 	return topBorder + "\n" + strings.Join(lines, "\n") + "\n" + renderBottomBorder(width, footer)
 }
 
-// renderBottomBorder renders a bottom border, optionally embedding a footer hint.
 func renderBottomBorder(width int, footer string) string {
 	borderColor := lipgloss.NewStyle().Foreground(lipgloss.Color(ansiBrightBlack))
 

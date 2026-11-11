@@ -41,8 +41,6 @@ func normalizeRepositoryOverrides(raw RepositoryOverrides) (RepositoryOverrides,
 	return overrides, nil
 }
 
-// normalizeRepositoryRemote identifies a Git remote by host and repository path,
-// applying provider-specific case and suffix equivalence.
 func normalizeRepositoryRemote(remote string) (string, error) {
 	remote = strings.TrimSpace(remote)
 	if remote == "" {

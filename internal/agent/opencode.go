@@ -13,31 +13,12 @@ import (
 
 var errOpencodeThinkingToolChoiceConflict = errors.New("opencode provider rejects required tool choice while thinking is enabled")
 
-// errOpencodeForcedToolChoiceUnsupported is the blanket variant: the
-// gateway rejects EVERY non-auto tool_choice unconditionally (for
-// example the OpenCode Console free tier), so no thinking toggle can
-// help and prompt-only is the only route. It stays a separate sentinel
-// from errOpencodeThinkingToolChoiceConflict so the surfaced error never
-// claims a thinking conflict where there is none, even though both route
-// into the same prompt-only structured-output fallback.
 var errOpencodeForcedToolChoiceUnsupported = errors.New("opencode provider supports only auto tool choice")
 
-// errOpencodeToolsAlreadyRan annotates a failure whose turn had already
-// invoked a tool. The prompt-only fallback re-runs the whole prompt in a
-// fresh session, so it must not be taken past this marker.
 var errOpencodeToolsAlreadyRan = errors.New("the failed turn already ran tools")
 
-// errOpencodeToolActivityUnknown annotates a failure whose turn could not be
-// read at all: no tool part observed, and no complete record of the turn to
-// prove none ran. It withholds the same replays as errOpencodeToolsAlreadyRan
-// - an unverified turn is not a turn that did nothing - and stays a separate
-// sentinel so the surfaced error says which of the two it was.
 var errOpencodeToolActivityUnknown = errors.New("could not verify the failed turn ran no tools")
 
-// thinkingConflict builds the fallback trigger, carrying the turn's tool
-// evidence. A session.error can arrive at any point in a turn, so the
-// conflict is not always detected before the model has acted, and the
-// fallback is another fresh session.
 func thinkingConflict(evidence opencodeToolEvidence, cause error) error {
 	err := errOpencodeThinkingToolChoiceConflict
 	if !evidence.replaySafe() {
@@ -49,11 +30,6 @@ func thinkingConflict(evidence opencodeToolEvidence, cause error) error {
 	return err
 }
 
-// forcedToolChoiceConflict builds the fallback trigger for the blanket
-// only-auto rejection, carrying the turn's tool evidence like
-// thinkingConflict does. It reports the gateway's own wording - there is
-// no thinking conflict to name and disabling thinking would not help -
-// and routes into the same prompt-only fallback.
 func forcedToolChoiceConflict(evidence opencodeToolEvidence, cause error) error {
 	err := errOpencodeForcedToolChoiceUnsupported
 	if !evidence.replaySafe() {
@@ -65,10 +41,6 @@ func forcedToolChoiceConflict(evidence opencodeToolEvidence, cause error) error 
 	return err
 }
 
-// opencodeFallbackTrigger reports whether err is either structured-output
-// fallback trigger: the thinking/tool_choice conflict or the blanket
-// only-auto rejection. Both route to the same prompt-only retry; they stay
-// distinct sentinels so the surfaced error names the actual rejection.
 func opencodeFallbackTrigger(err error) bool {
 	return errors.Is(err, errOpencodeThinkingToolChoiceConflict) ||
 		errors.Is(err, errOpencodeForcedToolChoiceUnsupported)
@@ -80,18 +52,6 @@ var thinkingToolChoiceConflictPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(?:thinking|reasoning)\s+may not be enabled when\s+tool[_ ]choice\s+forces\s+tool use`),
 }
 
-// forcedToolChoiceUnsupportedPatterns matches a gateway that rejects every
-// non-auto tool_choice unconditionally, without naming thinking or
-// reasoning. Each pattern requires tool_choice beside an only-auto or
-// unsupported verdict, so unrelated provider errors - including a thinking
-// model that merely "does not support this tool_choice" - do not match.
-// Both detectors match per sentence, so a period can never appear in the
-// input and cannot separate anything. What keeps the tool_choice token and
-// the only-auto verdict together is excluding the comma and semicolon that
-// would put them in different clauses of one sentence: "tool_choice is
-// restricted, and only auto scaling is enabled" describes a quota, not this
-// rejection. A colon directly after the token is allowed, since
-// "tool_choice: only auto" is one clause.
 var forcedToolChoiceUnsupportedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)only\s+["']?\bauto\b["']?\s+(?:is\s+)?supported\s+for\s+["']?tool[_ ]choice["']?`),
 	// After "only auto", require a verdict boundary (end / punctuation /
@@ -104,16 +64,10 @@ var forcedToolChoiceUnsupportedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)["']?tool[_ ]choice["']?\s*(?:value|parameter)?\s*(?:is\s+)?(?:currently\s+)?unsupported\b`),
 }
 
-// opencodeAgent starts a persistent HTTP server via `opencode serve`
-// and sends requests via REST with SSE streaming.
 type opencodeAgent struct {
 	bin       string
 	extraArgs []string
-	// profile is the harness-neutral model/effort selection resolved by
-	// internal/agentcfg. `opencode serve` rejects model and variant flags
-	// outright, so unlike every other native adapter these two knobs cannot ride
-	// argv: V1 uses the session-message body; V2 uses the session model reference.
-	profile agentcfg.Profile
+	profile   agentcfg.Profile
 	subprocessContext
 	mu     sync.Mutex
 	server *managedServer
@@ -420,17 +374,6 @@ func isThinkingToolChoiceConflict(e *opencodeMessageError) bool {
 	return false
 }
 
-// isThinkingToolChoiceConflictText reports the conditional rejection: this
-// provider refuses a forced tool_choice while a thinking or reasoning mode is
-// on, so turning that mode off is a genuine remedy.
-//
-// Beyond the relational wordings above, a sentence that carries one of the
-// blanket only-auto verdicts AND names thinking belongs here rather than to
-// isForcedToolChoiceUnsupportedText. "tool_choice must be auto when thinking
-// is enabled" states the same conditional restriction without a relational
-// verb, and reading the two signals together in one sentence keeps the pair
-// of detectors both exhaustive and disjoint: a verdict naming thinking is a
-// thinking conflict, and the same verdict without it is a blanket rejection.
 func isThinkingToolChoiceConflictText(text string) bool {
 	for _, pattern := range thinkingToolChoiceConflictPatterns {
 		if pattern.MatchString(text) {
@@ -450,14 +393,8 @@ func isThinkingToolChoiceConflictText(text string) bool {
 	return false
 }
 
-// thinkingMentionPattern names a thinking or reasoning mode. A blanket
-// only-auto rejection describes the parameter alone, so a sentence that also
-// names thinking is a thinking conflict this detector must decline - see
-// isForcedToolChoiceUnsupportedText.
 var thinkingMentionPattern = regexp.MustCompile(`(?i)\b(?:thinking|reasoning)\b`)
 
-// sentenceSplitPattern splits provider prose into sentences so a verdict is
-// only read together with the words in its own sentence.
 var sentenceSplitPattern = regexp.MustCompile(`[.!?\n]+`)
 
 func isForcedToolChoiceUnsupported(e *opencodeMessageError) bool {
@@ -469,19 +406,6 @@ func isForcedToolChoiceUnsupported(e *opencodeMessageError) bool {
 	return false
 }
 
-// isForcedToolChoiceUnsupportedText reports the blanket rejection: this
-// provider allows no tool_choice but auto, whatever else is enabled.
-//
-// A sentence naming thinking or reasoning is declined even when a pattern
-// matches it. Wording like "tool_choice must be auto when thinking is
-// enabled" is a thinking conflict, and isThinkingToolChoiceConflictText does
-// not catch it because it requires a relational verb such as "incompatible
-// with". Without this guard that string would reach here and be reported as
-// a blanket gateway restriction, naming the wrong cause and implying that no
-// thinking toggle can help when one is exactly the remedy. Both classes still
-// reach the same prompt-only fallback, so declining here costs no recovery -
-// it only keeps the surfaced error honest, which is the whole reason the two
-// sentinels are separate.
 func isForcedToolChoiceUnsupportedText(text string) bool {
 	for _, sentence := range sentenceSplitPattern.Split(text, -1) {
 		if thinkingMentionPattern.MatchString(sentence) {

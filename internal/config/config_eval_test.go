@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// TestEvalDefaultsCollectWithoutSetup pins the decision that replaced the
-// environment variable: a machine with no eval configuration at all still
-// records replay provenance and still collects cases. Provenance cannot be
-// added to a review round after the fact, so an off-by-default setting means
-// every run before someone discovers the setting is permanently unusable.
 func TestEvalDefaultsCollectWithoutSetup(t *testing.T) {
 	cfg, err := LoadGlobal(filepath.Join(t.TempDir(), "absent.yaml"))
 	if err != nil {
@@ -36,8 +31,6 @@ func TestEvalSettingsAreConfigurable(t *testing.T) {
 	}
 }
 
-// TestEvalMaxCasesZeroKeepsEveryCase pins that an explicit zero survives the
-// "not set" pointer check instead of falling back to the default cap.
 func TestEvalMaxCasesZeroKeepsEveryCase(t *testing.T) {
 	cfg, err := LoadGlobalFromBytes([]byte("eval:\n  max_cases: 0\n"))
 	if err != nil {
@@ -72,10 +65,6 @@ func TestEvalDiversifiedSizeZeroMeansNoCap(t *testing.T) {
 	}
 }
 
-// TestRepoConfigCannotChangeEvalCollection pins eval as an operator-only,
-// machine-level setting. It governs this machine's local disk and what its
-// daemon records, so a pushed branch must not be able to switch collection on,
-// off, or resize it for the person running the pipeline.
 func TestRepoConfigCannotChangeEvalCollection(t *testing.T) {
 	global, err := LoadGlobalFromBytes([]byte("eval:\n  auto_capture: true\n  max_cases: 7\n"))
 	if err != nil {
@@ -91,9 +80,6 @@ func TestRepoConfigCannotChangeEvalCollection(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigYAMLDocumentsEvalCollection keeps the shipped template
-// honest about a default that writes to disk on every run: someone reading
-// their own config.yaml has to be able to see it and turn it off.
 func TestDefaultConfigYAMLDocumentsEvalCollection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	EnsureDefaultGlobalConfig(path)

@@ -327,18 +327,6 @@ func TestRefreshManagedPostReceiveHookInstallsMissingHook(t *testing.T) {
 	}
 }
 
-// TestPostReceiveHook_ResolvesAbsoluteGateDir covers issue #269: when git
-// invokes the hook from a cwd whose `pwd` collapses to "." (observed in real
-// pushes though not reliably reproducible by hand), the hook used to pass
-// `--gate .`, which the daemon rejects with "invalid gate path: ." so the
-// pipeline never started. The hook must resolve the bare repo dir explicitly
-// via `git rev-parse --absolute-git-dir` so the gate path is absolute in every
-// cwd state.
-//
-// We force the failure condition deterministically by poisoning PWD="." in
-// the hook's environment: the POSIX `pwd` builtin then returns "." exactly as
-// the reporter saw, while `git rev-parse --absolute-git-dir` still returns the
-// true absolute path.
 func TestPostReceiveHook_ResolvesAbsoluteGateDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("post-receive hook is /bin/sh-only")
@@ -476,8 +464,6 @@ func TestPostReceiveHook_FallsBackToHookLocationForGateDir(t *testing.T) {
 	}
 }
 
-// gateArgFromArgv returns the value following the first "--gate" token in a
-// newline-separated argv dump, or "" if absent.
 func gateArgFromArgv(argv string) string {
 	fields := strings.Split(strings.TrimSpace(argv), "\n")
 	for i, f := range fields {
@@ -488,15 +474,6 @@ func gateArgFromArgv(argv string) string {
 	return ""
 }
 
-// TestPostReceiveHook_SurfacesNotifyFailures covers issue #122 defect 2:
-// when notify-push fails (daemon down, missing-hook state, etc.), the user
-// must see the failure on stderr instead of getting a clean-looking push.
-// We also persist failures to <bareDir>/notify-push.log so they survive past
-// the terminal scrollback.
-//
-// Note: post-receive's exit code is ignored by git, so we can't make
-// `git push` exit non-zero. The wizard's push-confirmation step (defect 3)
-// is responsible for surfacing the failure to the user as an error.
 func TestPostReceiveHook_SurfacesNotifyFailures(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("post-receive hook is /bin/sh-only")
@@ -603,11 +580,6 @@ func TestIsolateHooksPath_OverridesPoisonedSharedConfig(t *testing.T) {
 	}
 }
 
-// TestIsolateHooksPath_LinkedWorktreeCanRebase covers the regression where
-// enabling extensions.worktreeConfig on a bare repo while leaving
-// core.bare=true in shared config caused `git rebase` to fail inside linked
-// worktrees with "fatal: this operation must be run in a work tree". Git
-// requires core.bare to live in per-worktree scope once worktreeConfig is on.
 func TestIsolateHooksPath_LinkedWorktreeCanRebase(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("worktree + shell pipeline is /bin/sh-only")
@@ -659,10 +631,6 @@ func TestIsolateHooksPath_LinkedWorktreeCanRebase(t *testing.T) {
 	}
 }
 
-// TestIsolateHooksPath_PushToGateStillWorks guards the other critical path:
-// after IsolateHooksPath moves core.bare to per-worktree scope, a normal
-// `git push` from a working repo to the gate must still land, and the
-// post-receive hook (resolved via the pinned core.hookspath) must still fire.
 func TestIsolateHooksPath_PushToGateStillWorks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("post-receive hook is /bin/sh-only")
@@ -708,9 +676,6 @@ func TestIsolateHooksPath_PushToGateStillWorks(t *testing.T) {
 	}
 }
 
-// seedGate creates a working repo under base/work, wires it to the bare as a
-// remote, makes an initial commit, and pushes it as refs/heads/main. Returns
-// the working repo path.
 func seedGate(t *testing.T, base, bare string) string {
 	t.Helper()
 	work := filepath.Join(base, "work")
@@ -735,11 +700,6 @@ func runGitOrFatal(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
-// TestIsolateHooksPath_MigratesFromPreFixState covers the upgrade path for
-// bare repos created by the previous version of IsolateHooksPath, which left
-// core.bare=true in shared config. Running the new IsolateHooksPath on that
-// state must relocate core.bare to per-worktree scope so linked worktrees
-// stop inheriting core.bare=true.
 func TestIsolateHooksPath_MigratesFromPreFixState(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("worktree + shell pipeline is /bin/sh-only")
@@ -827,15 +787,6 @@ func TestIsolateHooksPath_SkipsIsolationWhenWorktreeConfigUnsupported(t *testing
 	}
 }
 
-// TestIsolateHooksPath_LinkedWorktreeResolvesRepoForCLI reproduces the CI
-// step's working directory: a detached linked worktree of the gate bare repo,
-// which records origin = the GitHub upstream. The CI watch shells out to `gh`
-// from this directory, and gh resolves the repository by running git there.
-// This guards the invariant that such a worktree is a real work tree with no
-// leaked core.bare and a resolvable origin - i.e. gh can determine the repo
-// from cwd alone. See issue #255: when this breaks, `gh pr checks` fails every
-// poll and the CI step hangs until ci_timeout. No real gh or network is
-// needed; the failure is purely in git's repo resolution, which gh depends on.
 func TestIsolateHooksPath_LinkedWorktreeResolvesRepoForCLI(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
@@ -845,8 +796,6 @@ func TestIsolateHooksPath_LinkedWorktreeResolvesRepoForCLI(t *testing.T) {
 	}
 	seedGate(t, base, bare)
 
-	// The gate records origin = upstream so worktrees can resolve the repo
-	// (gate.provisionGate does this for exactly this reason).
 	const upstream = "https://github.com/test/repo.git"
 	if err := EnsureRemote(ctx, bare, "origin", upstream); err != nil {
 		t.Fatalf("EnsureRemote: %v", err)
@@ -889,14 +838,6 @@ func TestIsolateHooksPath_LinkedWorktreeResolvesRepoForCLI(t *testing.T) {
 	}
 }
 
-// TestLinkedWorktreeLeaksCoreBareWithoutRelocation pins the failure mechanism
-// behind issue #255 for a git too old for per-worktree config. When
-// IsolateHooksPath cannot relocate core.bare (no `config --worktree`), the bare
-// repo's core.bare=true stays in shared config and leaks into every linked
-// worktree. A worktree that reports core.bare=true is treated as bare by
-// stricter git, so git - and therefore gh - fail to operate from it, and that
-// worktree is the CI step's cwd. The old-git path is simulated deterministically
-// via the runGit stub so this reproduces the reporter's config state on any git.
 func TestLinkedWorktreeLeaksCoreBareWithoutRelocation(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
@@ -935,10 +876,6 @@ func TestLinkedWorktreeLeaksCoreBareWithoutRelocation(t *testing.T) {
 	}
 }
 
-// worktreeConfigIsolatesCoreBare reports whether the host git supports
-// per-worktree config, i.e. whether IsolateHooksPath was able to relocate
-// core.bare into per-worktree scope. When false, the host cannot isolate
-// core.bare at all (best-effort path).
 func worktreeConfigIsolatesCoreBare(t *testing.T, bare string) bool {
 	t.Helper()
 	out, err := exec.Command("git", "-C", bare, "config", "--worktree", "--get", "core.bare").CombinedOutput()

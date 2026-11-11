@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// TranscriptHomes pins discovery roots, independently of agent authentication.
-// Both roots are resolved by the caller, including defaults, so the daemon's
-// environment cannot select a different account. Nil denotes a legacy launch.
 type TranscriptHomes struct {
 	ClaudeConfigDir string `json:"claude_config_dir"`
 	CodexHome       string `json:"codex_home"`

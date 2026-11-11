@@ -14,34 +14,12 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// maxSettledQuestionsInPrompt bounds the settled-questions section. Every
-// entry is rendered verbatim into the review prompt, so this is a prompt
-// budget, not a correctness limit: a longer conversation carries its most
-// recent answers.
 const maxSettledQuestionsInPrompt = db.MaxBranchReviewAnswers
 
-// reviewConversationEnabled reports whether this repository asked for the
-// review conversation. It is the one owner of that question inside this
-// package: off, every part of the protocol is off together, which is what
-// makes "the key is off" mean today's behavior rather than most of it.
 func reviewConversationEnabled(sctx *pipeline.StepContext) bool {
 	return sctx != nil && sctx.Config != nil && sctx.Config.Review.Conversation
 }
 
-// reviewConversationDir is where this run's review conversation lives.
-//
-// Empty is the off-switch for ASKING, and every ask-side consumer keys on it:
-// the reviewer is told nothing about a question channel, no files are created,
-// no question findings are produced (which is what parks the step), the
-// settled-questions section is absent, and the PR body grows no conversation
-// group - byte for byte the behavior of a build without this feature.
-//
-// Whether a conversation that already EXISTS may be read and answered is a
-// separate question, owned by reviewConversationReadDir below.
-//
-// It is empty for two reasons. review.conversation is off, which is the
-// default and means the repository has not asked for the conversation; or the
-// run has no evidence directory, so there is nowhere to put the files.
 func reviewConversationDir(sctx *pipeline.StepContext) string {
 	if !reviewConversationEnabled(sctx) {
 		return ""
@@ -49,29 +27,6 @@ func reviewConversationDir(sctx *pipeline.StepContext) string {
 	return reviewqa.Dir(sctx.EvidenceDir)
 }
 
-// reviewConversationReadDir is where an EXISTING conversation may be read from,
-// or empty when none may be.
-//
-// It is deliberately not reviewConversationDir, because one flag was answering
-// two different questions. "May the reviewer ASK?" must stay keyed on
-// review.conversation: an off repository's prompt carries no question protocol,
-// creates no files, and publishes the body it published before the feature
-// existed. "May an existing conversation be READ?" has no reason to be keyed on
-// it at all - the questions are already on disk, the reviewer already asked
-// them, and the only thing the setting can do at that point is strand them.
-//
-// review.conversation is trusted-default-branch-only and is re-resolved on
-// recovery from the current default-branch tip, so a maintainer who turns it
-// off - or a trusted-config fetch that fails, which resolves the same way -
-// while a run is parked on open questions used to make those questions
-// permanently unanswerable: the answer path refused, and even when it did not,
-// the finalize turn skipped its answers section and the answer reached no agent.
-//
-// The off-state guarantee is untouched, because the two cases are
-// distinguishable on disk. A repository that never enabled the conversation
-// cannot have a questions file, so this returns "" for it and every read-side
-// consumer behaves exactly as upstream does. A file can only exist if the
-// conversation was on when the reviewer wrote it.
 func reviewConversationReadDir(sctx *pipeline.StepContext) string {
 	if dir := reviewConversationDir(sctx); dir != "" {
 		return dir
@@ -86,16 +41,6 @@ func reviewConversationReadDir(sctx *pipeline.StepContext) string {
 	return dir
 }
 
-// loadReviewConversation reads the run's conversation, logging any bounded
-// protocol note the reader produced.
-//
-// A read failure is fatal to the step, matching the refusal the answer path
-// already gives: only the questions this load returns become findings, so a
-// conversation file that exists but cannot be opened would otherwise produce
-// no open question, no park, and a review that completes as if the reviewer
-// had asked nothing. Absence is not failure - an off conversation, a missing
-// directory and a missing file are all ordinary empty conversations, which
-// reviewqa.Load already distinguishes.
 func loadReviewConversation(sctx *pipeline.StepContext, dir string) (reviewqa.Conversation, error) {
 	if dir == "" {
 		return reviewqa.Conversation{}, nil
@@ -112,25 +57,6 @@ func loadReviewConversation(sctx *pipeline.StepContext, dir string) (reviewqa.Co
 	return conv, nil
 }
 
-// reviewQuestionProtocolSection tells the reviewer how to ask while it works.
-//
-// The channel is two append-only files rather than a tool, because the agent
-// already has file tools: an MCP server per run would be a process, a
-// handshake and a per-adapter support matrix for a capability it already has.
-//
-// Three instructions carry the whole design and are load-bearing:
-//
-//   - keep reviewing while a question is open, so the captain's answer latency
-//     (tens of minutes to hours) never gates the review's own work;
-//   - re-read answers at checkpoints, which is what lets an early answer
-//     REDIRECT the pass instead of arriving after the effort is spent (the
-//     captain's stated reason for building emission first);
-//   - an answer settles only the question it answers, which stops a live
-//     "that is intended" from softening findings nobody asked about.
-//
-// Routing by weight is unchanged: minor questions the reviewer decides itself.
-// An emitted question therefore always carries options, because it reaches the
-// captain in the same multiple-choice form he already receives.
 func reviewQuestionProtocolSection(dir string, conv reviewqa.Conversation) string {
 	if dir == "" {
 		return ""
@@ -161,14 +87,6 @@ func reviewQuestionProtocolSection(dir string, conv reviewqa.Conversation) strin
 	return b.String()
 }
 
-// reviewAnswersPromptSection renders the answers this pass has received.
-//
-// It is appended to the FULL review prompt on a finalize turn, not to a bare
-// "here are your answers" message, and that is deliberate: the finalize turn
-// resumes the reviewer's session, but a resume can fail (a dead session id, an
-// adapter without resume support), in which case RunSessions re-runs the same
-// turn cold. A self-sufficient prompt makes that fallback a slower review
-// rather than a meaningless one.
 func reviewAnswersPromptSection(conv reviewqa.Conversation) string {
 	answered := conv.Answered()
 	if len(answered) == 0 {
@@ -199,11 +117,6 @@ func reviewAnswersPromptSection(conv reviewqa.Conversation) string {
 	return b.String()
 }
 
-// reviewSchemaForFinalize declares the retraction list, and only a finalize
-// turn with the conversation on may have it: the property is meaningless to
-// any other turn, which is never told what a carried finding is, and declaring
-// it anyway left an opt-in feature visible in the agent contract of every
-// repository that had not turned the conversation on.
 func reviewSchemaForFinalize(finalizing bool) json.RawMessage {
 	if !finalizing {
 		return reviewFindingsSchema
@@ -212,16 +125,6 @@ func reviewSchemaForFinalize(finalizing bool) json.RawMessage {
 	return json.RawMessage(strings.Replace(string(reviewFindingsSchema), `"tested":`, property+`"tested":`, 1))
 }
 
-// carriedFindingsPromptSection makes an answer round re-adjudicate what it
-// carried in, instead of clearing a finding by staying silent about it.
-//
-// The finalize turn resumes a pass that had already judged some files before it
-// asked. The answer changes what it knows, so the right move is to walk the
-// findings it has already made and say, for each, whether it still holds - not
-// to re-derive the whole pass and let anything it happens not to re-report drop
-// out. Clearing by omission is what let a covered file take an unrelated
-// finding with it; here a carried finding is kept unless the turn names it in
-// withdrawn_findings with a reason.
 func carriedFindingsPromptSection(carried string) string {
 	parsed, err := types.ParseFindingsJSON(carried)
 	if err != nil || len(parsed.Items) == 0 {
@@ -254,15 +157,6 @@ func carriedFindingsPromptSection(carried string) string {
 	return b.String()
 }
 
-// settledQuestionsPromptSection lists what a human already answered about this
-// branch, in any run, so a cold reviewer stops re-asking it.
-//
-// It is rendered SEPARATELY from the acceptance criteria and from the
-// branch-decision section on purpose: an acceptance criterion is something the
-// change must satisfy, while a settled question is something the reviewer must
-// stop asking. Merging them is how a recorded decision got re-derived as a
-// requirement and re-raised (the audited seed-bytes case, raised in rounds 3,
-// 10 and 20 of one branch).
 func settledQuestionsPromptSection(sctx *pipeline.StepContext) string {
 	answers, truncated := loadBranchReviewAnswers(sctx)
 	if len(answers) == 0 {
@@ -316,28 +210,6 @@ func loadBranchReviewAnswers(sctx *pipeline.StepContext) ([]db.ReviewAnswer, boo
 	return answers, truncated
 }
 
-// recordAnsweredQuestions mirrors every answered question of this pass into
-// the branch-scoped store, so the next COLD reviewer - in this run or a later
-// one - reads it. A mid-turn answer is not a gate response, so it cannot ride
-// the step_rounds decision channel that carries approve/fix/skip.
-//
-// Best effort: a write failure degrades the next reviewer's context, and
-// failing the review over it would throw away a completed pass. It is reported
-// at ERROR rather than as a degradation, because the decision it drops is a
-// human's and nothing else records it.
-//
-// One shape of failure is worth naming, since there is deliberately no
-// migration for it. review_questions gained ask_ordinal inside this feature's
-// own branch, and every statement here and in the read path names that column,
-// so a database created by an earlier commit of that branch fails every write
-// and every read. No released version ships the old shape - CREATE TABLE gives
-// every other database the five-column key - and migrationStatements could not
-// carry the remedy anyway: they are re-executed with their errors TOLERATED on
-// every start, which is safe for an additive ALTER and destructive for the
-// create/copy/drop/rename a key change needs, since SQLite cannot ALTER a
-// column into a primary key. The blast radius stays this store: such a
-// development database reports loudly here and is repaired by dropping the
-// table by hand, and nothing else in the application is affected.
 func recordAnsweredQuestions(sctx *pipeline.StepContext, conv reviewqa.Conversation) {
 	if sctx == nil || sctx.DB == nil || sctx.Repo == nil || sctx.Run == nil {
 		return
@@ -371,25 +243,6 @@ func recordAnsweredQuestions(sctx *pipeline.StepContext, conv reviewqa.Conversat
 	}
 }
 
-// Bounds on what the open questions may put on a channel that is not theirs.
-//
-// The findings payload rides the IPC event stream, and one frame over the
-// transport limit kills the whole subscription and hides every event after it
-// (the executor's approval-park comment owns that fact). reviewqa's own bounds
-// do not contain this: 2000 accepted lines, or ~16 lines near its 64 KiB
-// per-line bound, are all still a "bounded" conversation while being two orders
-// of magnitude over the 1 MiB frame once each becomes a finding. The prompt
-// sections have the same shape, and every sibling channel in this package is
-// already bounded (db.MaxBranchReviewAnswers for settled questions,
-// maxPublishedConversationEntries/Chars for the PR body), so these are the
-// outliers rather than a new policy.
-//
-// Same remedy as maxReviewBotCommentFindings in ci_findings.go, but it degrades
-// differently, because a review question needs an answer before the gate can
-// release: a dropped question is NOT re-emitted as a row once the others are
-// answered (that would need another review turn, and a review turn only starts
-// with no question open), so the omission marker names the dropped ids and they
-// are answered by id like any other.
 const (
 	maxReviewQuestionFindings      = 50
 	maxReviewQuestionDescription   = 2000
@@ -397,10 +250,6 @@ const (
 	maxReviewQuestionPromptChars   = 2000
 )
 
-// boundReviewQuestionText bounds one rendered question by RUNES, not bytes: a
-// question is prose the reviewer wrote, so a byte cut lands inside a multi-byte
-// rune on nothing rarer than a typographic quote, and the result would be
-// invalid UTF-8 on the event stream and in a prompt.
 func boundReviewQuestionText(s string, limit int) string {
 	runes := []rune(s)
 	if len(runes) <= limit {
@@ -409,27 +258,10 @@ func boundReviewQuestionText(s string, limit int) string {
 	return string(runes[:limit]) + fmt.Sprintf("… (truncated, %d chars total)", len(runes))
 }
 
-// reviewQuestionFindingID is the stable finding ID for a question, so the same
-// question keeps the same handle across rounds and an operator answering it
-// never has to guess which finding is which.
 func reviewQuestionFindingID(questionID string) string {
 	return "question-" + questionID
 }
 
-// openReviewQuestionFindings turns each unanswered question into one ask-user
-// warning.
-//
-// This is what puts the step into waiting-on-answers, and it deliberately
-// reuses the existing approval park rather than adding a durable status: the
-// park already stamps runs.awaiting_agent_since, accrues runs.parked_ms, and
-// surfaces through the IPC stream, the TUI and axi. Because the agent turn has
-// already ENDED, review_agent_timeout cannot count the wait either - the
-// finalize turn is a fresh invocation with a fresh deadline.
-//
-// Severity is warning, never error: an open question is not a defect, and an
-// error would misreport the change's risk. Action is ask-user, which is what
-// the executor parks on, and it also keeps the finding out of the auto-fix
-// filter - there is nothing here for a fixer to do.
 func openReviewQuestionFindings(conv reviewqa.Conversation) []types.Finding {
 	open := conv.Open()
 	// An unreadable question history replaces the whole question channel for
@@ -563,38 +395,6 @@ func marshalSanitizedAnswerLine(a db.ReviewAnswer) string {
 	return strings.Join(parts, " ")
 }
 
-// ResumeApprovalGate re-checks a parked review gate against the conversation on
-// disk, and is the review step's half of pipeline.ApprovalGateResumer.
-//
-// It closes a race that otherwise parks a run forever. ReviewStep.Execute loads
-// the conversation, builds a finding for each still-open question and returns;
-// only afterwards does the executor write the step rows and register the gate as
-// waiting. An answer to the last open question landing inside that window is
-// appended to disk, so the daemon's answer handler sees nothing open, calls
-// Respond, gets "no step awaiting approval", and reports the answer recorded -
-// truthfully, but there is no reviewer left to read it. The gate then parks on
-// the pre-answer snapshot and nothing releases it.
-//
-// It returns an ACTION rather than resolving the gate, which is the whole reason
-// ApprovalGateResumer exists: completing the review step here would approve the
-// run's head off that stale snapshot without the reviewer ever seeing the
-// answers. types.ActionAnswer re-enters the step as a finalize turn instead -
-// the same outcome the answer handler produces on the happy path.
-//
-// Three conditions must all hold, and each one is load-bearing:
-//
-//   - a conversation may be READ: the setting is on, or the reviewer's
-//     questions are already on disk (see reviewConversationReadDir). Neither,
-//     and there is nothing to re-check and the gate behaves exactly as it did
-//     before this feature existed.
-//   - the parked gate actually carries review-question findings. A review gate
-//     parked on ordinary ask-user CODE findings must never be answered out from
-//     under the operator just because no question happens to be open - that is
-//     the same defect the answer handler's snapshot check exists to prevent.
-//   - nothing is open in the conversation now. While a question is still open
-//     the gate is parked for a reason.
-//
-// Read-only and fails closed: an unreadable conversation leaves the gate parked.
 func (s *ReviewStep) ResumeApprovalGate(sctx *pipeline.StepContext, findingsJSON string) (types.ApprovalAction, bool, error) {
 	dir := reviewConversationReadDir(sctx)
 	if dir == "" {

@@ -16,10 +16,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/paths"
 )
 
-// TestInitIsIdempotent proves an existing user can re-run `init` to adopt new
-// capabilities (the agent skill) without hitting an "already initialized"
-// error, and that the second run reports the refresh and refreshes a stale
-// user-level skill copy left by an older binary.
 func TestInitIsIdempotent(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 
@@ -65,12 +61,6 @@ func TestInitIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestInitLegacyNotice proves init in a repo that still carries a vendored
-// skill copy from an older no-mistakes version points it out without touching
-// it: the copy is the user's to remove, possibly via their VCS.
-//
-// The test name is deliberately short for the same socket path length reason
-// as TestInitRepoRename.
 func TestInitLegacyNotice(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 
@@ -104,15 +94,6 @@ func TestInitLegacyNotice(t *testing.T) {
 	}
 }
 
-// TestInitRepoRename proves that a user who renames or moves their repo
-// directory can re-run `init` from the new location and get their existing
-// gate back, instead of the historical failure:
-//
-//	init: add remote: remote "no-mistakes" already exists with url "..."
-//
-// The test name is deliberately short: it becomes part of t.TempDir(), which
-// hosts NM_HOME, and the daemon's Unix socket path under it must stay within
-// the OS socket path limit (104 bytes on macOS).
 func TestInitRepoRename(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	ctx := context.Background()
@@ -148,13 +129,6 @@ func TestInitRepoRename(t *testing.T) {
 	}
 }
 
-// TestInitInSubmoduleRegistersSubmoduleOwnOrigin reproduces issue #328:
-// `no-mistakes init` from inside a Git submodule checkout must register the
-// gate against the submodule's own origin, not the superproject's. Before the
-// fix, FindMainRepoRoot took the parent of --git-common-dir, which for an
-// absorbed submodule is <super>/.git/modules/<name>. The gate then read its
-// origin from that wrong root and recorded the superproject's URL as the
-// upstream — a "push would land in the wrong repository" data-loss hazard.
 func TestInitInSubmoduleRegistersSubmoduleOwnOrigin(t *testing.T) {
 	h := NewHarness(t, SetupOpts{Agent: "claude"})
 	ctx := context.Background()
@@ -271,14 +245,6 @@ func TestInitRollsBackWhenDaemonStartFails(t *testing.T) {
 	if strings.Contains(out, "rollback init:") {
 		t.Fatalf("rollback should succeed cleanly, got wrapped error output: %q", out)
 	}
-	// What this bound proves is that init honored the injected 200ms daemon
-	// start timeout instead of falling back to the 45s production budget
-	// (internal/daemon/selfexec.go daemonStartTimeout). It is deliberately
-	// slack: elapsed covers a whole CLI subprocess - process spawn, git work,
-	// opening the database, and the rollback - which takes over a second on a
-	// machine running the rest of the parallel e2e suite, with nothing having
-	// regressed. A run that actually fell back to the production budget is
-	// still nowhere near this.
 	const rollbackBudget = 10 * time.Second
 	if elapsed >= rollbackBudget {
 		t.Fatalf("init rollback should fail fast in tests, took %v (budget %v)", elapsed, rollbackBudget)

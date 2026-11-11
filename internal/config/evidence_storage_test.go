@@ -6,13 +6,6 @@ import (
 	"time"
 )
 
-// TestEvidenceLocalStorageIsGlobalOnly is the trust-boundary regression.
-//
-// local_root names a filesystem path the daemon writes to, and retention and
-// max_runs budget a resource every repository on the machine shares. Neither is
-// per-repository policy, so neither may be settable from a repository config -
-// including the trusted default-branch copy, which is where test.evidence.branch
-// legitimately comes from. Merge must resolve all three from GlobalConfig alone.
 func TestEvidenceLocalStorageIsGlobalOnly(t *testing.T) {
 	globalRoot := t.TempDir()
 	repoRoot := t.TempDir()
@@ -43,9 +36,6 @@ func TestEvidenceLocalStorageIsGlobalOnly(t *testing.T) {
 	}
 }
 
-// TestEvidenceLocalStorageFallsBackToDefaultsWhenOnlyTheRepoSetsIt is the same
-// boundary from the other side: with nothing configured globally, a repository
-// value must not fill the gap - the built-in defaults do.
 func TestEvidenceLocalStorageFallsBackToDefaultsWhenOnlyTheRepoSetsIt(t *testing.T) {
 	repoRoot := t.TempDir()
 	repo, err := LoadRepoFromBytes([]byte("test:\n  evidence:\n    local_root: " + repoRoot + "\n    retention: 1h\n    max_runs: 999\n"))
@@ -66,10 +56,6 @@ func TestEvidenceLocalStorageFallsBackToDefaultsWhenOnlyTheRepoSetsIt(t *testing
 	}
 }
 
-// TestEvidenceStorageDefaultsAreBounded states the shipped policy: evidence is
-// reaped by no-mistakes on both axes out of the box, with no configuration.
-// The whole point of the relocation is that cleanup stops depending on an OS
-// temp-directory timer, so neither default may be "keep forever".
 func TestEvidenceStorageDefaultsAreBounded(t *testing.T) {
 	merged := Merge(DefaultGlobalConfig(), &RepoConfig{})
 
@@ -84,8 +70,6 @@ func TestEvidenceStorageDefaultsAreBounded(t *testing.T) {
 	}
 }
 
-// TestEvidenceStorageOverridesParse covers the documented values an operator
-// can write, including the keyword and zero forms that disable a bound.
 func TestEvidenceStorageOverridesParse(t *testing.T) {
 	root := t.TempDir()
 	for _, tc := range []struct {
@@ -115,9 +99,6 @@ func TestEvidenceStorageOverridesParse(t *testing.T) {
 	}
 }
 
-// TestEvidenceStorageFailsClosedOnUnusableValues surfaces a typo in the config
-// where the operator can fix it, instead of at run time when evidence would
-// already have gone somewhere unexpected.
 func TestEvidenceStorageFailsClosedOnUnusableValues(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

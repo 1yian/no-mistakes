@@ -13,12 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/ipc"
 )
 
-// newAxiRetryCmd continues a run that failed on an agent invocation error.
-//
-// --run does not select a run. The retried run is always the current branch's
-// latest run, as for every mutating axi command; --run is the operator's
-// confirmation of which failed run they inspected, and the daemon refuses
-// when it names any other.
 func newAxiRetryCmd() *cobra.Command {
 	var runID string
 	var wait time.Duration

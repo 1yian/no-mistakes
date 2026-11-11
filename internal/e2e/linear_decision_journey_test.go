@@ -13,9 +13,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// Drive a selected review fix followed by a documentation edit and a lint
-// fix turn through the real CLI, hook, daemon, worktree, and push. The canned
-// agent supplies only responses and edits, not pipeline decisions.
 func TestSelectedFixFollowedByDocumentEditDoesNotRestartReview(t *testing.T) {
 	scenario := filepath.Join(t.TempDir(), "linear.yaml")
 	content := `actions:

@@ -553,8 +553,6 @@ func TestTestStep_RepairCutKeepsTheFindingsItWasFixing(t *testing.T) {
 	}
 }
 
-// answerTestPark splits a parked Test gate the way the executor does for a fix
-// response selecting ids: the selection and the deferred rest.
 func answerTestPark(t *testing.T, raw string, ids ...string) (string, string) {
 	t.Helper()
 	parked, err := types.ParseFindingsJSON(raw)
@@ -905,8 +903,6 @@ func TestTestStep_EvidenceAgentCannotClaimAReservedBudgetCutID(t *testing.T) {
 	}
 }
 
-// leaveConflictedRebase stops a rebase on a conflict, leaving HEAD detached at
-// a partial result the way an agent cut mid-rebase does.
 func leaveConflictedRebase(t *testing.T, dir string) {
 	t.Helper()
 	start := gitCmd(t, dir, "rev-parse", "HEAD")
@@ -1011,8 +1007,6 @@ func TestTestStep_FixMode(t *testing.T) {
 	}
 }
 
-// The repair and evidence turns share the scope rules. The repair turn must
-// leave an intent-conflicting repair alone so the evidence turn can ask the user.
 func TestTestStep_RepairScopeContract(t *testing.T) {
 	t.Parallel()
 	for _, fixing := range []bool{false, true} {
@@ -1365,10 +1359,6 @@ func TestTestStep_PublishedEvidenceGuidanceNamesTheEvidenceBranch(t *testing.T) 
 	}
 }
 
-// Local Test is targeted validation of the requested intent, never a complete
-// repository-suite walk. Broad regression belongs to remote CI. Pins the
-// normal evidence-agent contract wording so a soft "run the appropriate tests"
-// regression is caught.
 func TestTestStep_InitialAgent_TargetedValidationContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1417,9 +1407,6 @@ func TestTestStep_InitialAgent_TargetedValidationContract(t *testing.T) {
 	}
 }
 
-// Test repair must reproduce the specific failure, fix its root cause, and
-// re-verify only with focused checks. Soft "Run the tests" / "relevant tests"
-// wording invited complete-suite walks after a one-line fix.
 func TestTestStep_FixMode_TargetedVerificationContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1468,9 +1455,6 @@ func TestTestStep_FixMode_TargetedVerificationContract(t *testing.T) {
 	}
 }
 
-// A driver/user instruction that asks for full-suite confirmation must still
-// be accompanied by the hard product boundary so the repair agent does not
-// treat that instruction as license to expand scope.
 func TestTestStep_FixMode_DriverFullSuiteInstructionDoesNotOverrideContract(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1502,8 +1486,6 @@ func TestTestStep_FixMode_DriverFullSuiteInstructionDoesNotOverrideContract(t *t
 	}
 }
 
-// Honest failure reporting when no targeted check can establish intent must
-// remain mandatory; the no-full-suite rule must not collapse into "skip tests".
 func TestTestStep_InitialAgent_NoTargetedEvidenceRequiresHonestFinding(t *testing.T) {
 	t.Parallel()
 	dir, baseSHA, headSHA := setupGitRepo(t)
@@ -1538,8 +1520,6 @@ func TestTestStep_InitialAgent_NoTargetedEvidenceRequiresHonestFinding(t *testin
 	}
 }
 
-// A driver's --instructions on a budget-cut answer reach the evidence turn
-// labelled as the driver's guidance, never as the operator's decision.
 func TestBudgetCutGuidanceSection_LabelsDriverInstructions(t *testing.T) {
 	t.Parallel()
 	const userNote = "USER-NOTE validate only checkout"

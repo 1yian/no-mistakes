@@ -70,8 +70,6 @@ func lastCommitMessage(t *testing.T, dir string) string {
 	return gitCmd(t, dir, "log", "-1", "--pretty=%s")
 }
 
-// gitRepoTemplate holds a cached template repo that setupGitRepo copies from
-// instead of running git init + config + commits each time.
 var gitRepoTemplate struct {
 	once    sync.Once
 	dir     string
@@ -123,9 +121,6 @@ func ensureGitRepoTemplate(t *testing.T) {
 	})
 }
 
-// setupGitRepo creates a git repo with a base commit on main and a head commit on feature.
-// Returns (repoDir, baseSHA, headSHA).
-// Uses a cached template repo and copies it via cp -a for speed.
 func setupGitRepo(t *testing.T) (string, string, string) {
 	t.Helper()
 	ensureGitRepoTemplate(t)
@@ -138,13 +133,6 @@ func setupGitRepo(t *testing.T) (string, string, string) {
 	return dir, gitRepoTemplate.baseSHA, gitRepoTemplate.headSHA
 }
 
-// ensureHermeticOrigin gives a test repo that lacks an "origin" remote a
-// local one (itself) so incidental upstream fetches stay hermetic instead of
-// reaching the network. Without this, tests that never configure a real
-// remote fetch the placeholder github.com/test/repo URL - which used to be
-// harmless because a failed fetch degraded silently, but resolveBranchBaseSHA
-// now refuses on fetch failure (#997/#1147), so every step test needs a
-// fetchable base branch ref.
 func ensureHermeticOrigin(t *testing.T, workDir string) {
 	t.Helper()
 	if testGitExecutable == "" {
@@ -162,12 +150,6 @@ func ensureHermeticOrigin(t *testing.T, workDir string) {
 	}
 }
 
-// ensureLocalBranch creates branch pointing at ref in workDir, unless it
-// already exists. Tests that configure a base branch other than "main" (e.g.
-// "develop", "epic/feature") need that ref to actually exist locally: with
-// ensureHermeticOrigin pointing "origin" at the worktree itself,
-// resolveBranchBaseSHA's base-branch fetch now fails closed on a missing ref
-// (#997/#1147) instead of silently degrading.
 func ensureLocalBranch(t *testing.T, workDir, branch, ref string) {
 	t.Helper()
 	check := exec.Command(testGitExecutable, "-C", workDir, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
@@ -180,7 +162,6 @@ func ensureLocalBranch(t *testing.T, workDir, branch, ref string) {
 	}
 }
 
-// newTestContext creates a StepContext for testing with optional config overrides.
 func newTestContext(t *testing.T, ag agent.Agent, workDir, baseSHA, headSHA string, cmds config.Commands) *pipeline.StepContext {
 	t.Helper()
 	if testGitErr != nil {
@@ -213,8 +194,6 @@ func newTestContext(t *testing.T, ag agent.Agent, workDir, baseSHA, headSHA stri
 	}
 }
 
-// fakeCLIEnv builds environment variable entries for a fake CLI binary and PATH override.
-// Returns env entries that should be set on StepContext.Env for parallel-safe tests.
 func fakeCLIEnv(binDir string, vars map[string]string) []string {
 	if testGitErr != nil {
 		panic(testGitErr)
@@ -230,9 +209,6 @@ func fakeCLIEnv(binDir string, vars map[string]string) []string {
 	return env
 }
 
-// fakeCLIBinDir creates a temporary directory for fake CLI binaries.
-// Unlike t.TempDir(), cleanup tolerates file locks from recently-executed
-// binaries on Windows (which prevent immediate deletion).
 func fakeCLIBinDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "fakecli")
@@ -250,14 +226,11 @@ func fakeCLIBinDir(t *testing.T) string {
 	return dir
 }
 
-// linkTestBinary places the tiny fake-CLI helper on PATH under name.
 func linkTestBinary(t *testing.T, binDir, name string) {
 	t.Helper()
 	stepstest.LinkFakeCLI(t, binDir, name)
 }
 
-// fakeGH creates a mock gh binary in a temp dir and returns env entries for StepContext.Env.
-// The binary records all invocations to a log file and responds based on subcommand.
 func fakeGH(t *testing.T, prViewURL string) (env []string, logFile string) {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -278,9 +251,6 @@ func fakeGH(t *testing.T, prViewURL string) (env []string, logFile string) {
 	return env, logFile
 }
 
-// fakeGHWithBase behaves like fakeGH but additionally records the existing
-// PR's actual base branch, so the fake `gh pr list --base X` only returns the
-// PR when X matches it - mirroring GitHub's server-side base filtering.
 func fakeGHWithBase(t *testing.T, prViewURL, prBase string) (env []string, logFile string) {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -464,10 +434,6 @@ func fakeGlab(t *testing.T, mrViewJSON string) (env []string, logFile string) {
 	return env, logFile
 }
 
-// fakeGlabWithMRState is fakeGlab with a stateful merge request: `mr create`
-// and `mr update` record the title and description they were given, and a later
-// `mr view` reads them back, which is what the PR step verifies a published
-// body against. It returns the env, the argv log, and the state file path.
 func fakeGlabWithMRState(t *testing.T) (env []string, logFile, stateFile string) {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -482,8 +448,6 @@ func fakeGlabWithMRState(t *testing.T) (env []string, logFile, stateFile string)
 	return env, logFile, stateFile
 }
 
-// newTestContextWithDBRecords is like newTestContext but also inserts
-// repo and run records into the database so GetRun works after updates.
 func recordReviewApproval(t *testing.T, sctx *pipeline.StepContext, headSHA string) {
 	t.Helper()
 	if err := sctx.DB.UpdateRunReviewApprovedHeadSHA(sctx.Run.ID, headSHA); err != nil {
@@ -511,8 +475,6 @@ func newTestContextWithDBRecords(t *testing.T, ag agent.Agent, workDir, baseSHA,
 	return sctx
 }
 
-// fakeCIGH creates a fake gh binary that responds to CI-related
-// commands (pr view --json state, pr checks --json, pr view --json comments).
 func fakeCIGH(t *testing.T, state, checksJSON string) []string {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -625,10 +587,6 @@ func fakeCIGHSequence(t *testing.T, state string, checks []string) []string {
 	})
 }
 
-// fakeCIGHLoggedSequence is fakeCIGHSequence with a recorded argv log, so tests
-// can assert which gh commands the CI monitor issued (for example whether it
-// asked for a check rerun). mergeable overrides the reported mergeable state
-// ("" reports MERGEABLE); rerunErr, when set, makes `gh run rerun` fail.
 func fakeCIGHLoggedSequence(t *testing.T, state string, checks []string, mergeable, rerunErr string) (env []string, logFile string) {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -668,10 +626,6 @@ func fakeCIGHNoChecks(t *testing.T) []string {
 	})
 }
 
-// fakeCIGlab creates a fake glab binary that serves the CI monitoring endpoints.
-// state is the MR state ("opened", "merged", "closed"); checksJSON is a JSON
-// array of pipeline jobs the checks read reports (`glab ci get` or the
-// paginated REST jobs route, depending on whether the project path is known).
 func fakeCIGlab(t *testing.T, state, checksJSON string) []string {
 	t.Helper()
 	binDir := fakeCLIBinDir(t)
@@ -734,8 +688,6 @@ func fakeCIGlabSequence(t *testing.T, state string, checks []string) []string {
 	})
 }
 
-// runGitDirect runs git without any of the repository's step helpers, so a test
-// can observe what a plain, hook-verified git invocation does in dir.
 func runGitDirect(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir

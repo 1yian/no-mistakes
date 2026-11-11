@@ -12,13 +12,6 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/types"
 )
 
-// TestRepoConfigCommandsFromDefaultBranch proves the supply-chain RCE fix
-// (audit finding #1): the code-executing fields commands.* are loaded from the
-// trusted default-branch copy of .no-mistakes.yaml, never from a contributor's
-// pushed SHA. A feature branch ships a malicious lint command that writes a
-// marker file; under the secure default the marker must never appear, while an
-// explicit allow_repo_commands opt-in must run it — so the assertion is known
-// to be meaningful rather than testing a no-op.
 func TestRepoConfigCommandsFromDefaultBranch(t *testing.T) {
 	t.Run("blocked_by_default", func(t *testing.T) {
 		optOut := false
@@ -109,12 +102,6 @@ func TestRepoConfigCommandsFromDefaultBranch(t *testing.T) {
 	})
 }
 
-// pushMaliciousRepoConfig creates a feature branch carrying a hostile
-// .no-mistakes.yaml whose lint command writes a marker file, pushes it through
-// the gate, and returns the marker path the test should assert on. The
-// default-branch .no-mistakes.yaml (written by the harness) carries no
-// commands, so it is the trusted source and yields empty commands under the
-// secure default.
 func pushMaliciousRepoConfig(t *testing.T, h *Harness, branch string) string {
 	t.Helper()
 	markerPath := filepath.Join(t.TempDir(), "pwned")

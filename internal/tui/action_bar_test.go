@@ -138,11 +138,6 @@ func TestOutcomeBanner_SuccessShowsCheckmark(t *testing.T) {
 	}
 }
 
-// TestOutcomeBanner_ChecksPassedAnnouncesTheRelease is the opt-in release
-// verdict's banner. The run reached its validation verdict and released the
-// branch, so the banner must not read like an ordinary finished run: the merge
-// decision is the user's, and the run's outcome must stay distinguishable from
-// "the PR merged or closed".
 func TestOutcomeBanner_ChecksPassedAnnouncesTheRelease(t *testing.T) {
 	run := testRun()
 	run.Status = types.RunChecksPassed
@@ -162,14 +157,6 @@ func TestOutcomeBanner_ChecksPassedAnnouncesTheRelease(t *testing.T) {
 	}
 }
 
-// TestOutcomeBanner_CIOverrideShowsReason is the P1 regression from the
-// upstream review of PR 923 ("TUI hides persisted CI overrides"): a human
-// approving a still-unresolved CI gate is recorded on run.CIOverrideReason
-// (see pipeline.ApprovalOverrideVerifier), and axi already renders that as
-// outcome=passed-with-override with the reason attached. Before this fix the
-// TUI's completion banner rendered exactly the same "✓ Pipeline passed" for
-// this run as for a genuinely green one, so the two human/agent-facing
-// surfaces disagreed. The banner must show the override and its reason.
 func TestOutcomeBanner_CIOverrideShowsReason(t *testing.T) {
 	run := testRun()
 	run.Status = types.RunCompleted

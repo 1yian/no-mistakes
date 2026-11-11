@@ -7,16 +7,11 @@ import (
 	"strings"
 )
 
-// PiProfile is an opt-in run pin, not a credential or a routing policy. A
-// request may omit one field; a persisted profile must have both resolved.
 type PiProfile struct {
 	Model  string `json:"model"`
 	Effort Effort `json:"effort"`
 }
 
-// ValidateRequest accepts only identifier-shaped, provider-qualified models.
-// In particular, URLs, glob patterns and Pi's :thinking shorthand are not pins.
-// Do not quote invalid input in errors: an accidental credential is not evidence.
 func (p *PiProfile) ValidateRequest() error {
 	if p == nil {
 		return nil
@@ -62,8 +57,6 @@ func (p *PiProfile) Validate() error {
 	return nil
 }
 
-// Matches permits omission on reattachment, never replacement. Partial requests
-// compare only their explicit knobs against the already-resolved run values.
 func (p *PiProfile) Matches(request *PiProfile) bool {
 	return request == nil || p != nil && (request.Model == "" || request.Model == p.Model) && (request.Effort == "" || request.Effort == p.Effort)
 }
@@ -92,7 +85,6 @@ func (p *PiProfile) Scan(src any) error {
 	return p.Validate()
 }
 
-// OptionalPiProfile keeps existing internal launch callers source compatible.
 func OptionalPiProfile(profiles []RunSelection) *PiProfile {
 	for _, profile := range profiles {
 		if p, ok := profile.(*PiProfile); ok && p != nil {
@@ -102,17 +94,12 @@ func OptionalPiProfile(profiles []RunSelection) *PiProfile {
 	return nil
 }
 
-// PinnedBaseArgs removes live native selectors and binds the provider explicitly.
-// Pi's inferred provider/model path can otherwise fall back across providers
-// when authentication changes. Model/effort still go through NativeArgs.
 func (p *PiProfile) PinnedBaseArgs(raw []string) []string {
 	args, _ := PiSelectionArgs(raw)
 	provider, _, _ := strings.Cut(p.Model, "/")
 	return append(args, "--provider", provider)
 }
 
-// PiSelectionArgs strips only native selection knobs. Used when applying a
-// durable pin so a later raw override cannot suppress NativeArgs on recovery.
 func PiSelectionArgs(args []string) (remaining []string, found bool) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

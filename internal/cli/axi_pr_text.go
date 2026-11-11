@@ -11,28 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The supplied PR title and description each travel as one base64 push
-// option, like intent.
 const (
 	prTitlePushOptionPrefix = "no-mistakes.pr-title="
 	prBodyPushOptionPrefix  = "no-mistakes.pr-body="
 )
 
-// maxAxiRunPRBodyBytes is the pkt-line budget for the description's push
-// option (see maxAxiRunIntentBytes); steps.MaxRunPRBodyBytes is the daemon's
-// copy of the same limit.
 const maxAxiRunPRBodyBytes = (65516 - len(prBodyPushOptionPrefix)) / 4 * 3
 
-// bindPRTextFlags adds --pr-title and --pr-body-file. There is deliberately no
-// inline body flag: Markdown is exactly the text a caller's shell would expand.
 func bindPRTextFlags(cmd *cobra.Command, title, bodyFile *string) {
 	cmd.Flags().StringVar(title, "pr-title", "", "PR title to use verbatim when this run creates the PR (pr.title_format still applies)")
 	cmd.Flags().StringVar(bodyFile, "pr-body-file", "", "read the PR description to use verbatim when this run creates the PR from this file; '-' reads stdin to EOF")
 }
 
-// resolvePRTextFlags reads and validates --pr-title and --pr-body-file before
-// any run resource opens, so a bad value never pushes or starts a run.
-// intentReadsStdin reports that --intent already claims stdin.
 func resolvePRTextFlags(cmd *cobra.Command, title, bodyFile string, intentReadsStdin bool) (db.RunPRText, error) {
 	var text db.RunPRText
 	if cmd.Flags().Changed("pr-title") {
@@ -101,8 +91,6 @@ func formatPRTextPushOptions(text db.RunPRText) []string {
 	return options
 }
 
-// parsePRTextPushOptions decodes the supplied PR text push options. A repeated
-// option must repeat the same value; the daemon validates the text itself.
 func parsePRTextPushOptions(options []string) (db.RunPRText, error) {
 	title, err := parseOpaquePushOptions(options, prTitlePushOptionPrefix, "pr title")
 	if err != nil {
@@ -115,9 +103,6 @@ func parsePRTextPushOptions(options []string) (db.RunPRText, error) {
 	return db.RunPRText{Title: title, Body: body}, nil
 }
 
-// requireDaemonHonorsRunPRText refuses supplied PR text before any push when
-// the running daemon predates it: it would drop the unknown fields and open a
-// PR with drafted text. The probe is a method such a daemon refuses.
 func requireDaemonHonorsRunPRText(client closingIssueRefsUpdateClient, text db.RunPRText) error {
 	if !hasRunPRText(text) {
 		return nil
@@ -133,8 +118,6 @@ func requireDaemonHonorsRunPRText(client closingIssueRefsUpdateClient, text db.R
 	return nil
 }
 
-// conflictingActiveRunPRText reports when supplied PR text would be discarded
-// by reattaching to an in-flight run that carries different (or no) text.
 func conflictingActiveRunPRText(run *ipc.RunInfo, text db.RunPRText) error {
 	if run == nil {
 		return nil
