@@ -691,6 +691,7 @@ type StepResultInfo struct {
 	// pipeline.ApprovalOverrideVerifier and db.StepResult.OverrideReason.
 	OverrideReason string `json:"override_reason,omitempty"`
 	SkipReason     string `json:"skip_reason,omitempty"`
+	Carried        bool   `json:"carried,omitempty"`
 }
 
 // --- Events (for subscribe stream) ---

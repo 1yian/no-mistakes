@@ -114,6 +114,10 @@ const (
 	// checks-passed, which is a new default no installation asked for; a
 	// repository opts in with "always".
 	DefaultCIReviewBotComments = CIReviewBotCommentsOnFailure
+	CIRebaseRepairFull         = "full"
+	CIRebaseRepairReplay       = "replay"
+	CIRebaseRepairReview       = "review"
+	DefaultCIRebaseRepair      = CIRebaseRepairFull
 	// RebaseStrategyRebase replays the branch on top of the moved base. It is
 	// the historical behavior and the default.
 	RebaseStrategyRebase = "rebase"
@@ -826,7 +830,8 @@ type CIRaw struct {
 	// RebaseBehind is a pointer for the same reason as RevalidateRepairs.
 	RebaseBehind *bool `yaml:"rebase_behind"`
 	// CarryReviewOnReplay is a pointer for the same reason as RevalidateRepairs.
-	CarryReviewOnReplay *bool `yaml:"carry_review_on_replay"`
+	CarryReviewOnReplay *bool  `yaml:"carry_review_on_replay"`
+	RebaseRepair        string `yaml:"rebase_repair"`
 	// ReleaseAfterChecksPass is a pointer for the same reason as
 	// RevalidateRepairs: a repository must be able to opt back out.
 	ReleaseAfterChecksPass *bool `yaml:"release_after_checks_pass"`
@@ -912,6 +917,7 @@ type CI struct {
 	// keeps meaning "every repair re-passes Review", or when the run has a
 	// review-anchored gate, which would otherwise be skipped for the new head.
 	CarryReviewOnReplay bool
+	RebaseRepair        string
 
 	// ReleaseAfterChecksPass makes the CI step finish the run at its checks
 	// verdict instead of monitoring the pull request until it is merged, closed,
@@ -2885,6 +2891,9 @@ func LoadGlobalFromBytes(data []byte) (*GlobalConfig, error) {
 	if strings.TrimSpace(raw.CI.Instructions) != "" {
 		return nil, fmt.Errorf("ci.instructions is repository-only; configure it on the trusted default branch")
 	}
+	if strings.TrimSpace(raw.CI.RebaseRepair) != "" {
+		return nil, fmt.Errorf("ci.rebase_repair is repository-only; configure it on the trusted default branch")
+	}
 	if raw.Test.InstructionsFile != "" {
 		return nil, fmt.Errorf("test.instructions_file is repository-only; configure it on the trusted default branch")
 	}
@@ -4128,6 +4137,7 @@ func ciDefaults() CI {
 		RerunTransient:    DefaultCIRerunTransient,
 		RevalidateRepairs: DefaultCIRevalidateRepairs,
 		ReviewBotComments: DefaultCIReviewBotComments,
+		RebaseRepair:      DefaultCIRebaseRepair,
 	}
 }
 
@@ -4191,6 +4201,9 @@ func applyCIOverrides(dst *CI, src *CIRaw) {
 	if src.CarryReviewOnReplay != nil {
 		dst.CarryReviewOnReplay = *src.CarryReviewOnReplay
 	}
+	if v := strings.TrimSpace(src.RebaseRepair); v != "" {
+		dst.RebaseRepair = v
+	}
 	if src.ReleaseAfterChecksPass != nil {
 		dst.ReleaseAfterChecksPass = *src.ReleaseAfterChecksPass
 	}
@@ -4203,9 +4216,14 @@ func applyCIOverrides(dst *CI, src *CIRaw) {
 func validateCIRaw(c CIRaw) error {
 	switch strings.TrimSpace(c.ReviewBotComments) {
 	case "", CIReviewBotCommentsOnFailure, CIReviewBotCommentsAlways:
+	default:
+		return fmt.Errorf("ci.review_bot_comments: %q is not a valid policy (want %q or %q)", c.ReviewBotComments, CIReviewBotCommentsOnFailure, CIReviewBotCommentsAlways)
+	}
+	switch strings.TrimSpace(c.RebaseRepair) {
+	case "", CIRebaseRepairFull, CIRebaseRepairReplay, CIRebaseRepairReview:
 		return nil
 	}
-	return fmt.Errorf("ci.review_bot_comments: %q is not a valid policy (want %q or %q)", c.ReviewBotComments, CIReviewBotCommentsOnFailure, CIReviewBotCommentsAlways)
+	return fmt.Errorf("ci.rebase_repair: %q is not a valid policy (want %q, %q, or %q)", c.RebaseRepair, CIRebaseRepairFull, CIRebaseRepairReplay, CIRebaseRepairReview)
 }
 
 // applyAutoFixOverrides applies non-nil raw values onto resolved defaults.

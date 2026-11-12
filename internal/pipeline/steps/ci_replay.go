@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kunchenguid/no-mistakes/internal/config"
 	"github.com/kunchenguid/no-mistakes/internal/git"
 	"github.com/kunchenguid/no-mistakes/internal/pipeline"
 	"github.com/kunchenguid/no-mistakes/internal/types"
@@ -16,6 +17,21 @@ import (
 // ci.revalidate_repairs, which keeps meaning "every repair re-passes Review".
 func ciCarriesReviewOnReplay(sctx *pipeline.StepContext) bool {
 	return sctx.Config != nil && sctx.Config.CI.CarryReviewOnReplay && !sctx.Config.CI.RevalidateRepairs
+}
+
+func ciRebaseRepair(sctx *pipeline.StepContext) string {
+	if sctx.Config == nil || sctx.Config.CI.RevalidateRepairs {
+		return config.CIRebaseRepairFull
+	}
+	switch policy := sctx.Config.CI.RebaseRepair; policy {
+	case config.CIRebaseRepairReplay, config.CIRebaseRepairReview:
+		return policy
+	}
+	return config.CIRebaseRepairFull
+}
+
+func ciPublishesPureReplay(sctx *pipeline.StepContext) bool {
+	return ciRebaseRepair(sctx) != config.CIRebaseRepairFull
 }
 
 // reviewAnchoredGate returns the first repository gate that runs after Review,
@@ -176,4 +192,49 @@ func firstField(s string) string {
 		return ""
 	}
 	return fields[0]
+}
+
+func ciReviewsRebaseOnly(sctx *pipeline.StepContext) bool {
+	return ciRebaseRepair(sctx) == config.CIRebaseRepairReview
+}
+
+func rebaseReviewGap(sctx *pipeline.StepContext, headSHA, base string) string {
+	run, err := sctx.DB.GetRun(sctx.Run.ID)
+	if err != nil {
+		return "the run could not be read"
+	}
+	if approved, reason := reviewApprovedHead(sctx, run); approved == "" {
+		return reason
+	}
+	if gate := reviewAnchoredGate(sctx); gate != "" {
+		return fmt.Sprintf("gate %q runs after Review", gate)
+	}
+	if run.LastPushedSHA == nil || !isFullGitObjectID(strings.TrimSpace(*run.LastPushedSHA)) {
+		return "the run has no published head to carry validation from"
+	}
+	if pending, err := sctx.DB.RunTestRestartPending(sctx.Run.ID); err != nil || pending {
+		return "a carried review approval still awaits its restart at Test"
+	}
+	if _, err := stepGitRun(sctx, "merge-base", "--is-ancestor", strings.TrimSpace(base), headSHA); err != nil {
+		return fmt.Sprintf("the repaired head does not contain the rebase target %s", shortObjectID(base))
+	}
+	steps, err := sctx.DB.GetStepsByRun(sctx.Run.ID)
+	if err != nil {
+		return "the step results could not be read"
+	}
+	for _, step := range steps {
+		if step.StepName != types.StepTest {
+			continue
+		}
+		switch step.Status {
+		case types.StepStatusSkipped:
+		case types.StepStatusCompleted:
+			if step.OverrideReason != nil || step.TestOverrideReason() != "" {
+				return "Test was approved over an unresolved condition, which a carry would hide"
+			}
+		default:
+			return fmt.Sprintf("Test is %s, not completed", step.Status)
+		}
+	}
+	return ""
 }

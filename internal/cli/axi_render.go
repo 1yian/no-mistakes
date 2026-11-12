@@ -45,6 +45,11 @@ type automaticSkipRow struct {
 	Reason string `toon:"reason"`
 }
 
+type carriedStepRow struct {
+	Step   string `toon:"step"`
+	Reason string `toon:"reason"`
+}
+
 type sharedWorkRow struct {
 	AttributedTo string `toon:"attributed_to"`
 	Scope        string `toon:"scope"`
@@ -111,6 +116,7 @@ type stepView struct {
 	PendingFixSource string
 	QuietWarning     time.Duration
 	SkipReason       string
+	Carried          bool
 }
 
 // runView is a render-ready view of a pipeline run.
@@ -184,6 +190,7 @@ func runViewFromIPC(r *ipc.RunInfo) runView {
 			PendingFixSource: s.PendingFixSource,
 			WorkScope:        s.WorkScope,
 			SkipReason:       s.SkipReason,
+			Carried:          s.Carried,
 		}
 		if s.LastActivity != nil {
 			sv.LastActivity = *s.LastActivity
@@ -234,6 +241,7 @@ func runViewFromDB(r *db.Run, steps []*db.StepResult, database *db.DB) runView {
 		if s.SkipReason != nil {
 			sv.SkipReason = *s.SkipReason
 		}
+		sv.Carried = s.CarriedAcrossRebase()
 		if s.LastActivity != nil {
 			sv.LastActivity = *s.LastActivity
 		}
@@ -566,6 +574,9 @@ func runObjectFieldWithKey(key string, rv runView) toon.Field {
 	if skips := rv.automaticSkips(); len(skips) > 0 {
 		fields = append(fields, toon.Field{Key: "automatic_skips", Value: skips})
 	}
+	if carried := rv.carriedSteps(); len(carried) > 0 {
+		fields = append(fields, toon.Field{Key: "carried_steps", Value: carried})
+	}
 	if len(sharedRows) > 0 {
 		fields = append(fields, toon.Field{Key: "shared_work", Value: sharedRows})
 	}
@@ -647,6 +658,16 @@ type quotaSwitchRow struct {
 	From   string `toon:"from"`
 	To     string `toon:"to"`
 	Reason string `toon:"reason"`
+}
+
+func (rv runView) carriedSteps() []carriedStepRow {
+	var rows []carriedStepRow
+	for _, s := range rv.Steps {
+		if s.Carried {
+			rows = append(rows, carriedStepRow{Step: s.Name, Reason: "not re-run on this head after a rebase; CI gates it"})
+		}
+	}
+	return rows
 }
 
 func (rv runView) automaticSkips() []automaticSkipRow {

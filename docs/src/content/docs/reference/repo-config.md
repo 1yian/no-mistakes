@@ -26,7 +26,7 @@ After refusal, run `no-mistakes axi sync --recover` from the registered working 
 :::caution[Security: gate-control fields are read from the default branch]
 `commands.*` and `gates[].command` execute arbitrary shell on the daemon host via `sh -c` / `cmd.exe /c`, and `agent` selects which process launches there (including ordered fallback lists, ACP aliases such as `cursor` and `devin`, and `acp:` targets) with the maintainer's credentials.
 To prevent a supply-chain attack where a contributor lands a hostile value on a gated branch, the daemon always reads **`commands` and `agent` from your default branch** (e.g. `origin/main`), never from the pushed SHA, and reads them at the exact commit a fresh fetch resolved (so a stale `origin/<default>` ref cannot serve a value the live default branch removed).
-The daemon also reads `document.instructions`, `review.conversation`, `review.path_instructions`, `review.agent_timeout`, `review.max_fix_rounds`, `gates`, `auto_fix.gates`, `protected_paths`, `disable_project_settings`, `no_ci`, `ci.rerun_transient`, `ci.revalidate_repairs`, `ci.required_reviews`, `ci.review_bot_comments`, `ci.rebase_behind`, `ci.carry_review_on_replay`, `ci.release_after_checks_pass`, `ci.instructions`, `rebase.strategy`, `test.prepare`, `test.base_attribution`, `test.instructions`, `test.instructions_file`, `test.path_instructions`, `test.allow_approve_over_failure`, `test.evidence.branch`, `intent.check`, `pr.template`, `pr.publish_intent`, `pr.intent`, and `pr.appendix` only from that trusted copy.
+The daemon also reads `document.instructions`, `review.conversation`, `review.path_instructions`, `review.agent_timeout`, `review.max_fix_rounds`, `gates`, `auto_fix.gates`, `protected_paths`, `disable_project_settings`, `no_ci`, `ci.rerun_transient`, `ci.revalidate_repairs`, `ci.required_reviews`, `ci.review_bot_comments`, `ci.rebase_behind`, `ci.carry_review_on_replay`, `ci.rebase_repair`, `ci.release_after_checks_pass`, `ci.instructions`, `rebase.strategy`, `test.prepare`, `test.base_attribution`, `test.instructions`, `test.instructions_file`, `test.path_instructions`, `test.allow_approve_over_failure`, `test.evidence.branch`, `intent.check`, `pr.template`, `pr.publish_intent`, `pr.intent`, and `pr.appendix` only from that trusted copy.
 `pr.base_branch` is trusted-default-branch-only as well, but unlike those fields it follows the same `allow_repo_commands: true` opt-in exception as `commands`/`agent` (see [`pr.base_branch`](#prbase_branch) below).
 If the default branch cannot be fetched and resolved to a readable commit, or its present `.no-mistakes.yaml` cannot be read and parsed, the run aborts before launching an agent. The pre-admission `intent.check` fetch is the exception: if that fetch fails, intent checks are unavailable/off for that launch, a warning is logged, and the same failed result is reused by trusted-config loading without retrying.
 A readable default-branch tree with no `.no-mistakes.yaml` is valid and uses defaults.
@@ -111,6 +111,7 @@ ci:
   review_bot_comments: on_failure # or: always
   rebase_behind: false
   carry_review_on_replay: false
+  rebase_repair: full # or: replay, review
   required_reviews: [] # opt in with: [coderabbit]
   # instructions: |
   #   Regenerate golden files with `make fixtures`; never hand-edit them.
@@ -1079,6 +1080,37 @@ The restart at Test is recorded with the carried approval, in the same write, an
 
 This value is read only from the trusted default-branch copy of this file, like the rest of the `ci` block: a pushed branch cannot let its own rebases skip Review.
 A value set here wins over the operator's own [`ci.carry_review_on_replay`](/no-mistakes/reference/global-config/#cicarry_review_on_replay) in both directions.
+
+### ci.rebase_repair
+
+How far a CI rebase repair is revalidated before it is republished.
+
+| | |
+|---|---|
+| Type | `string`: `full`, `replay`, or `review` |
+| Default | `full` |
+| Trust | Read only from the trusted default branch; the operator's global config rejects it |
+
+```yaml
+ci:
+  rebase_repair: review
+```
+
+A merge-conflict repair, or a [`ci.rebase_behind`](#cirebase_behind) rebase, rewrites every branch commit, so it normally [revalidates from Review](#cirevalidate_repairs) and re-runs Review, Test, Document, and Lint before Push republishes it. The cost is dominated by Test. Both faster values trade that local Test run for the forge's checks, so they are opt-ins.
+
+- **`full` (default)** keeps today's behavior exactly. An absent key is the same as `full`.
+- **`replay`** first checks whether the repaired head is a pure replay of the run's **published** head onto the base tip the repair targeted, with the same proof as [`ci.carry_review_on_replay`](#cicarry_review_on_replay) (linear chains of the same length, each commit replaying with no conflict to exactly its recorded tree, each patch-identical). When it is, the head is published at once through the guarded Push path (force-with-lease, remote verification, gate mirror, and the attestation rebind all apply), the run's review approval moves to it, and CI on the rebased head is the gate; Review, Test, Document, and Lint do not re-run. Proving against the published head rather than the reviewed head means commits added after Review (a Test or Document fix, an earlier published CI repair) do not disqualify a replay, because they were already admitted before they were published. A rebase an agent performed on its own in an ordinary failing-check round is eligible too, if it sits exactly on the rebase target. If the publish does not complete, the head stays recorded with its carried approval and restarts at Test. Both `replay` and `review` publish a pure replay without a local Test run, so a repository that requires Test locally on every published head must keep `full`.
+- **`review`** is `replay`, and any other rebase repair (a conflict was resolved, or the agent added a commit) re-runs only Review, Document, and Lint. The Review prompt gets a `git range-diff` of the previously published head against the rebased head, so the reviewer sees exactly what the rebase changed beyond a clean replay. If Review approves that exact head without committing a fix, **Test is carried**: its row stays `completed` with `carried_from` pointing at itself, the step log and PR body say it was carried and not re-run, and the PR attestation records `"status": "carried"` for it, never `completed`. The shared `require-no-mistakes` action therefore fails closed on such a head until a full validation replaces the attestation; do not enable `review` in a repository whose CI requires it. If Review commits a fix, Test runs as usual. CI gates the tests.
+
+Every faster path fails closed to `full` when any part of its proof does not hold, including any git error. Neither has an effect when:
+
+- [`ci.revalidate_repairs`](#cirevalidate_repairs) is `true`.
+- The run has a repository [gate](#gates) anchored `after: review`.
+- For `review`: the rebased head does not contain the rebase target, the run has no published head or review approval, a carried Test restart is still pending, or Test was approved over an unresolved condition (a carry would hide it).
+
+The rebased head is recorded in the same write that revokes the review approval, so a Review parked for your decision, or a daemon restart, still carries Test when Review later approves exactly that head. The next publication clears it.
+
+This value is read only from the trusted default-branch copy of this file, like the rest of the `ci` block: a pushed branch cannot lower its own validation. It has no global equivalent, so a global config that sets it fails to load.
 
 ### ci.release_after_checks_pass
 

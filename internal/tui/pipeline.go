@@ -177,6 +177,9 @@ func renderPipelineView(run *ipc.RunInfo, steps []ipc.StepResultInfo, width int,
 				line += " " + dimStyle.Render(errText)
 			}
 		}
+		if step.Carried {
+			line += " " + dimStyle.Render("- carried")
+		}
 		if step.ReportedFindings > 0 && (step.FixedFindings > 0 || step.Status == types.StepStatusFixing) {
 			fixedLabel := dimStyle.Render(fmt.Sprintf("%d/%d fixed", step.FixedFindings, step.ReportedFindings))
 			line = appendRightLabel(line, fixedLabel, contentWidth)
