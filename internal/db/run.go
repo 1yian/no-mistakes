@@ -726,7 +726,7 @@ func (d *DB) UpdateRunPushBinding(id string, binding PushBinding) error {
 func (d *DB) UpdateRunPublication(id string, binding PushBinding) error {
 	ts := now()
 	_, err := d.sql.Exec(
-		`UPDATE runs SET head_sha = ?, last_pushed_sha = ?, push_target_kind = ?, push_target_fingerprint = ?, push_ref = ?, last_pushed_at = ?, push_generation = COALESCE(push_generation, 0) + 1, ci_test_restart_pending = 0, updated_at = ? WHERE id = ?`,
+		`UPDATE runs SET head_sha = ?, last_pushed_sha = ?, push_target_kind = ?, push_target_fingerprint = ?, push_ref = ?, last_pushed_at = ?, push_generation = COALESCE(push_generation, 0) + 1, ci_test_restart_pending = 0, ci_rebase_review_head_sha = NULL, ci_rebase_review_base_sha = NULL, updated_at = ? WHERE id = ?`,
 		binding.HeadSHA, binding.HeadSHA, binding.TargetKind, binding.TargetFingerprint, binding.Ref, ts, ts, id,
 	)
 	if err != nil {
@@ -1027,11 +1027,27 @@ func (d *DB) UpdateRunHeadSHA(id, headSHA string) error {
 // UpdateRunHeadSHAForRevalidation records a late repair while revoking the
 // previous review binding so the repaired head must pass review before push.
 func (d *DB) UpdateRunHeadSHAForRevalidation(id, headSHA string) error {
-	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, review_approved_head_sha = NULL, updated_at = ? WHERE id = ?`, headSHA, now(), id)
+	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, review_approved_head_sha = NULL, ci_rebase_review_head_sha = NULL, ci_rebase_review_base_sha = NULL, updated_at = ? WHERE id = ?`, headSHA, now(), id)
 	if err != nil {
 		return fmt.Errorf("update run head sha for revalidation: %w", err)
 	}
 	return nil
+}
+
+func (d *DB) UpdateRunHeadSHAForRebaseReview(id, headSHA, baseSHA string) error {
+	_, err := d.sql.Exec(`UPDATE runs SET head_sha = ?, review_approved_head_sha = NULL, ci_rebase_review_head_sha = ?, ci_rebase_review_base_sha = ?, updated_at = ? WHERE id = ?`, headSHA, headSHA, baseSHA, now(), id)
+	if err != nil {
+		return fmt.Errorf("update run head sha for rebase review: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) RunRebaseReview(id string) (headSHA, baseSHA string, err error) {
+	var head, base sql.NullString
+	if err := d.sql.QueryRow(`SELECT ci_rebase_review_head_sha, ci_rebase_review_base_sha FROM runs WHERE id = ?`, id).Scan(&head, &base); err != nil {
+		return "", "", fmt.Errorf("read run rebase review: %w", err)
+	}
+	return strings.TrimSpace(head.String), strings.TrimSpace(base.String), nil
 }
 
 // UpdateRunHeadSHAWithCarriedReview records a late repair that was proven to

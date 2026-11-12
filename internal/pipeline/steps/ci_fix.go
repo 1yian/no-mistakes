@@ -350,7 +350,7 @@ CI logs:
 	if conclusionErr != nil {
 		sctx.Log(fmt.Sprintf("warning: could not parse CI repair conclusion: %v", conclusionErr))
 	}
-	if rebase {
+	if rebase || (rebaseBaseResolved && ciPublishesPureReplay(sctx)) {
 		s.replayBase = rebaseBaseSHA
 		defer func() { s.replayBase = "" }()
 	}
@@ -849,13 +849,20 @@ func (s *CIStep) recordRepair(sctx *pipeline.StepContext, headSHA string) (ciRep
 		return s.recordLocalRepair(sctx, headSHA)
 	}
 	if reason := ciRepairContinuityGap(sctx, headSHA); reason != "" {
-		if s.replayBase != "" && ciCarriesReviewOnReplay(sctx) {
+		if s.replayBase != "" && (ciCarriesReviewOnReplay(sctx) || ciPublishesPureReplay(sctx)) {
 			repair, carried, err := s.recordReplayedRepair(sctx, headSHA, s.replayBase)
 			if err != nil || carried {
 				return repair, err
 			}
 		}
 		sctx.Log(fmt.Sprintf("cannot prove the repaired head continues the reviewed head: %s; revalidating from Review instead of publishing", reason))
+		if s.replayBase != "" && ciReviewsRebaseOnly(sctx) {
+			if gap := rebaseReviewGap(sctx, headSHA, s.replayBase); gap != "" {
+				sctx.Log(fmt.Sprintf("rebase repair revalidates in full: %s", gap))
+			} else {
+				return s.holdRepair(sctx, headSHA, s.replayBase)
+			}
+		}
 		return s.recordLocalRepair(sctx, headSHA)
 	}
 	// A head that carried its review approval across a rebase has not been
@@ -873,12 +880,13 @@ func (s *CIStep) recordRepair(sctx *pipeline.StepContext, headSHA string) (ciRep
 	return s.publishRepair(sctx, headSHA)
 }
 
-// recordReplayedRepair keeps a rebase repair local and moves the run's review
-// approval to it when it is a provable pure replay of the approved commits
-// onto base (see pureReplayGap). The reviewed diff is unchanged, so only the
-// steps that depend on the base - Test onward - re-run. It reports carried =
-// false, having recorded nothing, whenever the proof does not hold, so the
-// caller takes the ordinary revalidation path.
+// recordReplayedRepair moves the run's review approval to a rebase repair that
+// is a provable pure replay onto base (see pureReplayGap). A replay of the
+// published head is published at once when ci.rebase_repair allows it; a replay
+// of the approved commits otherwise stays local and restarts at Test, since the
+// reviewed diff is unchanged and only the steps that depend on the base re-run.
+// It reports carried = false, having recorded nothing, whenever the proof does
+// not hold, so the caller takes the ordinary revalidation path.
 func (s *CIStep) recordReplayedRepair(sctx *pipeline.StepContext, headSHA, base string) (ciRepairResult, bool, error) {
 	run, err := sctx.DB.GetRun(sctx.Run.ID)
 	if err != nil {
@@ -892,8 +900,25 @@ func (s *CIStep) recordReplayedRepair(sctx *pipeline.StepContext, headSHA, base 
 		sctx.Log(fmt.Sprintf("not carrying the review approval across the rebase: gate %q runs after Review", gate))
 		return ciRepairResult{}, false, nil
 	}
-	if gap := pureReplayGap(sctx, approvedHead, base, headSHA); gap != "" {
-		sctx.Log(fmt.Sprintf("rebase repair is not a pure replay of the reviewed commits: %s", gap))
+	provenHead, publishes, refused := "", false, ""
+	if ciPublishesPureReplay(sctx) {
+		if published := publishedHeadOfApproval(sctx, run, approvedHead); published != "" {
+			if gap := pureReplayGap(sctx, published, base, headSHA); gap != "" {
+				sctx.Log(fmt.Sprintf("rebase repair is not a pure replay of the published head: %s", gap))
+				refused = published
+			} else {
+				provenHead, publishes = published, true
+			}
+		}
+	}
+	if provenHead == "" && ciCarriesReviewOnReplay(sctx) && refused != approvedHead {
+		if gap := pureReplayGap(sctx, approvedHead, base, headSHA); gap != "" {
+			sctx.Log(fmt.Sprintf("rebase repair is not a pure replay of the reviewed commits: %s", gap))
+		} else {
+			provenHead = approvedHead
+		}
+	}
+	if provenHead == "" {
 		return ciRepairResult{}, false, nil
 	}
 	if err := updateNonSharedBranchRef(sctx, headSHA); err != nil {
@@ -909,8 +934,30 @@ func (s *CIStep) recordReplayedRepair(sctx *pipeline.StepContext, headSHA, base 
 	sctx.Run.HeadSHA = headSHA
 	sctx.Run.ReviewApprovedHeadSHA = &headSHA
 	pipeline.RemapUncertifiedPipelineRangeAfterRebase(sctx, startingHead, headSHA)
-	sctx.Log(fmt.Sprintf("rebase repair is a pure replay of reviewed head %s onto %s; carrying the review approval to %s and revalidating from Test", shortObjectID(approvedHead), shortObjectID(base), shortObjectID(headSHA)))
+	if publishes {
+		sctx.Log(fmt.Sprintf("rebase repair is a pure replay of published head %s onto %s; publishing %s without revalidation, CI on the rebased head is the gate", shortObjectID(provenHead), shortObjectID(base), shortObjectID(headSHA)))
+		repair, err := s.publishRepair(sctx, headSHA)
+		return repair, true, err
+	}
+	sctx.Log(fmt.Sprintf("rebase repair is a pure replay of reviewed head %s onto %s; carrying the review approval to %s and revalidating from Test", shortObjectID(provenHead), shortObjectID(base), shortObjectID(headSHA)))
 	return ciRepairResult{HeadAdvanced: true, Revalidate: true, ReviewCarried: true}, true, nil
+}
+
+func publishedHeadOfApproval(sctx *pipeline.StepContext, run *db.Run, approvedHead string) string {
+	if run == nil || run.LastPushedSHA == nil {
+		return ""
+	}
+	published := strings.TrimSpace(*run.LastPushedSHA)
+	if !isFullGitObjectID(published) {
+		return ""
+	}
+	if pending, err := sctx.DB.RunTestRestartPending(sctx.Run.ID); err != nil || pending {
+		return ""
+	}
+	if _, err := stepGitRun(sctx, "merge-base", "--is-ancestor", approvedHead, published); err != nil {
+		return ""
+	}
+	return published
 }
 
 // ciRepairContinuityGap returns why the repaired head cannot be proven to
@@ -947,6 +994,10 @@ func ciRepairContinuityGap(sctx *pipeline.StepContext, headSHA string) string {
 // Review has approved it again. The CI monitor turns that into a restart at
 // Review.
 func (s *CIStep) recordLocalRepair(sctx *pipeline.StepContext, headSHA string) (ciRepairResult, error) {
+	return s.holdRepair(sctx, headSHA, "")
+}
+
+func (s *CIStep) holdRepair(sctx *pipeline.StepContext, headSHA, rebaseReviewBase string) (ciRepairResult, error) {
 	if err := updateNonSharedBranchRef(sctx, headSHA); err != nil {
 		return ciRepairResult{}, err
 	}
@@ -955,12 +1006,20 @@ func (s *CIStep) recordLocalRepair(sctx *pipeline.StepContext, headSHA string) (
 	// succeeds leaves the monitor watching a head the durable record does not
 	// know about, still holding its old review approval, with the revalidation
 	// this call exists to trigger silently lost.
-	if err := sctx.DB.UpdateRunHeadSHAForRevalidation(sctx.Run.ID, headSHA); err != nil {
+	update := func() error { return sctx.DB.UpdateRunHeadSHAForRevalidation(sctx.Run.ID, headSHA) }
+	if rebaseReviewBase != "" {
+		update = func() error { return sctx.DB.UpdateRunHeadSHAForRebaseReview(sctx.Run.ID, headSHA, rebaseReviewBase) }
+	}
+	if err := update(); err != nil {
 		return ciRepairResult{}, err
 	}
 	sctx.Run.HeadSHA = headSHA
 	sctx.Run.ReviewApprovedHeadSHA = nil
 	pipeline.PersistUncertifiedPipelineRange(sctx, startingHead, headSHA)
+	if rebaseReviewBase != "" {
+		sctx.Log("committed CI rebase repair for revalidation; Test is carried if Review approves this head unchanged, and CI gates the tests")
+		return ciRepairResult{HeadAdvanced: true, Revalidate: true}, nil
+	}
 	sctx.Log("committed CI repair for revalidation")
 	return ciRepairResult{HeadAdvanced: true, Revalidate: true}, nil
 }

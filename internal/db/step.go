@@ -420,6 +420,29 @@ func (d *DB) CompleteStepWithStatus(id string, status types.StepStatus, exitCode
 	return d.completeStep(id, status, exitCode, durationMS, logPath, "")
 }
 
+func (d *DB) CarryStepAcrossRebase(id string) error {
+	ts := now()
+	result, err := d.sql.Exec(
+		`UPDATE step_results SET status = ?, exit_code = 0, duration_ms = 0, started_at = ?, completed_at = ?, last_activity_at = ?, last_activity = ?, agent_pid = NULL, carried_from = id WHERE id = ? AND status = ?`,
+		types.StepStatusCompleted, ts, ts, ts, "status: completed (carried)", id, types.StepStatusPending,
+	)
+	if err != nil {
+		return fmt.Errorf("carry step: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("carry step rows affected: %w", err)
+	}
+	if changed != 1 {
+		return fmt.Errorf("carry step: step %s is not pending", id)
+	}
+	return nil
+}
+
+func (s *StepResult) CarriedAcrossRebase() bool {
+	return s != nil && s.CarriedFrom != nil && *s.CarriedFrom == s.ID
+}
+
 // CompleteSkippedStep atomically preserves the automatic skip cause with its status.
 func (d *DB) CompleteSkippedStep(id string, exitCode int, durationMS int64, logPath, reason string) error {
 	return d.completeStep(id, types.StepStatusSkipped, exitCode, durationMS, logPath, reason)

@@ -1776,6 +1776,7 @@ func stepToInfo(d *db.DB, s *db.StepResult) ipc.StepResultInfo {
 	if s.SkipReason != nil {
 		info.SkipReason = *s.SkipReason
 	}
+	info.Carried = s.CarriedAcrossRebase()
 	if s.AutoFixLimit != nil {
 		info.AutoFixLimit = *s.AutoFixLimit
 	}

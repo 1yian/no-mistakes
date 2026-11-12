@@ -63,6 +63,8 @@ type pipelineAttestation struct {
 	AllowTestCommandOverride string `json:"allow_test_command_override,omitempty"`
 }
 
+const attestationStatusCarried types.StepStatus = "carried"
+
 type pipelineAttestationStep struct {
 	Step   types.StepName   `json:"step"`
 	Status types.StepStatus `json:"status"`
@@ -205,6 +207,9 @@ func newPipelineAttestation(steps []*db.StepResult, rounds map[string][]*db.Step
 		item := pipelineAttestationStep{
 			Step:   sr.StepName,
 			Status: sr.Status,
+		}
+		if sr.CarriedAcrossRebase() {
+			item.Status = attestationStatusCarried
 		}
 		if sr.StepName == types.StepTest && sr.OverrideReason != nil {
 			// Free text: JSON would write a control byte as \u00XX, which the
@@ -381,6 +386,9 @@ func buildTestingSummary(steps []*db.StepResult, rounds map[string][]*db.StepRou
 		line, _ := buildStepEntry(sr, stepRounds, opts.flavor)
 		if line == "" {
 			return ""
+		}
+		if sr.CarriedAcrossRebase() {
+			return "## Testing\n\n- " + line
 		}
 
 		testingSummary := collectTestingSummary(sr, stepRounds)
@@ -1194,6 +1202,10 @@ func buildStepEntry(sr *db.StepResult, rounds []*db.StepRound, flavor prBodyFlav
 	name := stepDisplayName(sr.StepName)
 	buildDetail := func(line string) (string, string) {
 		return line, buildStepDetails(line, sr, rounds, flavor)
+	}
+
+	if sr.CarriedAcrossRebase() && sr.Status == types.StepStatusCompleted {
+		return buildDetail(fmt.Sprintf("↪️ **%s** - carried over the rebase, not re-run on this head (its last result predates the rebase)", name))
 	}
 
 	switch sr.Status {

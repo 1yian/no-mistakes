@@ -604,6 +604,13 @@ func (e *Executor) Execute(ctx context.Context, run *db.Run, repo *db.Repo, work
 			e.emitStepEventWithFindingsAndError(ipc.EventStepCompleted, run, repo, step.Name(), string(types.StepStatusSkipped), "", "", nil)
 			continue
 		}
+		carried, err := e.carryTestAcrossRebaseRepair(run, repo, step, sr, logDir)
+		if err != nil {
+			return e.failRun(run, repo, fmt.Errorf("carry step %s: %w", step.Name(), err), ctx)
+		}
+		if carried {
+			continue
+		}
 		state, err := e.durableExecutionState(sr.ID)
 		if err != nil {
 			return e.failRun(run, repo, fmt.Errorf("restore step %s execution state: %w", step.Name(), err), ctx)
