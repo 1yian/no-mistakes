@@ -38,9 +38,10 @@ const (
 	// ": " (see UserAbortStepError).
 	StepErrorAbortedByUser = "aborted by user"
 
-	RunCancelReasonAbortedByUser  = "cancelled: aborted by user"
-	RunCancelReasonSuperseded     = "cancelled: superseded by new push"
-	RunCIMonitorInterruptedReason = "ci monitor interrupted by daemon restart; PR remains open"
+	RunCancelReasonAbortedByUser       = "cancelled: aborted by user"
+	RunCancelReasonSuperseded          = "cancelled: superseded by new push"
+	RunCancelReasonRecoveredForEditing = "validation withdrawn for recovery; fresh full validation required"
+	RunCIMonitorInterruptedReason      = "ci monitor interrupted by daemon restart; PR remains open"
 )
 
 // UserAbortStepError returns the error recorded on a step an operator aborted

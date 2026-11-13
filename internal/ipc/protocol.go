@@ -37,6 +37,7 @@ const (
 	MethodSubscribe                 = "subscribe"
 	MethodRespond                   = "respond"
 	MethodAnswerReview              = "answer_review_question"
+	MethodRecoverActive             = "recover_active"
 	MethodCancelRun                 = "cancel_run"
 	MethodHandoffRun                = "handoff_run"
 	MethodGateContext               = "gate_context"
@@ -295,6 +296,21 @@ type RerunParams struct {
 	// set; an unset field inherits it.
 	PRTitle string `json:"pr_title,omitempty"`
 	PRBody  string `json:"pr_body,omitempty"`
+}
+
+type RecoverActiveParams struct {
+	RepoID        string `json:"repo_id"`
+	Branch        string `json:"branch"`
+	RunID         string `json:"run_id"`
+	WorkDir       string `json:"work_dir"`
+	LocalHead     string `json:"local_head"`
+	PublishedHead string `json:"published_head"`
+}
+
+type RecoverActiveResult struct {
+	RunID        string `json:"run_id"`
+	SnapshotDir  string `json:"snapshot_dir"`
+	PublishedRef string `json:"published_ref"`
 }
 
 // RetryRunParams asks the daemon to continue a failed run from its failed

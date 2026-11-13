@@ -153,8 +153,9 @@ type StepContext struct {
 	// SetPRState is the daemon-owned transition boundary for CI monitor PR
 	// lifecycle observations. Embeddings leave it nil and use the local DB
 	// write path.
-	SetPRState func(state string) error
-	CIWake     <-chan struct{}
+	SetPRState    func(state string) error
+	CIWake        <-chan struct{}
+	RecoverActive func(*StepContext) error
 	// MarkRunning tells the executor that a step re-executing as a fix round
 	// has finished its repair and is executing normally again, so the step's
 	// status returns from fixing to running before Execute returns. The CI

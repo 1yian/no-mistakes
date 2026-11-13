@@ -136,6 +136,7 @@ type Executor struct {
 	ciMonitorLifecycle      func(runID string, active bool)
 	ciWake                  func(runID string) <-chan struct{}
 	handoffPending          func(runID string) bool
+	recoverActive           func(*StepContext) error
 	gateClaimGuard          func() (release func(), ok bool)
 }
 
@@ -170,6 +171,10 @@ func (e *Executor) SetCIWake(fn func(runID string) <-chan struct{}) {
 		return
 	}
 	e.ciWake = fn
+}
+
+func (e *Executor) SetRecoverActive(fn func(*StepContext) error) {
+	e.recoverActive = fn
 }
 
 func (e *Executor) SetHandoffPending(fn func(runID string) bool) {
@@ -1548,6 +1553,7 @@ func (e *Executor) executeStep(ctx context.Context, step Step, sr *db.StepResult
 		},
 		CIReadinessChanged: ciReadinessChanged,
 		CIWake:             ciWake,
+		RecoverActive:      e.recoverActive,
 		MarkRunning:        markRunning,
 		OnPRMerged:         e.onPRMerged,
 	}
@@ -2652,7 +2658,7 @@ func (e *Executor) failRun(run *db.Run, repo *db.Repo, err error, ctxs ...contex
 		}
 	}
 	runStatus := types.RunFailed
-	if errMsg == types.RunCancelReasonAbortedByUser || errMsg == types.RunCancelReasonSuperseded {
+	if errMsg == types.RunCancelReasonAbortedByUser || errMsg == types.RunCancelReasonSuperseded || errMsg == types.RunCancelReasonRecoveredForEditing {
 		runStatus = types.RunCancelled
 	}
 	verifiedHead, verified := e.reconcileTerminalRunHead(run)

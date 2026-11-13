@@ -557,6 +557,36 @@ For the alternative validation path and its refusal conditions, see [`no-mistake
 A recovered never-pushed run reports `state: custody_returned`; a recovered pushed run reports its ordinary classification against the last push binding, typically `local_ahead`.
 On a `user_owned` branch, `--recover` is an idempotent no-op success: nothing pipeline-created exists to recover, and no file, ref, or database row changes.
 
+## no-mistakes axi recover-active
+
+Preserve an active, genuinely diverged published run for editing, withdraw its validation, and stop its CI monitor without reporting success. This is separate from `sync --recover`, which still refuses active published divergence.
+
+```sh
+no-mistakes axi recover-active --run <run-id> --local-head <full-local-sha> --published-head <full-published-sha>
+```
+
+Run this from the clean feature worktree. All three pins are required. The existing daemon must already support the command; this command never starts, restarts, or upgrades it. It refuses a different active run, pending handoff, changed local/gate/managed/published head, dirty worktree, non-open PR, or unavailable live PR attestation.
+
+Before withdrawing validation, it preserves both commits under `refs/no-mistakes/recover-active/<run-id>/{local,published}` and writes a private snapshot under `<NM_HOME>/recovery-active/<run-id>/snapshot-*`: a self-contained Git bundle, run/step/round history, evidence, step logs, and the original PR body. A preservation or withdrawal failure cannot cancel the run. After a durable preparation record exists, the monitor stays held at its checkpoint until the same pinned recovery succeeds; it cannot poll back to green or hand off. Retrying the exact command resumes that held checkpoint while the same daemon remains running. Conflicting or unreadable records refuse. Do not restart or upgrade the daemon during recovery: ordinary startup recovery resumes parked approval gates, not a live CI monitor. An interrupted daemon requires a separately planned preservation-first maintenance bridge; this command does not provide one.
+
+Withdrawal replaces every old attestation step with `failed` and removes live-validation claims and approval exceptions. Only after live readback confirms withdrawal and the identities are rechecked does the monitor cancel with `validation withdrawn for recovery; fresh full validation required`. Exit `0` requires confirmed terminal cancellation, not just an accepted request. Output says `state: recovered-for-editing` and `validated: false`, and names the snapshot and published recovery ref. No caller branch, worktree content, gate branch, or published branch is replaced. These snapshots are not ordinary reapable run evidence; retain them until recovery has been reviewed.
+
+Only then reconcile explicitly, retaining both histories:
+
+```sh
+git merge --no-ff refs/no-mistakes/recover-active/<run-id>/published
+```
+
+Resolve conflicts according to the acceptance requirements and commit. Correct remaining behavior gaps in additional commits. Then submit:
+
+```sh
+no-mistakes axi run --intent '<complete corrected acceptance requirements>'
+```
+
+This merge is an operator decision, not automatic conflict resolution. Verify that both pinned heads are ancestors of the corrected submission. A retry, skipped-step submission, or head missing either ancestry is refused. The new run must perform fresh Review, Test, Document, Lint, publication/PR attestation, and CI; old green CI or completed steps are not reusable validation. Existing opt-in CI replay policies remain unchanged for later repairs of the new run.
+
+A lost response, interrupted withdrawal, or unconfirmed terminal result is not permission to reset, force-push, edit database rows, or delete preservation records. Inspect the exact run and private records, then retry only with unchanged pins. Never restore the old green attestation as a rollback.
+
 ## no-mistakes axi logs
 
 Show one pipeline step's recorded findings and log output, using the [read-only database access described for status](#no-mistakes-axi-status).
