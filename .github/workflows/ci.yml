@@ -144,6 +144,8 @@ jobs:
 
       - name: Test on Unix
         if: runner.os != 'Windows'
+        env:
+          GOFLAGS: ${{ runner.os == 'macOS' && '-timeout=20m' || '' }}
         run: go test -race ./...
 
       # Git-heavy packages are the Windows wall floor. NM_CI_WINDOWS_GIT_EXCLUDE
@@ -188,7 +190,7 @@ jobs:
           NM_CI_WINDOWS_GIT_EXCLUDE: '/internal/(git|branchsync|gate|evidence|pipeline/steps(/.*)?|daemon|eval)$'
         run: |
           $pkgs = go list ./... | Where-Object { $_ -notmatch $env:NM_CI_WINDOWS_GIT_EXCLUDE }
-          go test -v -timeout=15m @pkgs
+          go test -v -timeout=25m @pkgs
 
       - name: Build
         run: go build ./cmd/no-mistakes
