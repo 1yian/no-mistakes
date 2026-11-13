@@ -56,13 +56,14 @@ var fetchRecoveredRemoteBranch = git.FetchRemoteBranch
 
 // RunManager tracks active pipeline executors and manages run lifecycle.
 type RunManager struct {
-	mu              sync.Mutex
-	executors       map[string]*pipeline.Executor      // runID → executor
-	cancels         map[string]context.CancelCauseFunc // runID → cancel function with cause
-	dones           map[string]chan struct{}           // runID → closed when goroutine exits
-	handoffRequests map[string]*handoffRequest         // runID → pending monitor request
-	ciMonitorActive map[string]bool                    // runID → CI monitor accepts observations
-	ciWakes         map[string]chan struct{}           // runID → CI poll wake signal
+	mu               sync.Mutex
+	executors        map[string]*pipeline.Executor      // runID → executor
+	cancels          map[string]context.CancelCauseFunc // runID → cancel function with cause
+	dones            map[string]chan struct{}           // runID → closed when goroutine exits
+	handoffRequests  map[string]*handoffRequest         // runID → pending monitor request
+	ciMonitorActive  map[string]bool                    // runID → CI monitor accepts observations
+	ciWakes          map[string]chan struct{}           // runID → CI poll wake signal
+	activeRecoveries map[string]*activeRecoveryRequest
 	// runQueue holds submissions waiting for setup or an execution slot under
 	// the max_concurrent_runs cap, in submission order. Guarded by mu; see
 	// run_queue.go.
@@ -130,18 +131,19 @@ func NewRunManager(database *db.DB, p *paths.Paths, stepFactory StepFactory) *Ru
 		stepFactory = func() []pipeline.Step { return steps.AllSteps() }
 	}
 	return &RunManager{
-		executors:       make(map[string]*pipeline.Executor),
-		cancels:         make(map[string]context.CancelCauseFunc),
-		dones:           make(map[string]chan struct{}),
-		handoffRequests: make(map[string]*handoffRequest),
-		ciMonitorActive: make(map[string]bool),
-		ciWakes:         make(map[string]chan struct{}),
-		db:              database,
-		paths:           p,
-		steps:           stepFactory,
-		subscribers:     make(map[string][]*eventMailbox),
-		stateRevs:       make(map[string]int64),
-		completedRuns:   make(map[string]bool),
+		executors:        make(map[string]*pipeline.Executor),
+		cancels:          make(map[string]context.CancelCauseFunc),
+		dones:            make(map[string]chan struct{}),
+		handoffRequests:  make(map[string]*handoffRequest),
+		ciMonitorActive:  make(map[string]bool),
+		ciWakes:          make(map[string]chan struct{}),
+		activeRecoveries: make(map[string]*activeRecoveryRequest),
+		db:               database,
+		paths:            p,
+		steps:            stepFactory,
+		subscribers:      make(map[string][]*eventMailbox),
+		stateRevs:        make(map[string]int64),
+		completedRuns:    make(map[string]bool),
 	}
 }
 
@@ -546,6 +548,7 @@ func (m *RunManager) resumeRecoveredRun(plan recoveredRunPlan) {
 	executor.SetCIObservationTransition(m.transitionCIObservation)
 	executor.SetCIMonitorLifecycle(m.transitionCIMonitorLifecycle)
 	executor.SetCIWake(m.ciWake)
+	executor.SetRecoverActive(m.recoverActiveAtCheckpoint)
 	executor.SetHandoffPending(m.handoffPending)
 	executor.SetGateClaimGuard(m.gateClaimGuard)
 	executor.SetOnPRMerged(func(_ context.Context, runID string) {
@@ -1757,6 +1760,10 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 		repo = refreshed
 	}
 
+	if err := m.requireFreshActiveRecovery(ctx, repo.ID, branch, headSHA, skipSteps, retry != nil); err != nil {
+		return "", err
+	}
+
 	// Resolve before cancellation, row creation or any pipeline work. A bad
 	// dispatch request must not supersede a healthy active validation.
 	// ResolvePiProfile pins model/effort from global-only defaults. Agent
@@ -2218,6 +2225,7 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 	executor.SetCIObservationTransition(m.transitionCIObservation)
 	executor.SetCIMonitorLifecycle(m.transitionCIMonitorLifecycle)
 	executor.SetCIWake(m.ciWake)
+	executor.SetRecoverActive(m.recoverActiveAtCheckpoint)
 	executor.SetHandoffPending(m.handoffPending)
 	executor.SetGateClaimGuard(m.gateClaimGuard)
 	executor.SetForgeContext(forgeCtx)
@@ -2754,6 +2762,10 @@ func (m *RunManager) Shutdown() {
 // its executor.
 func (m *RunManager) HandleCancel(runID string) error {
 	m.mu.Lock()
+	if m.activeRecoveryPendingLocked(runID) {
+		m.mu.Unlock()
+		return fmt.Errorf("active recovery pending; finish the pinned recovery before cancelling")
+	}
 	if qe, ok := m.extractQueuedLocked(runID); ok {
 		m.mu.Unlock()
 		m.cancelQueuedRun(qe, types.RunCancelReasonAbortedByUser)
@@ -2826,6 +2838,10 @@ func (m *RunManager) HandleHandoff(ctx context.Context, runID string) error {
 	defer cancel()
 
 	m.mu.Lock()
+	if m.activeRecoveryPendingLocked(runID) {
+		m.mu.Unlock()
+		return fmt.Errorf("active recovery pending; handoff cannot validate recovery")
+	}
 	_, ok := m.cancels[runID]
 	if !ok {
 		m.mu.Unlock()

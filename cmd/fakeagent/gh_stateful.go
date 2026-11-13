@@ -174,17 +174,22 @@ func runGhStatefulPRStub(args []string) int {
 	}
 	// view
 	fields := map[string]any{
-		"number":      pr.Number,
-		"url":         pr.URL,
-		"title":       pr.Title,
-		"body":        pr.Body,
-		"state":       pr.State,
-		"baseRefName": pr.Base,
-		"headRefName": pr.Head,
-		"mergeable":   "MERGEABLE",
-		"headRefOid":  ghStatefulHeadOID(repo, pr.Head),
+		"number":           pr.Number,
+		"url":              pr.URL,
+		"title":            pr.Title,
+		"body":             pr.Body,
+		"state":            pr.State,
+		"baseRefName":      pr.Base,
+		"headRefName":      pr.Head,
+		"mergeable":        "MERGEABLE",
+		"mergeStateStatus": "CLEAN",
+		"headRefOid":       ghStatefulHeadOID(repo, pr.Head),
 	}
 	if jq := argAfter(args, "--jq"); strings.HasPrefix(jq, ".") {
+		if jq == `.mergeable + " " + .mergeStateStatus` {
+			fmt.Printf("%s %s\n", fields["mergeable"], fields["mergeStateStatus"])
+			return 0
+		}
 		if value, ok := fields[strings.TrimPrefix(jq, ".")]; ok {
 			fmt.Println(value)
 			return 0
@@ -249,6 +254,12 @@ func (s *ghStatefulState) patchPR(statePath string, args []string, stdin string)
 	if pr == nil {
 		fmt.Fprintf(os.Stderr, "no pull request found for %v\n", args)
 		return 1
+	}
+	if path := os.Getenv("FAKEAGENT_GH_REJECT_PATCH_FILE"); path != "" {
+		if _, err := os.Stat(path); err == nil {
+			fmt.Fprintln(os.Stderr, "isolated forge fixture refused the PR write")
+			return 1
+		}
 	}
 	var payload struct {
 		Title *string `json:"title"`

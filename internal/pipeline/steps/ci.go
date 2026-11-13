@@ -365,6 +365,11 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 		encoded, _ := types.MarshalFindingsJSON(findings)
 		outcome, err = &pipeline.StepOutcome{NeedsApproval: true, Findings: encoded}, nil
 	}()
+	if sctx.RecoverActive != nil {
+		if err := sctx.RecoverActive(sctx); err != nil {
+			return nil, err
+		}
+	}
 	if err := assertPipelineHeadContinuity(sctx, s.Name()); err != nil {
 		return nil, err
 	}
@@ -595,6 +600,11 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if sctx.RecoverActive != nil {
+			if err := sctx.RecoverActive(sctx); err != nil {
+				return nil, err
+			}
 		}
 		pollBaseTip := ""
 		botCommentReadFailed := false
