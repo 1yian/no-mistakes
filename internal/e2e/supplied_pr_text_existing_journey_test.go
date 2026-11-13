@@ -234,7 +234,7 @@ func TestSuppliedPRTextExistingPRJourney(t *testing.T) {
 		if failed == nil {
 			continue
 		}
-		if st, _ := findStep(failed.Steps, types.StepPR); failed.Status.Terminal() || (st.Status != types.StepStatusPending && st.Status != types.StepStatusRunning) {
+		if st, found := findStep(failed.Steps, types.StepPR); failed.Status.Terminal() || (found && st.Status != types.StepStatusPending && st.Status != types.StepStatusRunning) {
 			break
 		}
 	}
