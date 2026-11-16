@@ -485,4 +485,5 @@ COMMIT;`,
 	`ALTER TABLE runs ADD COLUMN pr_text_applied_at INTEGER`,
 	`ALTER TABLE runs ADD COLUMN ci_rebase_review_head_sha TEXT`,
 	`ALTER TABLE runs ADD COLUMN ci_rebase_review_base_sha TEXT`,
+	`ALTER TABLE runs ADD COLUMN integration_destination TEXT`,
 }
