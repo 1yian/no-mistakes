@@ -189,6 +189,13 @@ func (m *RunManager) proveRetry(ctx context.Context, repo *db.Repo, branch, runI
 	if source.VerificationPlan != nil {
 		return nil, refuseRetry(runID, "compatible configuration", "the run carries a verification plan, which belongs to that run alone")
 	}
+	obligation, err := m.db.CIRepairObligation(source.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read guarded CI repair obligation: %w", err)
+	}
+	if obligation != nil && obligation.Phase != "fulfilled" {
+		return nil, refuseRetry(runID, "guarded CI repair", "the run has an unresolved guarded CI repair obligation (%s); a continuation would carry validation the repair withdrew", obligation.Phase)
+	}
 	gates, err := m.pinnedRunGates(source.ID)
 	if err != nil {
 		return nil, refuseRetry(runID, pipeline.RetryProofCheckpoint, "%v", err)

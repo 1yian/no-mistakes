@@ -100,6 +100,9 @@ func (m *RunManager) HandleAdmitCIRepair(ctx context.Context, p ipc.AdmitCIRepai
 		if err := matchGuardedCIRepair(run, p); err != nil {
 			return "", err
 		}
+		if run.Integration != nil {
+			return "", fmt.Errorf("guarded CI repair is unsupported for a run bound to an explicit integration remote")
+		}
 		prior, err := m.db.CIRepairObligation(p.RunID)
 		if err != nil {
 			return "", err
