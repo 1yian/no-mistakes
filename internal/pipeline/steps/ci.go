@@ -301,6 +301,31 @@ func verifyMergedProof(ctx context.Context, host scm.Host, pr *scm.PR, expectedH
 }
 
 func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutcome, err error) {
+	if sctx.CIRepairCheckpoint != nil {
+		if outcome, err := sctx.CIRepairCheckpoint(sctx); err != nil || outcome != nil {
+			return outcome, err
+		}
+	}
+	obligation, err := sctx.DB.CIRepairObligation(sctx.Run.ID)
+	if err != nil {
+		return nil, err
+	}
+	guarded := obligation != nil
+	if guarded {
+		if obligation.Owner != sctx.CIRepairOwner || sctx.CIRepairOwner == "" || obligation.Phase == "held" || obligation.Phase == "withdrawing" {
+			return nil, fmt.Errorf("guarded CI repair is held without continuous monitor ownership")
+		}
+		pending, err := sctx.DB.CIRepairValidationPending(sctx.Run.ID)
+		if err != nil {
+			return nil, err
+		}
+		if pending {
+			return &pipeline.StepOutcome{RestartFrom: types.StepReview, Findings: sctx.DeferredFindings}, nil
+		}
+		if obligation.Phase == "repair" && !sctx.Fixing {
+			return GuardedCIRepairAdmissionOutcome(), nil
+		}
+	}
 	refusalFindings := ""
 	if sctx.StepResultID != "" {
 		stepResult, err := sctx.DB.GetStepResult(sctx.StepResultID)
@@ -463,6 +488,22 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 		if repairOutcome != nil {
 			return repairOutcome, nil
 		}
+		if guarded {
+			a, err := sctx.DB.CIRepairObligation(sctx.Run.ID)
+			if err != nil {
+				return nil, err
+			}
+			if a.Phase == "repair" {
+				return GuardedCIRepairAdmissionOutcome(), nil
+			}
+			pending, err := sctx.DB.CIRepairValidationPending(sctx.Run.ID)
+			if err != nil {
+				return nil, err
+			}
+			if pending {
+				return &pipeline.StepOutcome{RestartFrom: types.StepReview, Findings: sctx.DeferredFindings}, nil
+			}
+		}
 		// A repair that recorded nothing (the fixer failed) must not fall
 		// through to monitoring the old published head while a carried review
 		// approval still awaits its restart at Test: green checks there would
@@ -598,6 +639,11 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if sctx.CIRepairCheckpoint != nil {
+			if outcome, err := sctx.CIRepairCheckpoint(sctx); err != nil || outcome != nil {
+				return outcome, err
+			}
 		}
 		pollBaseTip := ""
 		botCommentReadFailed := false
@@ -960,6 +1006,11 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 					if err := logStatus(ciWaitingMessage(checks)); err != nil {
 						return nil, err
 					}
+				case guarded && !genuineCIRepairPass(checks):
+					if err := clearCIMonitorReady(sctx); err != nil {
+						return nil, err
+					}
+					sctx.Log("guarded CI repair awaits genuine passing validation at the repaired published head")
 				case len(checks) == 0 && (sctx.Config == nil || !sctx.Config.NoCI):
 					// Empty forge results are ready ONLY with positive durable
 					// evidence from trusted default-branch config (no_ci: true).
@@ -1036,6 +1087,12 @@ func (s *CIStep) Execute(sctx *pipeline.StepContext) (outcome *pipeline.StepOutc
 						return ciObservationOutcome(findings), nil
 					}
 					sctx.DeferredFindings = ""
+					if guarded {
+						published, err := publishedBranchHead(sctx)
+						if err != nil || published != sctx.Run.HeadSHA {
+							return nil, fmt.Errorf("guarded CI repair published head moved before readiness: %v", err)
+						}
+					}
 					declaredNoCI := len(checks) == 0
 					// The default keeps watching: the green observation only
 					// clears the failure signal, as it always has, so the run

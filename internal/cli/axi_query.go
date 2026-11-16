@@ -96,7 +96,17 @@ func runAxiStatus(cmd *cobra.Command, runID string) error {
 	if syncField := cachedBranchSyncField(cmd, run.ID); syncField != nil {
 		fields = append(fields, *syncField)
 	}
-	if gate, ok := rv.awaitingStep(); ok {
+	if guardedRepairHeld(rv.CIRepairPhase) {
+		fields = append(fields, toon.Field{Key: "state", Value: "guarded-repair-held"}, toon.Field{Key: "validated", Value: false})
+		if run.Error != nil {
+			fields = append(fields, toon.Field{Key: "error", Value: *run.Error})
+		}
+		if gate, ok := rv.awaitingStep(); ok {
+			fields = append(fields, gateFieldsForRun(gate, runID)...)
+		} else {
+			fields = append(fields, toon.Field{Key: "help", Value: guardedRepairHoldHelp(rv.CIRepairPhase)})
+		}
+	} else if gate, ok := rv.awaitingStep(); ok {
 		// The label above and the commands below deliberately use different
 		// evidence rules. Branch equality is enough to label the selected run,
 		// but not enough to attach a bare mutation command to it: another active

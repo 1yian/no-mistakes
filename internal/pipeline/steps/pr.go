@@ -128,6 +128,9 @@ func (s *PRStep) Execute(sctx *pipeline.StepContext) (*pipeline.StepOutcome, err
 	if err := assertPipelineHeadContinuity(sctx, s.Name()); err != nil {
 		return nil, err
 	}
+	if err := verifyGuardedCIRepairPR(sctx, s.host); err != nil {
+		return nil, err
+	}
 	ctx := sctx.Ctx
 
 	branch := sctx.Run.Branch

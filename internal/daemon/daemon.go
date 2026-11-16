@@ -269,7 +269,9 @@ func runWithOptionsLocked(p *paths.Paths, d *db.DB, globalCfg *config.GlobalConf
 	slog.Info("daemon process launched", "pid", pidRecord.PID, "version", buildinfo.CurrentVersion())
 
 	// Recovery remains exclusive and completes before IPC is bound.
-	recoverOnStartup(d, p, mgr, layout)
+	if err := recoverOnStartup(d, p, mgr, layout); err != nil {
+		return err
+	}
 
 	srv := ipc.NewServer()
 
@@ -413,7 +415,11 @@ func writeDaemonPIDFile(path string, record daemonPIDFile) error {
 // best-effort migrates gate bare repos in place so older installs pick up
 // the per-worktree hookspath isolation introduced for issue #122 when Git
 // supports config --worktree.
-func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktrees.Layout) {
+func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktrees.Layout) error {
+	heldRepairs, err := d.HoldCIRepairs()
+	if err != nil {
+		return fmt.Errorf("fence guarded CI repairs before startup recovery: %w", err)
+	}
 	orphanStarted := time.Now()
 	reapOrphanedServers(p)
 	logStartupPhase("orphan_servers", orphanStarted)
@@ -442,7 +448,7 @@ func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktre
 
 	parkedStarted := time.Now()
 	plans := mgr.recoverableParkedRuns(context.Background())
-	preserved := make(map[string]struct{}, len(plans))
+	preserved := heldRepairs
 	for _, plan := range plans {
 		preserved[plan.run.ID] = struct{}{}
 	}
@@ -462,7 +468,7 @@ func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktre
 		for _, plan := range plans {
 			_ = plan.agent.Close()
 		}
-		return
+		return err
 	}
 	if count > 0 {
 		slog.Info("recovered stale runs from previous crash", "count", count)
@@ -513,6 +519,7 @@ func recoverOnStartup(d *db.DB, p *paths.Paths, mgr *RunManager, layout *worktre
 	logStartupPhase("evidence_cleanup", evidenceStarted)
 
 	mgr.resumeRecoveredRuns(plans)
+	return nil
 }
 
 func preserveStaleRunHeads(d *db.DB, p *paths.Paths, excluded map[string]struct{}) {
@@ -1608,6 +1615,17 @@ func registerHandlers(srv *ipc.Server, mgr *RunManager, d *db.DB, shutdown func(
 		return &ipc.CancelRunResult{OK: true}, nil
 	})
 
+	srv.Handle(ipc.MethodAdmitCIRepair, func(ctx context.Context, params json.RawMessage) (interface{}, error) {
+		if err := refuseNested(ctx, false); err != nil {
+			return nil, err
+		}
+		var p ipc.AdmitCIRepairParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+		return mgr.HandleAdmitCIRepair(ctx, p)
+	})
+
 	srv.Handle(ipc.MethodHandoffRun, func(ctx context.Context, params json.RawMessage) (interface{}, error) {
 		if err := refuseNested(ctx, false); err != nil {
 			return nil, err
@@ -1727,6 +1745,17 @@ func runToInfo(d *db.DB, r *db.Run, steps []*db.StepResult) *ipc.RunInfo {
 		AwaitingAgentSince: r.AwaitingAgentSince,
 		CreatedAt:          r.CreatedAt,
 		UpdatedAt:          r.UpdatedAt,
+	}
+	if a, err := d.CIRepairObligation(r.ID); err != nil {
+		info.CIRepairPhase = "unreadable"
+		info.CIReady = false
+		info.CIReadyNoCI = false
+	} else if a != nil {
+		info.CIRepairPhase = a.Phase
+		if a.Phase != "fulfilled" {
+			info.CIReady = false
+			info.CIReadyNoCI = false
+		}
 	}
 	if r.PRTitle != nil {
 		info.PRTitleDigest = db.PRTextDigest(*r.PRTitle, "")

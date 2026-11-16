@@ -39,6 +39,7 @@ const (
 	MethodAnswerReview              = "answer_review_question"
 	MethodCancelRun                 = "cancel_run"
 	MethodHandoffRun                = "handoff_run"
+	MethodAdmitCIRepair             = "admit_ci_repair"
 	MethodGateContext               = "gate_context"
 	MethodAdmitPush                 = "admit_push"
 	MethodHealth                    = "health"
@@ -597,6 +598,7 @@ type RunInfo struct {
 	Error            *string         `json:"error,omitempty"`
 	CIReady          bool            `json:"ci_ready,omitempty"`
 	CIReadyNoCI      bool            `json:"ci_ready_no_ci,omitempty"`
+	CIRepairPhase    string          `json:"ci_repair_phase,omitempty"`
 	// PRBaseBranch is the per-run PR target override, if the operator set
 	// --base-branch when starting this run.
 	PRBaseBranch *string `json:"pr_base_branch,omitempty"`
