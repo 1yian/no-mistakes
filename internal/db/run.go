@@ -919,7 +919,7 @@ func (d *DB) ReconcileTerminalPRRuns() (int, error) {
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.Query(`SELECT id FROM runs WHERE status IN (?, ?) AND pr_state IN ('merged', 'closed')`, types.RunPending, types.RunRunning)
+	rows, err := tx.Query(`SELECT id FROM runs WHERE status IN (?, ?) AND pr_state IN ('merged', 'closed') AND NOT EXISTS (SELECT 1 FROM ci_repair_obligations a WHERE a.run_id = runs.id AND a.phase != 'fulfilled')`, types.RunPending, types.RunRunning)
 	if err != nil {
 		return 0, fmt.Errorf("reconcile terminal PR runs: list runs: %w", err)
 	}
@@ -970,6 +970,17 @@ func terminalPRState(state string) bool {
 }
 
 func finalizeTerminalPRRun(tx *sql.Tx, id string, ts int64) error {
+	var unresolved int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM ci_repair_obligations WHERE run_id = ? AND phase != 'fulfilled'`, id).Scan(&unresolved); err != nil {
+		return err
+	}
+	if unresolved != 0 {
+		if _, err := tx.Exec(`UPDATE ci_repair_obligations SET phase = 'held', certified_head = '' WHERE run_id = ?`, id); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE runs SET ci_ready_at = NULL, ci_ready_no_ci = 0, review_approved_head_sha = NULL, error = 'guarded CI repair held: PR became terminal before genuine certification', updated_at = ? WHERE id = ? AND status IN ('pending','running')`, ts, id)
+		return err
+	}
 	if _, err := tx.Exec(
 		`UPDATE step_results SET status = ?, exit_code = COALESCE(exit_code, 0), completed_at = COALESCE(completed_at, ?),
 			last_activity_at = ?, last_activity = ?, agent_pid = NULL
@@ -1004,6 +1015,16 @@ func (d *DB) SetRunCIReady(id string, ready bool) error {
 }
 
 func (d *DB) SetRunCIReadyWithReason(id string, ready, declaredNoCI bool) error {
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if ready {
+		if err := certifyCIRepair(tx, id, declaredNoCI); err != nil {
+			return err
+		}
+	}
 	readyValue := 0
 	declaredValue := 0
 	var readyAt any
@@ -1014,11 +1035,11 @@ func (d *DB) SetRunCIReadyWithReason(id string, ready, declaredNoCI bool) error 
 			declaredValue = 1
 		}
 	}
-	_, err := d.sql.Exec(`UPDATE runs SET ci_ready_at = ?, ci_ready_no_ci = ?, updated_at = ? WHERE id = ? AND ((ci_ready_at IS NULL AND ? = 1) OR (ci_ready_at IS NOT NULL AND ? = 0) OR (COALESCE(ci_ready_no_ci, 0) != ?))`, readyAt, declaredValue, now(), id, readyValue, readyValue, declaredValue)
+	_, err = tx.Exec(`UPDATE runs SET ci_ready_at = ?, ci_ready_no_ci = ?, updated_at = ? WHERE id = ? AND ((ci_ready_at IS NULL AND ? = 1) OR (ci_ready_at IS NOT NULL AND ? = 0) OR (COALESCE(ci_ready_no_ci, 0) != ?))`, readyAt, declaredValue, now(), id, readyValue, readyValue, declaredValue)
 	if err != nil {
 		return fmt.Errorf("set run CI ready: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // UpdateRunReviewApprovedHeadSHA replaces the run's review authority with the

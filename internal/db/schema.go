@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS runs (
     updated_at           INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ci_repair_obligations (
+    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    owner TEXT NOT NULL,
+    original_head TEXT NOT NULL,
+    pr_url TEXT NOT NULL,
+    snapshot_dir TEXT NOT NULL,
+    snapshot_digest TEXT NOT NULL,
+    phase TEXT NOT NULL CHECK(phase IN ('withdrawing', 'repair', 'revalidate', 'fulfilled', 'held')),
+    repair_head TEXT NOT NULL DEFAULT '',
+    certified_head TEXT NOT NULL DEFAULT '',
+    baselines TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS run_commit_identities (
     run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
     identity_json TEXT NOT NULL

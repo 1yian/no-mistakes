@@ -53,6 +53,7 @@ func newAxiCmd() *cobra.Command {
 	cmd.AddCommand(newAxiAbortCmd())
 	cmd.AddCommand(newAxiRetryCmd())
 	cmd.AddCommand(newAxiHandoffCmd())
+	cmd.AddCommand(newAxiRepairCICmd())
 	return cmd
 }
 
@@ -217,6 +218,8 @@ func runAxiHome(cmd *cobra.Command) error {
 		}
 	}
 
+	guardedPhase := ""
+	guardedCIGate := false
 	gated := false
 	gatedOnAnswers := false
 	gatedOnCoverage := false
@@ -225,6 +228,7 @@ func runAxiHome(cmd *cobra.Command) error {
 		steps, _ := env.d.GetStepsByRun(currentActive.ID)
 		rv := runViewFromDB(currentActive, steps, env.d)
 		annotateRunView(env, &rv)
+		guardedPhase = rv.CIRepairPhase
 		fields = append(fields, runObjectFieldWithKey("active_run", rv))
 		if syncField := cachedBranchSyncField(cmd, currentActive.ID); syncField != nil {
 			fields = append(fields, *syncField)
@@ -232,6 +236,7 @@ func runAxiHome(cmd *cobra.Command) error {
 		}
 		if gate, ok := rv.awaitingStep(); ok {
 			gated = true
+			guardedCIGate = guardedPhase != "" && gate.Name == string(types.StepCI)
 			gatedOnAnswers = pipeline.HasUnansweredReviewQuestion(gate.FindingsJSON)
 			gatedOnCoverage = pipeline.CanContinueReviewCoverage(types.StepName(gate.Name), gate.FindingsJSON)
 			fields = append(fields, gateFields(gate)...)
@@ -259,6 +264,10 @@ func runAxiHome(cmd *cobra.Command) error {
 		if otherActive != nil {
 			help = append(help, fmt.Sprintf("Another active run is on %s; leave it alone unless you are working on that branch", otherActive.Branch))
 		}
+	case guardedRepairHeld(guardedPhase):
+		help = append(help, guardedRepairHoldHelp(guardedPhase)...)
+	case guardedCIGate:
+		help = append(help, "Use the normal CI gate's explicit fix response with its displayed finding IDs. Guarded repair refuses approve, skip and unvalidated cancellation; do not synchronize or edit the caller checkout.")
 	case gatedOnAnswers:
 		// A review parked on its reviewer's own questions wants an answer, not
 		// a verdict: approving would discard the pass it paused.
@@ -270,10 +279,14 @@ func runAxiHome(cmd *cobra.Command) error {
 	default:
 		help = append(help, "Run `no-mistakes axi status` to inspect the active run")
 	}
-	if hasBranchSync {
+	if hasBranchSync && (guardedPhase == "" || guardedPhase == "fulfilled") {
 		help = append(help, branchSyncAgentGuidance)
 	}
-	help = append(help, preserveGateFixCommitsGuidance)
+	if guardedPhase != "" && guardedPhase != "fulfilled" {
+		help = append(help, "Custody remains with the original run. Do not create replacement runs, edit the managed worktree, or move caller refs to manufacture repair eligibility.")
+	} else {
+		help = append(help, preserveGateFixCommitsGuidance)
+	}
 	help = append(help, "The calling agent drives AXI gates but does not replace the configured pipeline agent; run `no-mistakes doctor` if no native agent or ACP runner is available")
 	help = append(help, "How to drive the pipeline: `no-mistakes axi run --help`, or the `/no-mistakes` skill (loaded when you invoke `/no-mistakes`)")
 	fields = append(fields, toon.Field{Key: "help", Value: help})

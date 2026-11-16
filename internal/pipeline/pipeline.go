@@ -152,7 +152,9 @@ type StepContext struct {
 	// write path.
 	SetCIReadiness func(ready, declaredNoCI bool) error
 	// HandoffPending reports an explicit request waiting on this monitor.
-	HandoffPending func() bool
+	HandoffPending     func() bool
+	CIRepairCheckpoint func(*StepContext) (*StepOutcome, error)
+	CIRepairOwner      string
 	// SetPRState is the daemon-owned transition boundary for CI monitor PR
 	// lifecycle observations. Embeddings leave it nil and use the local DB
 	// write path.

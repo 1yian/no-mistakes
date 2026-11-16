@@ -105,6 +105,7 @@ type Executor struct {
 	sessions *RunSessions
 	shared   *RunShared
 	workDir  string
+	runID    string
 
 	// Ephemeral proof only: recovered runs earn no retry credit.
 	crashRetryBaseSHA   string
@@ -128,6 +129,7 @@ type Executor struct {
 	// records the decision against it before the caller is told what was
 	// recorded, so an echo never claims a decision that is not durable.
 	waitingRoundID string
+	waitingContext *StepContext
 
 	gateReconcileInterval time.Duration
 	gateReconcileTimeout  time.Duration
@@ -139,6 +141,7 @@ type Executor struct {
 	ciMonitorLifecycle      func(runID string, active bool)
 	ciWake                  func(runID string) <-chan struct{}
 	handoffPending          func(runID string) bool
+	ciRepairCheckpoint      func(*StepContext) (*StepOutcome, error)
 	gateClaimGuard          func() (release func(), ok bool)
 }
 
@@ -177,6 +180,10 @@ func (e *Executor) SetCIWake(fn func(runID string) <-chan struct{}) {
 
 func (e *Executor) SetHandoffPending(fn func(runID string) bool) {
 	e.handoffPending = fn
+}
+
+func (e *Executor) SetCIRepairCheckpoint(fn func(*StepContext) (*StepOutcome, error)) {
+	e.ciRepairCheckpoint = fn
 }
 
 // SetGateClaimGuard orders a parked gate's own resume or reconciliation
@@ -351,6 +358,25 @@ func (e *Executor) RespondWithOverrides(step types.StepName, action types.Approv
 	if step != e.waitingStep {
 		e.mu.Unlock()
 		return RespondDispositions{}, fmt.Errorf("step mismatch: responding to %q but %q is awaiting approval", step, e.waitingStep)
+	}
+	obligation, err := e.db.CIRepairObligation(e.runID)
+	if err != nil {
+		e.mu.Unlock()
+		return RespondDispositions{}, &RespondRefusal{Message: fmt.Sprintf("guarded repair authority could not be read: %v", err), Help: "The gate remains parked; restore readable state before responding."}
+	}
+	if obligation != nil && (obligation.Phase == "held" || obligation.Phase == "withdrawing") {
+		e.mu.Unlock()
+		return RespondDispositions{}, &RespondRefusal{Message: "Guarded CI repair is held unvalidated; the gate cannot be released.", Help: "A pending withdrawal requires the exact admission pins and the same continuous owner; a lost-owner hold has no supported adoption command."}
+	}
+	if obligation != nil && action == types.ActionAbort {
+		if err := e.db.VerifyCIRepairCompletion(e.runID); err != nil {
+			e.mu.Unlock()
+			return RespondDispositions{}, err
+		}
+	}
+	if obligation != nil && (action == types.ActionSkip || (action == types.ActionAbort && obligation.Phase != "fulfilled") || (step == types.StepCI && action == types.ActionApprove)) {
+		e.mu.Unlock()
+		return RespondDispositions{}, fmt.Errorf("guarded CI repair requires fresh Review onward and genuine repaired-head CI; use fix or abort")
 	}
 	var coverageRound *db.StepRound
 	if action == types.ActionCompleteCoverage {
@@ -706,6 +732,20 @@ func (e *Executor) stepIndex(name types.StepName) (int, error) {
 }
 
 func (e *Executor) prepareRestart(runID string, name types.StepName, currentIndex int) (int, error) {
+	obligation, err := e.db.CIRepairObligation(runID)
+	if err != nil {
+		return 0, err
+	}
+	if obligation != nil {
+		if name != types.StepReview || obligation.Phase != "revalidate" {
+			return 0, fmt.Errorf("guarded CI repair requires its durable Review restart")
+		}
+		for _, step := range e.steps {
+			if step.Name().Order() >= types.StepReview.Order() {
+				delete(e.skips, step.Name())
+			}
+		}
+	}
 	index, err := e.stepIndex(name)
 	if err != nil || index >= currentIndex {
 		return 0, fmt.Errorf("invalid restart boundary")
@@ -720,6 +760,7 @@ func (e *Executor) prepareRestart(runID string, name types.StepName, currentInde
 }
 
 func (e *Executor) initializeRunScopes(runID string) {
+	e.runID = runID
 	sessionsEnabled := e.config != nil && e.config.SessionReuse && e.agent != nil
 	e.sessions = NewRunSessions(e.db, runID, e.agent, sessionsEnabled)
 	e.shared = &RunShared{}
@@ -911,6 +952,7 @@ func (e *Executor) Resume(ctx context.Context, run *db.Run, repo *db.Repo, workD
 	e.waitingFindings = gate.findings
 	e.waitingStepResultID = gate.stepResult.ID
 	e.waitingRoundID = gate.lastRoundID
+	e.waitingContext = reconcileCtx
 	e.mu.Unlock()
 	e.emitStepEventWithFindingsAndError(
 		ipc.EventStepCompleted,
@@ -1551,6 +1593,7 @@ func (e *Executor) executeStep(ctx context.Context, step Step, sr *db.StepResult
 			fmt.Fprintln(logFile, text)
 			touchLogActivity(text, true)
 		},
+		CIRepairCheckpoint: e.ciRepairCheckpoint,
 		CIReadinessChanged: ciReadinessChanged,
 		CIWake:             ciWake,
 		MarkRunning:        markRunning,
@@ -1899,6 +1942,7 @@ rounds:
 			e.waitingFindings = effectiveFindings
 			e.waitingStepResultID = sr.ID
 			e.waitingRoundID = currentRoundID
+			e.waitingContext = sctx
 			e.mu.Unlock()
 
 			// Parking starts before the gate becomes observable. This includes the
@@ -2660,6 +2704,30 @@ func (e *Executor) failRun(run *db.Run, repo *db.Repo, err error, ctxs ...contex
 	if errMsg == types.RunCancelReasonAbortedByUser || errMsg == types.RunCancelReasonSuperseded {
 		runStatus = types.RunCancelled
 	}
+	obligation, readErr := e.db.CIRepairObligation(run.ID)
+	if readErr != nil {
+		return readErr
+	}
+	guardedCancellation := false
+	if obligation != nil && obligation.Phase == "fulfilled" && runStatus == types.RunCancelled && e.db.VerifyCIRepairCompletion(run.ID) == nil {
+		checkCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		head, headErr := git.HeadSHA(checkCtx, e.workDir)
+		status, statusErr := git.Run(checkCtx, e.workDir, "status", "--porcelain")
+		cancel()
+		if headErr == nil && statusErr == nil && head == obligation.CertifiedHead && status == "" {
+			guardedCancellation = e.db.SetRunCIReady(run.ID, false) == nil
+		}
+	}
+	if obligation != nil && !guardedCancellation {
+		errMsg = "guarded CI repair held unvalidated: " + errMsg
+		if holdErr := e.db.HoldCIRepair(run.ID, errMsg); holdErr != nil {
+			return holdErr
+		}
+		run.Status = types.RunRunning
+		run.Error = &errMsg
+		e.emitRunEvent(ipc.EventRunUpdated, run, repo)
+		return err
+	}
 	verifiedHead, verified := e.reconcileTerminalRunHead(run)
 	var dbErr error
 	if verified {
@@ -2687,8 +2755,18 @@ func (e *Executor) completeRun(run *db.Run, repo *db.Repo) error {
 }
 
 func (e *Executor) completeRunWithStatus(run *db.Run, repo *db.Repo, status types.RunStatus) error {
+	if err := e.db.VerifyCIRepairCompletion(run.ID); err != nil {
+		return err
+	}
 	var err error
 	verifiedHead, verified := e.reconcileTerminalRunHead(run)
+	obligation, readErr := e.db.CIRepairObligation(run.ID)
+	if readErr != nil {
+		return readErr
+	}
+	if obligation != nil && (!verified || verifiedHead != obligation.CertifiedHead) {
+		return fmt.Errorf("guarded CI repair terminal head no longer matches genuine CI certification")
+	}
 	if verified {
 		err = e.db.UpdateRunStatusWithVerifiedHead(run.ID, status, verifiedHead)
 	} else {

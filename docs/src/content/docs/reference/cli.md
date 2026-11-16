@@ -674,12 +674,31 @@ no-mistakes axi handoff
 
 The daemon accepts this only while the CI step is actively monitoring an open PR and has persisted `checks-passed` readiness (including trusted declared-no-CI readiness). Pending or failed checks, approval gates, and runs without an open PR are refused with guidance to continue with `axi run`. Successful handoff waits for the run to stop and records terminal `handed_off`, rendered as the `handed-off` drive outcome. It neither merges nor closes the PR, and it does not claim a merge occurred. The open/green check is a snapshot at the monitor evaluation. Like other branch-scoped mutations, it must be run from the repository's current branch.
 
-Use `axi abort` to discard a run instead; its cancellation behavior is unchanged. Handoff is explicit and opt-in, not an automatic finish-on-green policy. If the run has already completed, no active monitor remains to hand off.
+Outside an unresolved guarded repair obligation, use `axi abort` to discard a run instead. Handoff is explicit and opt-in, not an automatic finish-on-green policy. If the run has already completed, no active monitor remains to hand off.
+
+## no-mistakes axi repair-ci
+
+Explicitly admit an absent CI monitor or an existing genuine CI-failure gate to same-run guarded repair without waiting for the monitor's idle timeout:
+
+```sh
+no-mistakes axi repair-ci \
+  --expect-run <original-run-id> \
+  --expect-head <full-published-sha> \
+  --expect-pr <exact-pr-url>
+```
+
+The repository and branch come from the caller's checkout. The flags are identity guards, not another run-selection path. The caller may be behind the pipeline's published head; this command never synchronizes or edits that checkout. It requires an already-running compatible Linux daemon and a continuously owned, uncontested monitor or its original executor's real CI approval gate. It never starts, stops, replaces or upgrades a daemon. Legacy adoption, other platforms and lost-monitor recovery are unsupported and refused. Recovered executors cannot admit a new guarded repair, even if an ordinary recovered gate later becomes a polling monitor.
+
+Admission requires matching live managed, gate, published and PR heads, an open PR, readable exact-head CI and an owned attestation. CI must be absent or have a settled genuine failure. A private snapshot preserves the original run/step/round history, logs, evidence, PR body and a self-contained Git bundle with immutable submitted and published heads under `<NM_HOME>/ci-repair/<run-id>/`. Old readiness and review authority are revoked and the machine attestation is withdrawn with readback before the ordinary approval gate is exposed. Failed or ambiguous withdrawal remains held unvalidated; only the same continuously owned monitor and exact pins may retry it.
+
+`state: admitted-unvalidated` is not a pass or a gate response. Attach with `axi run`, then select `fix` for the displayed CI findings at the real gate. Absent-CI admission emits `guarded-ci-repair`; admission at an existing genuine-failure gate preserves its findings and normal selection machinery. The normal CI fixer must make an additive repair preserving the original published history. Even when `ci.revalidate_repairs` is false, the same run must freshly execute Review, Test, Document, Lint, Push and PR before genuine CI at its repaired published head can establish readiness. No-edit or failed fixes re-park without restoring old-head readiness. Skips, carried results, a `no_ci` declaration, CI approval overrides, all-skipped checks and review-bot-only success cannot satisfy this obligation.
+
+While unresolved, the obligation refuses cancellation. Every nonterminal guarded run retains branch custody and refuses superseding submissions and replacement-run retries; end a fulfilled green monitor with handoff, release or verified clean cancellation before submitting a follow-up. A fatal error or loss of monitor continuity preserves the original run, worktree, logs and evidence in an explicitly unvalidated hold. Restart does not adopt that monitor or resume old CI; there is currently no supported command to release that hold. A fulfilled, still-green obligation permits ordinary handoff/release, or cancellation only while the certified head remains unchanged and the managed worktree is clean. This conservative capability limit requires a separately designed recovery protocol, not manual database/ref changes or a different run. Admission itself grants no installation, maintenance, merge or rollout authority.
 
 ## no-mistakes axi abort
 
 Cancel the active run for the current branch.
-Active runs on other branches are left alone.
+Active runs on other branches are left alone. An unresolved `axi repair-ci` obligation refuses cancellation and retains custody instead.
 
 ```sh
 no-mistakes axi abort

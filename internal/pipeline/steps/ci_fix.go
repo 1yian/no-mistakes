@@ -815,6 +815,9 @@ func ciRevalidatesRepairs(sctx *pipeline.StepContext) bool {
 // an operator reading a run after the fact can tell which of the two paths a
 // repair took without cross-referencing the config that was in force.
 func ciRepairPolicyDescription(sctx *pipeline.StepContext) string {
+	if sctx.CIRepairOwner != "" {
+		return "guarded same-run obligation: always fresh Review onward; original-head readiness is forbidden"
+	}
 	if ciRevalidatesRepairs(sctx) {
 		return "always restart validation from Review after a repair"
 	}
@@ -845,6 +848,9 @@ func ciRepairPolicyDescription(sctx *pipeline.StepContext) string {
 // the two paths differ in whether the repair is published now or held until
 // Review has approved it.
 func (s *CIStep) recordRepair(sctx *pipeline.StepContext, headSHA string) (ciRepairResult, error) {
+	if repair, handled, err := recordGuardedCIRepair(sctx, headSHA); handled || err != nil {
+		return repair, err
+	}
 	if ciRevalidatesRepairs(sctx) {
 		return s.recordLocalRepair(sctx, headSHA)
 	}
@@ -998,6 +1004,9 @@ func (s *CIStep) recordLocalRepair(sctx *pipeline.StepContext, headSHA string) (
 }
 
 func (s *CIStep) holdRepair(sctx *pipeline.StepContext, headSHA, rebaseReviewBase string) (ciRepairResult, error) {
+	if repair, handled, err := recordGuardedCIRepair(sctx, headSHA); handled || err != nil {
+		return repair, err
+	}
 	if err := updateNonSharedBranchRef(sctx, headSHA); err != nil {
 		return ciRepairResult{}, err
 	}

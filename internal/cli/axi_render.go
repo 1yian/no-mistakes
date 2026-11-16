@@ -98,6 +98,7 @@ type fixRow struct {
 // stepView is a render-ready view of a single pipeline step, decoupled from
 // whether it came from the daemon (ipc) or the local database.
 type stepView struct {
+	CIRepairPhase    string
 	ID               string
 	Name             string
 	Status           string
@@ -126,14 +127,15 @@ type runView struct {
 	VerificationPlan *verificationplan.Snapshot
 	// QuotaRouting is the run's parsed quota-aware ordering record, nil when
 	// the feature was off for this run.
-	QuotaRouting *quotarouting.Record
-	ID           string
-	Branch       string
-	Status       string
-	HeadSHA      string
-	PRURL        string
-	CIReady      bool
-	CIReadyNoCI  bool
+	QuotaRouting  *quotarouting.Record
+	ID            string
+	Branch        string
+	Status        string
+	HeadSHA       string
+	PRURL         string
+	CIReady       bool
+	CIReadyNoCI   bool
+	CIRepairPhase string
 	// AwaitingAgentSince is the unix-seconds time the run parked at a gate
 	// awaiting the driving agent, or nil when the run is not parked. It powers
 	// the top-level parked signal in the run object.
@@ -157,6 +159,7 @@ func runViewFromIPC(r *ipc.RunInfo) runView {
 		HeadSHA:            r.HeadSHA,
 		CIReady:            r.CIReady,
 		CIReadyNoCI:        r.CIReadyNoCI,
+		CIRepairPhase:      r.CIRepairPhase,
 		AwaitingAgentSince: r.AwaitingAgentSince,
 		CIOverrideReason:   r.CIOverrideReason,
 		TestOverrideReason: r.TestOverrideReason,
@@ -176,6 +179,7 @@ func runViewFromIPC(r *ipc.RunInfo) runView {
 	}
 	for _, s := range r.Steps {
 		sv := stepView{
+			CIRepairPhase:    rv.CIRepairPhase,
 			ID:               s.ID,
 			Name:             string(s.StepName),
 			Status:           string(s.Status),
@@ -217,6 +221,13 @@ func runViewFromDB(r *db.Run, steps []*db.StepResult, database *db.DB) runView {
 		HeadSHA:            r.HeadSHA,
 		AwaitingAgentSince: r.AwaitingAgentSince,
 	}
+	if database != nil {
+		if a, err := database.CIRepairObligation(r.ID); err != nil {
+			rv.CIRepairPhase = "unreadable"
+		} else if a != nil {
+			rv.CIRepairPhase = a.Phase
+		}
+	}
 	if payload, err := quotarouting.ParseRecord(r.QuotaRouting); err != nil {
 		slog.Warn("run carries an unreadable quota routing record", "run", r.ID, "error", err)
 	} else if payload != nil {
@@ -227,6 +238,7 @@ func runViewFromDB(r *db.Run, steps []*db.StepResult, database *db.DB) runView {
 	}
 	for _, s := range steps {
 		sv := stepView{
+			CIRepairPhase:  rv.CIRepairPhase,
 			ID:             s.ID,
 			Name:           string(s.StepName),
 			Status:         string(s.Status),
@@ -514,6 +526,9 @@ func runObjectFieldWithKey(key string, rv runView) toon.Field {
 	if rv.AwaitingAgentSince != nil && !terminalStatus(rv.Status) {
 		fields = append(fields, toon.Field{Key: "awaiting_agent", Value: formatParkedFor(*rv.AwaitingAgentSince)})
 	}
+	if rv.CIRepairPhase != "" {
+		fields = append(fields, toon.Field{Key: "ci_repair_phase", Value: rv.CIRepairPhase})
+	}
 	fields = append(fields, toon.Field{Key: "head", Value: shortSHA(rv.HeadSHA)})
 	fields = append(fields, toon.Field{Key: "head_sha", Value: rv.HeadSHA})
 	if rv.TestOverrideReason != "" {
@@ -689,7 +704,21 @@ func gateFields(gate stepView) []toon.Field {
 
 // gateFieldsForRun renders the gate with every follow-up command that accepts
 // --run carrying runID, so a caller that selected the run by id keeps naming it.
+func guardedRepairHeld(phase string) bool {
+	return phase != "" && phase != "repair" && phase != "revalidate" && phase != "fulfilled"
+}
+
+func guardedRepairHoldHelp(phase string) []string {
+	if phase == "withdrawing" {
+		return []string{"Validation withdrawal is pending or ambiguous. Do not release this gate, edit the caller checkout, or start another run. Retry axi repair-ci with the exact original pins and the same continuous owner.", "Admission is not validation; approve, skip, abort and ordinary fix responses cannot release a pending withdrawal."}
+	}
+	return []string{"The original guarded repair is held unvalidated. Monitor continuity is lost or its durable state is unreadable; no automatic adoption or recovery command is supported.", "Do not approve, skip, abort, replace the run, synchronize refs or edit its managed worktree. Preserve the original identity, heads, PR, logs and snapshot for an explicitly designed recovery."}
+}
+
 func gateFieldsForRun(gate stepView, runID string) []toon.Field {
+	if guardedRepairHeld(gate.CIRepairPhase) {
+		return gateFieldsWithHelp(gate, guardedRepairHoldHelp(gate.CIRepairPhase))
+	}
 	respond := "no-mistakes axi respond" + runFlag(runID)
 	coverageHelp := "Run `" + respond + " --action complete-coverage` to review only the remaining paths using stored coverage for this source"
 	help := []string{
@@ -729,6 +758,9 @@ func gateFieldsForRun(gate stepView, runID string) []toon.Field {
 		}
 		help = []string{"Protected-path refusals require an explicit operator response; Approve is rejected.", next}
 	}
+	if gate.CIRepairPhase != "" && gate.Name == string(types.StepCI) {
+		return gateFieldsWithHelp(gate, []string{"Guarded same-run CI repair requires a genuine repair and fresh Review onward; approval overrides, skips and unvalidated cancellation are refused.", "Run `" + respond + " --action fix --findings <ids> [--ignore <ids>]` to send the displayed findings to the normal fixer. A failed/no-edit fixer stays unvalidated; do not edit or synchronize the caller checkout.", fmt.Sprintf("Run `%s` to inspect the step log", axiLogsFullCommand(gate.Name, runID))})
+	}
 	skip := "Run `" + respond + " --action skip` to skip this step"
 	if pipeline.HasUnvalidatedWorkRefusal(gate.FindingsJSON) {
 		help = []string{
@@ -736,6 +768,21 @@ func gateFieldsForRun(gate stepView, runID string) []toon.Field {
 			"Run `" + respond + " --action fix --findings <ids>` to validate that work (do not edit files yourself), or `no-mistakes axi abort" + runFlag(runID) + "` to stop the run",
 		}
 		skip = "Do not skip this step: the steps after Test would commit and publish the unvalidated work, so skipping needs the operator's explicit decision"
+	}
+	if gate.CIRepairPhase != "" {
+		blocked := pipeline.HasProtectedPathRefusal(gate.FindingsJSON) || pipeline.HasUnvalidatedWorkRefusal(gate.FindingsJSON)
+		if blocked {
+			help = []string{"This guarded phase cannot approve protected or unvalidated work. Inspect the findings and use the normal explicit fix path after resolving the stated operator prerequisite.", "Run `" + respond + " --action fix --findings <ids> [--ignore <ids>]` when that repair is authorized; do not edit the managed worktree or replace the original run."}
+		}
+		if pipeline.HasReviewFixRoundLimit(gate.FindingsJSON) {
+			help = []string{"The total Review fix-round budget is exhausted. Further fixes are refused, and the guarded obligation cannot be skipped, aborted or moved to a replacement run."}
+			if !blocked {
+				help = append(help, "Only an ordinary explicit `"+respond+" --action approve` decision can accept these remaining findings; actual fresh downstream validation and genuine CI are still required.")
+			} else {
+				help = append(help, "The stronger refusal also blocks approval. Preserve the original unvalidated run; no automatic recovery path is supported.")
+			}
+		}
+		skip = "Fresh guarded repair phases cannot be skipped or replaced. Use only the permitted normal response above; genuine repaired-head CI must still execute."
 	}
 	return gateFieldsWithHelp(gate, append(help,
 		skip,
@@ -746,6 +793,9 @@ func gateFieldsForRun(gate stepView, runID string) []toon.Field {
 }
 
 func inspectionOnlyGateFields(gate stepView, runID string) []toon.Field {
+	if gate.CIRepairPhase != "" {
+		return gateFieldsForRun(gate, runID)
+	}
 	return gateFieldsWithHelp(gate, []string{
 		fmt.Sprintf("The explicitly selected gate for run %s is inspection-only here; respond with `no-mistakes axi respond --run %s --action approve|fix|skip`", runID, runID),
 		fmt.Sprintf("Run `%s` to read the complete step summary and log", axiLogsFullCommand(gate.Name, runID)),

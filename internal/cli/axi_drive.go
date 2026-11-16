@@ -1327,11 +1327,14 @@ func driveRunScoped(ctx context.Context, progress io.Writer, client *ipc.Client,
 		pp.update(run)
 
 		rv := runViewFromIPC(run)
+		if guardedRepairHeld(rv.CIRepairPhase) {
+			return run, false, nil
+		}
 		if terminalStatus(rv.Status) {
 			return run, false, nil
 		}
 		if gate, ok := rv.awaitingStep(); ok {
-			if !autoApprove {
+			if !autoApprove || (rv.CIRepairPhase != "" && rv.CIRepairPhase != "fulfilled") {
 				return run, false, nil
 			}
 			if pipeline.HasReviewFixRoundLimit(gate.FindingsJSON) {
@@ -1640,6 +1643,19 @@ func renderDriveResultForRun(cmd *cobra.Command, run *ipc.RunInfo, ciReady bool,
 	// at its checks verdict and releases the branch, so this shape reports the
 	// same outcome word with the released contract instead of the
 	// still-monitoring one.
+	if guardedRepairHeld(rv.CIRepairPhase) {
+		fields = append(fields, toon.Field{Key: "state", Value: "guarded-repair-held"}, toon.Field{Key: "validated", Value: false})
+		if run.Error != nil {
+			fields = append(fields, toon.Field{Key: "error", Value: *run.Error})
+		}
+		if gate, ok := rv.awaitingStep(); ok {
+			fields = append(fields, gateFieldsForRun(gate, runID)...)
+		} else {
+			fields = append(fields, toon.Field{Key: "help", Value: guardedRepairHoldHelp(rv.CIRepairPhase)})
+		}
+		emitDoc(cmd, fields...)
+		return nil
+	}
 	if rv.Status == string(types.RunChecksPassed) {
 		activity := cimonitor.FromAuthoritative(rv.CIReady, rv.CIReadyNoCI, nil)
 		fields = append(fields, toon.Field{Key: "outcome", Value: qualifyOutcome("checks-passed", rv)})

@@ -465,6 +465,9 @@ func (d *DB) CompleteCIStep(id, runID string, declaredNoCI bool, exitCode int, d
 		return fmt.Errorf("begin complete CI step: %w", err)
 	}
 	defer tx.Rollback()
+	if err := certifyCIRepair(tx, runID, declaredNoCI); err != nil {
+		return err
+	}
 	ts := now()
 	result, err := tx.Exec(
 		`UPDATE step_results SET status = ?, exit_code = ?, duration_ms = ?, log_path = ?, completed_at = ?, last_activity_at = ?, last_activity = ?, agent_pid = NULL WHERE id = ? AND run_id = ? AND step_name = ?`,

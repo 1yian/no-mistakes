@@ -61,13 +61,15 @@ type RunManager struct {
 	// evidencePinMu orders evidence deletion against a delivery retry adding
 	// its shared-evidence pin: a sweep reads the active pins and deletes under
 	// it, and the retry records its pin under it.
-	evidencePinMu   sync.Mutex
-	executors       map[string]*pipeline.Executor      // runID → executor
-	cancels         map[string]context.CancelCauseFunc // runID → cancel function with cause
-	dones           map[string]chan struct{}           // runID → closed when goroutine exits
-	handoffRequests map[string]*handoffRequest         // runID → pending monitor request
-	ciMonitorActive map[string]bool                    // runID → CI monitor accepts observations
-	ciWakes         map[string]chan struct{}           // runID → CI poll wake signal
+	evidencePinMu    sync.Mutex
+	executors        map[string]*pipeline.Executor      // runID → executor
+	cancels          map[string]context.CancelCauseFunc // runID → cancel function with cause
+	dones            map[string]chan struct{}           // runID → closed when goroutine exits
+	handoffRequests  map[string]*handoffRequest         // runID → pending monitor request
+	ciMonitorActive  map[string]bool                    // runID → CI monitor accepts observations
+	ciWakes          map[string]chan struct{}           // runID → CI poll wake signal
+	ciRepairOwner    string
+	ciRepairRequests map[string]*ciRepairRequest
 	// runQueue holds submissions waiting for setup or an execution slot under
 	// the max_concurrent_runs cap, in submission order. Guarded by mu; see
 	// run_queue.go.
@@ -135,18 +137,20 @@ func NewRunManager(database *db.DB, p *paths.Paths, stepFactory StepFactory) *Ru
 		stepFactory = func() []pipeline.Step { return steps.AllSteps() }
 	}
 	return &RunManager{
-		executors:       make(map[string]*pipeline.Executor),
-		cancels:         make(map[string]context.CancelCauseFunc),
-		dones:           make(map[string]chan struct{}),
-		handoffRequests: make(map[string]*handoffRequest),
-		ciMonitorActive: make(map[string]bool),
-		ciWakes:         make(map[string]chan struct{}),
-		db:              database,
-		paths:           p,
-		steps:           stepFactory,
-		subscribers:     make(map[string][]*eventMailbox),
-		stateRevs:       make(map[string]int64),
-		completedRuns:   make(map[string]bool),
+		executors:        make(map[string]*pipeline.Executor),
+		cancels:          make(map[string]context.CancelCauseFunc),
+		dones:            make(map[string]chan struct{}),
+		handoffRequests:  make(map[string]*handoffRequest),
+		ciMonitorActive:  make(map[string]bool),
+		ciWakes:          make(map[string]chan struct{}),
+		ciRepairOwner:    newCIRepairOwner(),
+		ciRepairRequests: make(map[string]*ciRepairRequest),
+		db:               database,
+		paths:            p,
+		steps:            stepFactory,
+		subscribers:      make(map[string][]*eventMailbox),
+		stateRevs:        make(map[string]int64),
+		completedRuns:    make(map[string]bool),
 	}
 }
 
@@ -188,6 +192,15 @@ func (m *RunManager) recoverableParkedRuns(ctx context.Context) []recoveredRunPl
 }
 
 func (m *RunManager) prepareRecoveredRun(ctx context.Context, run *db.Run) (*recoveredRunPlan, error) {
+	if run != nil {
+		obligation, err := m.db.CIRepairObligation(run.ID)
+		if err != nil {
+			return nil, err
+		}
+		if obligation != nil {
+			return nil, fmt.Errorf("guarded CI repair monitor continuity lost; automatic adoption is unsupported")
+		}
+	}
 	if run == nil || run.Status != types.RunRunning || run.AwaitingAgentSince == nil || run.Branch == "" {
 		return nil, fmt.Errorf("run is not a parked running run")
 	}
@@ -586,7 +599,7 @@ func (m *RunManager) resumeRecoveredRun(plan recoveredRunPlan) {
 				cancel(nil)
 				_ = plan.agent.Close()
 				m.closeSubscribers(plan.run.ID)
-				if !parkedAtShutdown {
+				if !parkedAtShutdown && !m.retainCIRepair(plan.run.ID) {
 					m.removeRunWorktree(plan.repo.ID, plan.run.ID, plan.gateDir, plan.workDir, "resumed_run_finished")
 					// A recovered run is a finished run too. This is the second of the
 					// two completion boundaries, and leaving it out is what let a run
@@ -1764,6 +1777,14 @@ func (m *RunManager) withBranchLock(repoID, branch string, action func() (string
 // the repository/branch lock. Proof fields are empty for ordinary launches,
 // and retry is nil for every run that does not continue a failed one.
 func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *db.Repo, branch, headSHA, baseSHA, trigger string, skipSteps []types.StepName, intent, source, launchNonce, validationGeneration, intentDigest, prBaseBranch string, omitIntent bool, inheritedPRURL, planID string, closingIssues []string, prText db.RunPRText, retry *retryLaunch, homes *runenv.TranscriptHomes, profiles ...agentcfg.RunSelection) (string, error) {
+	if blocked, err := m.db.CIRepairRetainsCustody(repo.ID, branch); err != nil {
+		return "", err
+	} else if blocked {
+		return "", fmt.Errorf("guarded CI repair retains custody of this branch; replacement runs and retries are refused")
+	}
+	if m.pendingCIRepair(repo.ID, branch) {
+		return "", fmt.Errorf("guarded CI repair admission is pending for this branch")
+	}
 	sequence := m.reserveAdmission()
 	defer m.releaseAdmission(sequence)
 	branchRole := telemetryBranchRole(branch, repo.DefaultBranch)
@@ -2289,6 +2310,7 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 	// Create executor with event broadcast.
 	runCtx, cancel := context.WithCancelCause(context.Background())
 	executor := pipeline.NewExecutor(m.db, m.paths, cfg, ag, execSteps, m.broadcast)
+	executor.SetCIRepairCheckpoint(m.ciRepairCheckpoint)
 	executor.SetCIObservationTransition(m.transitionCIObservation)
 	executor.SetCIMonitorLifecycle(m.transitionCIMonitorLifecycle)
 	executor.SetCIWake(m.ciWake)
@@ -2356,7 +2378,7 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 				ag.Close()
 				// Close subscriber channels for this run.
 				m.closeSubscribers(run.ID)
-				if !parkedAtShutdown {
+				if !parkedAtShutdown && !m.retainCIRepair(run.ID) {
 					m.removeRunWorktree(repo.ID, run.ID, gateDir, wtDir, "run_finished")
 					m.cleanupRunEvidence(cfg, run.ID)
 				}
@@ -2827,11 +2849,22 @@ func (m *RunManager) Shutdown() {
 // A queued run is removed and recorded cancelled without starting or resuming
 // its executor.
 func (m *RunManager) HandleCancel(runID string) error {
+	if a, err := m.db.CIRepairObligation(runID); err != nil {
+		return err
+	} else if a != nil {
+		if err := m.db.VerifyCIRepairCompletion(runID); err != nil {
+			return fmt.Errorf("guarded CI repair retains custody; cancellation is refused while unvalidated: %w", err)
+		}
+	}
 	m.mu.Lock()
 	if qe, ok := m.extractQueuedLocked(runID); ok {
 		m.mu.Unlock()
 		m.cancelQueuedRun(qe, types.RunCancelReasonAbortedByUser)
 		return nil
+	}
+	if m.ciRepairRequests[runID] != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("guarded CI repair admission is pending; cancellation is refused")
 	}
 	cancel, ok := m.cancels[runID]
 	m.resolveHandoffRequestLocked(runID, fmt.Errorf(types.RunCancelReasonAbortedByUser))
@@ -2908,6 +2941,10 @@ func (m *RunManager) HandleHandoff(ctx context.Context, runID string) error {
 	if !m.ciMonitorActive[runID] {
 		m.mu.Unlock()
 		return fmt.Errorf("handoff requires an actively monitoring CI step; use axi run to resolve gates, or axi abort to discard the run")
+	}
+	if m.ciRepairRequests[runID] != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("guarded CI repair admission is pending; handoff is refused")
 	}
 	if m.handoffRequests[runID] != nil {
 		m.mu.Unlock()
