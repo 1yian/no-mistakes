@@ -76,6 +76,25 @@ func TestIntegrationRemoteFreshRunUsesSelectedRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("selected custom remote must admit its release branch: %v", err)
 	}
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		snapshot, readErr := database.GetRun(result.Receipt.RunID)
+		data, _ := json.Marshal(snapshot)
+		t.Logf("fresh integration run at failure: %s (read error: %v)", data, readErr)
+		recordedSteps, readErr := database.GetStepsByRun(result.Receipt.RunID)
+		data, _ = json.Marshal(recordedSteps)
+		t.Logf("fresh integration steps at failure: %s (read error: %v)", data, readErr)
+		for _, step := range recordedSteps {
+			if step.LogPath != nil {
+				log, logErr := os.ReadFile(*step.LogPath)
+				t.Logf("fresh integration %s log: %s (read error: %v)", step.StepName, log, logErr)
+			}
+		}
+		log, logErr := os.ReadFile(forgeLog)
+		t.Logf("fresh integration forge log: %s (read error: %v)", log, logErr)
+	})
 	run := waitForRunTerminalState(t, database, result.Receipt.RunID)
 	if run.Status != types.RunCompleted {
 		t.Fatalf("run = %+v, want completed with selected sentinel %s", run, sentinel)
