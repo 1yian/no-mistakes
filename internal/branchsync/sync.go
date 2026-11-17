@@ -57,8 +57,9 @@ const (
 )
 
 const (
-	SafetySafeFastForward       = "safe_fast_forward"
-	SafetySafeEquivalentAdvance = "safe_equivalent_advance"
+	SafetySafeFastForward         = "safe_fast_forward"
+	SafetySafeEquivalentAdvance   = "safe_equivalent_advance"
+	SafetySafeRunPublishedAdvance = "safe_run_published_advance"
 )
 
 // State is the shared branch synchronization contract rendered by CLI, AXI,
@@ -82,6 +83,7 @@ type State struct {
 	Recovery   *RecoveryEvidence
 	NextAction *NextAction
 	Error      string
+	Notice     string
 }
 
 type LocalState struct {
@@ -136,10 +138,11 @@ type RecoveryEvidence struct {
 }
 
 // CanApply reports whether Apply may advance the clean checked-out branch for
-// a freshly verified plan. It includes strict fast-forwards and the narrower
-// equivalent-diverged advance that first anchors the pre-sync head.
+// a freshly verified plan. It includes strict fast-forwards, the narrower
+// equivalent-diverged advance that first anchors the pre-sync head, and the
+// run-published advance that preserves both heads before moving the branch.
 func CanApply(state State) bool {
-	return state.Safety == SafetySafeFastForward || state.Safety == SafetySafeEquivalentAdvance
+	return state.Safety == SafetySafeFastForward || state.Safety == SafetySafeEquivalentAdvance || state.Safety == SafetySafeRunPublishedAdvance
 }
 
 // Service synchronizes only the invoking worktree. Repo is the registered
@@ -406,7 +409,7 @@ func (s *Service) Refresh(ctx context.Context) State {
 		return state
 	}
 
-	s.classifyRelation(ctx, &state, bound, run.BaseSHA, true)
+	s.classifyRelation(ctx, &state, freshRun, bound, run.BaseSHA, true)
 	return state
 }
 
@@ -488,16 +491,29 @@ func (s *Service) Apply(ctx context.Context) State {
 		return blockedPlan(finalPrecondition, StateAmbiguousContext, "blocked_assumptions_changed", "the push binding, branch, HEAD, or worktree changed immediately before synchronization; no files or refs were changed")
 	}
 	equivalentAdvance := plan.Safety == SafetySafeEquivalentAdvance
-	if equivalentAdvance {
+	runPublishedAdvance := plan.Safety == SafetySafeRunPublishedAdvance
+	switch {
+	case equivalentAdvance:
 		if !equivalentDivergence(ctx, s.workDir(), plan.Local.Head, plan.Pipeline.PushedHead, finalRun.BaseSHA) {
 			return blockedPlan(plan, StateDiverged, "blocked_diverged", "the equivalent-diverged proof changed before synchronization; no files or refs were changed")
 		}
-	} else if !isAncestor(ctx, s.workDir(), plan.Local.Head, plan.Pipeline.PushedHead) || plan.Local.Head == plan.Pipeline.PushedHead {
+	case runPublishedAdvance:
+		if refusal := s.runPublishedAdvanceRefusal(ctx, finalPrecondition, finalRun, plan.Pipeline.PushedHead); refusal != "" {
+			return blockedPlan(plan, StateDiverged, "blocked_diverged", "the run-published adoption proof changed before synchronization: "+refusal+"; no files or refs were changed")
+		}
+		if isAncestor(ctx, s.workDir(), plan.Local.Head, plan.Pipeline.PushedHead) || isAncestor(ctx, s.workDir(), plan.Pipeline.PushedHead, plan.Local.Head) {
+			return blockedPlan(plan, StateAmbiguousContext, "blocked_assumptions_changed", "the divergence assumptions changed before synchronization; no files or refs were changed")
+		}
+	case !isAncestor(ctx, s.workDir(), plan.Local.Head, plan.Pipeline.PushedHead) || plan.Local.Head == plan.Pipeline.PushedHead:
 		return blockedPlan(plan, StateAmbiguousContext, "blocked_assumptions_changed", "the strict fast-forward assumptions changed before synchronization; no files or refs were changed")
 	}
 
 	var applyErr error
-	if equivalentAdvance {
+	if runPublishedAdvance {
+		if refusal, refused := s.adoptRunPublishedHead(ctx, plan); refused {
+			return refusal
+		}
+	} else if equivalentAdvance {
 		anchorRef := syncAnchorRef(plan.Pipeline.RunID)
 		if _, err := git.Run(ctx, s.workDir(), "update-ref", anchorRef, plan.Local.Head); err != nil {
 			return blockedPlan(plan, StateAmbiguousContext, "blocked_preserve_failed", "the pre-sync local head could not be anchored; no files or refs were changed")
@@ -533,6 +549,9 @@ func (s *Service) Apply(ctx context.Context) State {
 	plan.Safety = "already_synchronized"
 	plan.NextAction = nil
 	plan.Error = ""
+	if runPublishedAdvance {
+		plan.Notice = fmt.Sprintf("Adopted the head run %s published: the branch moved from %s to %s. The previous local head is preserved at %s and the published head at %s. Custody and the PR attestation are unchanged and stay bound to %s: moving the branch validated nothing, so validate any further local commit, or a rebase onto a newer base, with a fresh `no-mistakes axi run` from this head.", plan.Pipeline.RunID, recheck.Local.Head, plan.Pipeline.PushedHead, adoptionLocalRef(plan.Pipeline.RunID), adoptionPublishedRef(plan.Pipeline.RunID), plan.Pipeline.PushedHead)
+	}
 	return plan
 }
 
@@ -2090,11 +2109,11 @@ func (s *Service) inspect(ctx context.Context) (State, *db.Run, bool) {
 		return state, run, false
 	}
 
-	s.classifyRelation(ctx, &state, ptr(run.LastPushedSHA), run.BaseSHA, false)
+	s.classifyRelation(ctx, &state, run, ptr(run.LastPushedSHA), run.BaseSHA, false)
 	return state, run, true
 }
 
-func (s *Service) classifyRelation(ctx context.Context, state *State, pushed, base string, live bool) {
+func (s *Service) classifyRelation(ctx context.Context, state *State, run *db.Run, pushed, base string, live bool) {
 	if state.Local.Head == pushed {
 		state.State = StateSynchronized
 		state.Relation = RelationEqual
@@ -2128,12 +2147,31 @@ func (s *Service) classifyRelation(ctx context.Context, state *State, pushed, ba
 			}
 			state.State = StateDiverged
 			state.Relation = RelationDiverged
+			refusal := s.runPublishedAdvanceRefusal(ctx, *state, run, pushed)
+			if refusal == "" {
+				if live {
+					state.Safety = SafetySafeRunPublishedAdvance
+				} else {
+					state.Safety = "refresh_required"
+				}
+				state.NextAction = &NextAction{Code: "sync", Command: "no-mistakes axi sync"}
+				state.Error = ""
+				return
+			}
 			state.Safety = "blocked_diverged"
 			state.NextAction = &NextAction{Code: "inspect_and_reconcile_manually", Command: "git checkout --detach " + pushed}
-			state.Error = "local and pipeline-pushed histories have diverged; no files or refs were changed"
+			state.Error = "local and pipeline-pushed histories have diverged and adopting the head this run published does not apply (" + refusal + "); no files or refs were changed"
 			return
 		}
 	} else if state.Local.Head == state.Pipeline.SubmittedHead && state.Pipeline.SubmittedHead != pushed {
+		if s.gateProvesDivergence(ctx, state.Local.Head, pushed) {
+			state.State = StateDiverged
+			state.Relation = RelationDiverged
+			state.Safety = "refresh_required"
+			state.NextAction = &NextAction{Code: "sync", Command: "no-mistakes axi sync"}
+			state.Error = ""
+			return
+		}
 		state.State = StateBehind
 		state.Relation = RelationBehind
 	} else {
@@ -2154,6 +2192,134 @@ func (s *Service) classifyRelation(ctx context.Context, state *State, pushed, ba
 
 func syncAnchorRef(runID string) string {
 	return "refs/no-mistakes/sync-anchor/" + runID
+}
+
+func adoptionLocalRef(runID string) string {
+	return "refs/no-mistakes/adopt-run-published/" + runID + "/local"
+}
+
+func adoptionPublishedRef(runID string) string {
+	return "refs/no-mistakes/adopt-run-published/" + runID + "/published"
+}
+
+func (s *Service) gateProvesDivergence(ctx context.Context, local, pushed string) bool {
+	gate := strings.TrimSpace(s.GateDir)
+	if gate == "" || !objectExists(ctx, gate, local) || !objectExists(ctx, gate, pushed) {
+		return false
+	}
+	return !isAncestor(ctx, gate, local, pushed) && !isAncestor(ctx, gate, pushed, local)
+}
+
+func (s *Service) newestRunOnBranch(branch string) (*db.Run, error) {
+	runs, err := s.DB.GetRunsByRepo(s.Repo.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range runs {
+		if candidate.Branch == branch {
+			return candidate, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *Service) runSettled(run *db.Run) bool {
+	switch run.Status {
+	case types.RunCompleted, types.RunChecksPassed, types.RunHandedOff:
+		return true
+	case types.RunRunning:
+		if run.CIReadyAt == nil {
+			return false
+		}
+		steps, err := s.DB.GetStepsByRun(run.ID)
+		if err != nil || len(steps) == 0 {
+			return false
+		}
+		for _, step := range steps {
+			switch {
+			case step.StepName == types.StepCI && step.Status == types.StepStatusRunning:
+			case step.Status == types.StepStatusCompleted || step.Status == types.StepStatusSkipped:
+			default:
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) runPublishedAdvanceRefusal(ctx context.Context, state State, run *db.Run, pushed string) string {
+	if run == nil || state.Local.Branch == "" || state.Local.Head == "" || pushed == "" {
+		return "the run's facts could not be read"
+	}
+	if !state.Local.Clean {
+		return "the worktree is not completely clean"
+	}
+	if run.SubmittedHeadSHA == nil || *run.SubmittedHeadSHA != state.Local.Head {
+		return "the checked-out head is not the head this run was submitted from (the branch changed after submission)"
+	}
+	newest, err := s.newestRunOnBranch(state.Local.Branch)
+	if err != nil || newest == nil {
+		return "the branch's runs could not be read"
+	}
+	if newest.ID != run.ID {
+		return "a newer run exists on this branch"
+	}
+	if run.CustodyReturnedAt != nil {
+		return "custody of this run was already returned"
+	}
+	if !exactPushedBinding(s.Repo, run, state.Local.Branch) || ptr(run.LastPushedSHA) != pushed {
+		return "the run's recorded push binding does not match the configured target and published head"
+	}
+	if !s.runSettled(run) {
+		return "the run is still active or did not end passed or handed off"
+	}
+	approved := ptr(run.ReviewApprovedHeadSHA)
+	if approved == "" || !objectExists(ctx, s.workDir(), approved) || !isAncestor(ctx, s.workDir(), approved, pushed) {
+		return "the published head does not contain the head this run's review approved"
+	}
+	return ""
+}
+
+func (s *Service) adoptRunPublishedHead(ctx context.Context, plan State) (State, bool) {
+	wd := s.workDir()
+	branch := plan.Local.Branch
+	local := plan.Local.Head
+	published := plan.Pipeline.PushedHead
+	runID := plan.Pipeline.RunID
+	anchors := []struct{ ref, head string }{{adoptionLocalRef(runID), local}, {adoptionPublishedRef(runID), published}}
+	for _, anchor := range anchors {
+		if err := custody.PreserveRecoveryAnchor(ctx, wd, anchor.ref, anchor.head); err != nil {
+			return blockedPlan(plan, StateDiverged, "blocked_preserve_failed", "a head could not be preserved before adopting the run's published head; no files or branch refs were changed"), true
+		}
+		if anchored, err := git.Run(ctx, wd, "rev-parse", anchor.ref+"^{commit}"); err != nil || anchored != anchor.head {
+			return blockedPlan(plan, StateDiverged, "blocked_preserve_failed", "a preserved head could not be verified after anchoring; no files or branch refs were changed"), true
+		}
+	}
+	branchRef := "refs/heads/" + branch
+	currentBranch, branchErr := git.CurrentBranch(ctx, wd)
+	currentHead, headErr := git.HeadSHA(ctx, wd)
+	clean, _ := worktreeClean(ctx, wd)
+	if branchErr != nil || currentBranch != branch || headErr != nil || currentHead != local || !clean {
+		return blockedPlan(plan, StateAmbiguousContext, "blocked_assumptions_changed", "the local branch or worktree changed before the branch moved; no files or branch refs were changed"), true
+	}
+	if _, err := git.Run(ctx, wd, "update-ref", branchRef, published, local); err != nil {
+		return blockedPlan(plan, StateAmbiguousContext, "blocked_assumptions_changed", "the local branch moved before it could be adopted; no files or branch refs were changed"), true
+	}
+	rollback := func() string {
+		if _, err := git.Run(ctx, wd, "update-ref", branchRef, local, published); err != nil {
+			return fmt.Sprintf("; the branch could not be restored to %s and now points at %s", local, published)
+		}
+		return ""
+	}
+	if boundary, err := git.CurrentBranch(ctx, wd); err != nil || boundary != branch {
+		return blockedPlan(plan, StateAmbiguousContext, "blocked_assumptions_changed", "the checked-out branch changed while the branch moved"+rollback()), true
+	}
+	if _, err := git.Run(ctx, wd, "read-tree", "-m", "-u", local, published); err != nil {
+		return blockedPlan(plan, StateDirty, "blocked_adopt_worktree_busy", "the working tree changed while the branch moved, so no file was overwritten"+rollback()+"; run `no-mistakes axi sync` again once the working tree is settled"), true
+	}
+	return plan, false
 }
 
 func equivalentDivergence(ctx context.Context, dir, local, pushed, base string) bool {

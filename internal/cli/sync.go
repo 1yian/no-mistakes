@@ -24,9 +24,11 @@ func newSyncCmd() *cobra.Command {
 		Short: "Safely move the current branch to an exact pipeline-pushed head",
 		Long: "Refreshes the current branch's persisted pipeline push binding and, after\n" +
 			"confirmation, advances only a completely clean checked-out branch using one of\n" +
-			"two guarded modes: a strict fast-forward for clean behind branches, or an\n" +
+			"three guarded modes: a strict fast-forward for clean behind branches, an\n" +
 			"equivalent-diverged advance that first anchors the old head and then moves the\n" +
-			"branch to the verified pipeline head with reset semantics. It never stashes,\n" +
+			"branch to the verified pipeline head with reset semantics, or an adoption of the\n" +
+			"head the branch's own newest run reviewed and published, which preserves both\n" +
+			"heads and moves the branch with a compare-and-swap. It never stashes,\n" +
 			"merges genuine divergence, rebases, switches branches, or updates a remote.\n" +
 			"--check performs the fresh proof without applying it.\n" +
 			"--recover returns custody of a branch whose run went terminal with unpublished\n" +
@@ -87,9 +89,12 @@ func newAxiSyncCmd() *cobra.Command {
 		Long: "Verifies the registered invoking worktree, clean exact branch, persisted\n" +
 			"pipeline push binding, configured fork or upstream target, live remote equality,\n" +
 			"and either strict ancestry or content-equivalent divergence. The default applies\n" +
-			"an eligible plan without a prompt: strict fast-forward for behind branches, or an\n" +
+			"an eligible plan without a prompt: strict fast-forward for behind branches, an\n" +
 			"equivalent advance that anchors the old head before moving the branch to the\n" +
-			"verified pipeline head with reset semantics.\n" +
+			"verified pipeline head with reset semantics, or adoption of the head this branch's\n" +
+			"own newest run reviewed and published (safe_run_published_advance), which\n" +
+			"preserves both heads and moves the branch with a compare-and-swap. Adoption\n" +
+			"changes no custody or attestation: validate later changes with a fresh run.\n" +
 			"--check performs the same fresh read-only plan. Blocked states change nothing.\n" +
 			"--recover performs the guarded custody return offered by\n" +
 			"next_action.code: recover_custody; --keep-local keeps the current local head.\n" +
@@ -182,7 +187,9 @@ func runHumanSync(cmd *cobra.Command, check, yes bool) error {
 			result = "refused"
 			return &exitError{code: 1}
 		}
-		if state.Safety == branchsync.SafetySafeEquivalentAdvance {
+		if state.Safety == branchsync.SafetySafeRunPublishedAdvance {
+			fmt.Fprint(cmd.OutOrStdout(), "  Adopt the head this run published? Both heads are preserved first. [y/N] ")
+		} else if state.Safety == branchsync.SafetySafeEquivalentAdvance {
 			fmt.Fprint(cmd.OutOrStdout(), "  Apply this guarded synchronization? [y/N] ")
 		} else {
 			fmt.Fprint(cmd.OutOrStdout(), "  Apply this exact strict fast-forward? [y/N] ")
@@ -397,6 +404,8 @@ func printHumanSyncState(cmd *cobra.Command, state branchsync.State) {
 	}
 	if state.Error != "" {
 		fmt.Fprintf(w, "  blocked:  %s\n", state.Error)
+	} else if state.Notice != "" {
+		fmt.Fprintf(w, "  note:     %s\n", state.Notice)
 	}
 }
 
@@ -437,8 +446,11 @@ func humanSyncSummary(state branchsync.State) string {
 		if state.Safety == branchsync.SafetySafeEquivalentAdvance {
 			return "diverged, but local changes are represented in the pipeline head; guarded advance verified"
 		}
+		if state.Safety == branchsync.SafetySafeRunPublishedAdvance {
+			return "diverged from the head this run reviewed and published; guarded adoption verified, both heads are preserved first"
+		}
 		if state.NextAction != nil && state.NextAction.Code == "sync" {
-			return "diverged; refresh required to verify equivalent pipeline content"
+			return "diverged; refresh required to verify equivalent pipeline content or the run's own published head"
 		}
 		return "diverged from the pipeline-pushed head; manual reconciliation required"
 	case branchsync.StateSynchronized:
@@ -502,6 +514,9 @@ func runAxiSync(cmd *cobra.Command, check, recover, keepLocal, adoptPublished bo
 	var help []string
 	if state.NextAction != nil {
 		help = append(help, "Run `"+state.NextAction.Command+"`")
+	}
+	if state.Notice != "" {
+		help = append(help, "Validate any further local commit with a fresh `no-mistakes axi run`: this moved only the local branch and changed no custody or attestation")
 	}
 	if state.Safety == "blocked_pipeline_owned_recoverable" && (state.Recovery == nil || !state.Recovery.KeepLocal) {
 		help = append(help, "Run `no-mistakes rerun` instead to resume validating the selected preserved pipeline head; it refuses a known clean caller HEAD mismatch. If heads differ, inspect `no-mistakes axi status` and follow its exact `branch_sync.next_action.command` for custody or synchronization, then submit intended local commits with a fresh `no-mistakes axi run` once custody permits")
@@ -649,6 +664,8 @@ func branchSyncField(state branchsync.State) toON.Field {
 	}
 	if state.Error != "" {
 		fields = append(fields, toON.Field{Key: "note", Value: state.Error})
+	} else if state.Notice != "" {
+		fields = append(fields, toON.Field{Key: "note", Value: state.Notice})
 	}
 	if state.NextAction != nil {
 		fields = append(fields, toON.Field{Key: "next_action", Value: toON.NewObject(
