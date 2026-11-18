@@ -291,6 +291,17 @@ Kill-switch injected into every pipeline agent subprocess so compact-adviser sta
 
 no-mistakes stamps `COMPACT_ADVISER_DISABLE=1` onto every spawned gate agent, including ACP aliases and managed agent servers that can load host plugins. Forge and profile overlays cannot drop the flag. The daemon process itself is unchanged; this is agent-child policy only, not a user-facing knob for the service environment.
 
+## `NO_MISTAKES_SIGNAL_SPAWNER` and `NO_MISTAKES_SIGNAL_WORKTREE`
+
+Scope variables the [`agent_signal_guard`](/no-mistakes/reference/global-config/#agent_signal_guard) reads to tell which processes a run owns.
+
+|         |                                                              |
+| ------- | ------------------------------------------------------------ |
+| Type    | the daemon's PID, and the run worktree path                  |
+| Default | injected for pipeline agents only; not a user-facing setting |
+
+With the guard on, no-mistakes stamps both onto every spawned gate agent, prepends its `signal-guard` folder under the app root to the agent's `PATH`, and exports a bash `kill` function (`BASH_FUNC_kill%%`) that calls the checking `kill` there. The guard finds a run's agent as the ancestor of the calling process that the daemon launched. A forge or profile overlay cannot drop the entries. Removing them only makes the guard refuse more, never less: without a scope nothing is owned.
+
 ## `NO_MISTAKES_UMAMI_HOST`
 
 Override the telemetry collection host.

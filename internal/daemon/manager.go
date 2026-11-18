@@ -36,6 +36,7 @@ import (
 	"github.com/kunchenguid/no-mistakes/internal/reviewqa"
 	"github.com/kunchenguid/no-mistakes/internal/runenv"
 	"github.com/kunchenguid/no-mistakes/internal/safeurl"
+	"github.com/kunchenguid/no-mistakes/internal/signalguard"
 	"github.com/kunchenguid/no-mistakes/internal/telemetry"
 	"github.com/kunchenguid/no-mistakes/internal/types"
 	"github.com/kunchenguid/no-mistakes/internal/verificationplan"
@@ -261,7 +262,7 @@ func (m *RunManager) prepareRecoveredRun(ctx context.Context, run *db.Run) (*rec
 	if _, err := m.db.RunCommitIdentity(run.ID); err != nil {
 		return nil, err
 	}
-	ag, _, err := newPipelineAgent(ctx, cfg, pipelineEvidenceRoot(m.paths, cfg, run), exec.LookPath, forgeEnvironment(forgeCtx), quotaRecord)
+	ag, _, err := newPipelineAgent(ctx, cfg, pipelineEvidenceRoot(m.paths, cfg, run), exec.LookPath, m.agentEnvironment(cfg, workDir, forgeEnvironment(forgeCtx)), quotaRecord)
 	if err != nil {
 		return nil, err
 	}
@@ -509,6 +510,18 @@ func newConfiguredAgent(ctx context.Context, cfg *config.Config, evidenceRoot st
 		}
 	}
 	return ag, record, nil
+}
+
+func (m *RunManager) agentEnvironment(cfg *config.Config, worktree string, base runenv.Overlay) runenv.Overlay {
+	if !cfg.AgentSignalGuard {
+		return base
+	}
+	guard, err := signalguard.Install(m.paths.SignalGuardDir())
+	if err != nil {
+		slog.Warn("agent signal guard unavailable; this run's agents are not guarded against name-wide signals", "error", err)
+		return base
+	}
+	return guard.Apply(base, worktree)
 }
 
 func forgeEnvironment(ctx *forgecontext.Context) runenv.Overlay {
@@ -2266,7 +2279,7 @@ func (m *RunManager) startRunWithIntentSourceLocked(ctx context.Context, repo *d
 	// wires review-role routing plus the trusted-opt-out gate-neutralization
 	// fail-closed check. The quota-aware record is fresh-read here (a nil
 	// input) and persisted beside the gates pin below.
-	ag, quotaRecord, err := newPipelineAgent(ctx, cfg, pipelineEvidenceRoot(m.paths, cfg, run), exec.LookPath, forgeEnvironment(forgeCtx), nil)
+	ag, quotaRecord, err := newPipelineAgent(ctx, cfg, pipelineEvidenceRoot(m.paths, cfg, run), exec.LookPath, m.agentEnvironment(cfg, wtDir, forgeEnvironment(forgeCtx)), nil)
 	if err != nil {
 		m.db.UpdateRunError(run.ID, err.Error())
 		trackStartFailure("create_agent")
