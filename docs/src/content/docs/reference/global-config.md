@@ -58,6 +58,8 @@ log_level: info
 
 session_reuse: true
 
+agent_signal_guard: true
+
 worktree_roots:
   /Users/you/src/my-repo: /Users/you/work/my-repo-runs
 
@@ -973,6 +975,27 @@ When resume is unavailable or fails, the fix turn falls back to a cold run or a 
 Session identities are persisted only as minimum local resume metadata, never as prompts or transcripts; Pi's own session directory retains its native transcript. Keep Pi's session directory private, and keep any `--session-dir` or `PI_CODING_AGENT_SESSION_DIR` setting stable while a run is active so a daemon restart can find the fixer session.
 The [daemon crash-recovery reference](/no-mistakes/concepts/daemon/#crash-recovery) owns which parked gates can resume or reconcile after a restart.
 Set `false` to force every agent invocation cold.
+
+### agent_signal_guard
+
+Keeps a pipeline agent from signalling processes its run does not own.
+
+|         |        |
+| ------- | ------ |
+| Type    | `bool` |
+| Default | `true` |
+
+Every run's agent shares one OS account, so a single `pkill -f "node --test"` from one agent also ends the test suites, builds, and jobs of every other run on the host. With the guard on, each agent subprocess starts with a no-mistakes folder first on its `PATH` and refuses the name-wide signallers there, and `kill` works only on processes the run owns:
+
+- `pkill`, `killall`, `killall5`, and `skill` are refused with a message that names the alternative: signal a PID the run started.
+- `kill`, whether it is run by `xargs`, `env`, or a script, or called from bash, signals a PID, or a process group, only when every member belongs to the run. A run owns its agent process, everything that descends from it or shares its process group, and any process standing in the run's worktree, which is the same identity the daemon's leaked-process sweep reclaims a finished run's strays by. `kill -1`, a PID or group of another run, and a group that mixes in one process of another run are refused, and the refusal names the PID. `kill -0` and `kill -l` never need ownership.
+- Cancelling a run is unaffected. The daemon signals the agent's process group itself, and a PID the agent started, such as the `$!` of a background job, can still be stopped by the agent.
+
+Every refusal is also appended to `signal-guard/refusals.log` under the app root with its time, the caller's PID, the run worktree, and the command, because an agent that sends stderr to `/dev/null`, as the command behind the incident did, never sees the message.
+
+The guard catches an agent's ordinary mistake. It is not a sandbox, and it does not cover an absolute path such as `/usr/bin/pkill`, `builtin kill` or `command kill`, a job spec such as `kill %1`, `kill` in a shell other than bash (zsh, dash, and `sh` use their own builtin, which a `PATH` entry cannot shadow), a script or compiled helper that calls `kill(2)` or `process.kill`, `fuser -k`, `systemctl kill`, `docker kill`, a remote command, Windows `taskkill`, or a process owned by a different OS user. The ownership check reads the process table with `ps`, and a host without it refuses every signal except `kill -0`. A deliberately obfuscated command defeats it. Where that is not enough, run each pipeline on its own OS account or in a container. Windows is not covered at all.
+
+The guard applies to pipeline agents only. Repository `commands.*`, custom gates, and the daemon's own cancellation run without it. It is global-only, because a repository must not be able to switch off the protection that stands between its agent and the rest of the host. A guard that cannot be installed under the app root logs a warning and the run proceeds unguarded. Set `false` on a host whose agents legitimately need name-wide signals, for example a dedicated machine with one run at a time.
 
 ### quota_routing
 

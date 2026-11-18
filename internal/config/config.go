@@ -266,8 +266,9 @@ type GlobalConfig struct {
 	// run session-free so the rereview never resumes the session whose
 	// findings prescribed the fixes it certifies. Default true; set
 	// session_reuse: false to force every invocation cold.
-	SessionReuse  bool          `yaml:"-"`
-	ForgeProfiles ForgeProfiles `yaml:"forge_profiles"`
+	SessionReuse     bool          `yaml:"-"`
+	AgentSignalGuard bool          `yaml:"-"`
+	ForgeProfiles    ForgeProfiles `yaml:"forge_profiles"`
 	// ProviderPlugins are operator-installed PR/CI provider executables keyed
 	// by plugin name. Global-only: see ProviderPlugin.
 	ProviderPlugins ProviderPlugins `yaml:"-"`
@@ -333,6 +334,7 @@ type globalConfigRaw struct {
 	LogLevel                  string                     `yaml:"log_level"`
 	EvidenceDir               string                     `yaml:"evidence_dir"`
 	SessionReuse              *bool                      `yaml:"session_reuse"`
+	AgentSignalGuard          *bool                      `yaml:"agent_signal_guard"`
 	AutoFix                   AutoFixRaw                 `yaml:"auto_fix"`
 	CI                        CIRaw                      `yaml:"ci"`
 	Rebase                    RebaseRaw                  `yaml:"rebase"`
@@ -1018,6 +1020,7 @@ type Config struct {
 	GateReconcileTimeout      time.Duration
 	LogLevel                  string
 	SessionReuse              bool
+	AgentSignalGuard          bool
 	Eval                      Eval
 	Worktree                  Worktree
 	Commands                  Commands
@@ -1761,6 +1764,14 @@ gate_reconcile_timeout: "30s"
 # its fixes. Supported for claude, codex, grok, and pi; other agents run cold.
 # Set false to force every agent invocation cold.
 session_reuse: true
+
+# Keep pipeline agents from signalling processes their run does not own: the
+# name-wide signallers (pkill, killall, killall5, skill) are refused, and kill
+# works only on the agent's own process tree and worktree. Every run's agent
+# shares your OS account, so one agent running pkill -f "node --test" otherwise
+# ends other runs' test suites. A guard against accidents, not a sandbox.
+# Global-only. Set false to leave agents unguarded.
+agent_signal_guard: true
 
 # Quota-aware agent routing (optional, global only, off by default). When
 # enabled, no-mistakes reads one snapshot from the local quota-axi tool at the
@@ -2711,6 +2722,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 		GateReconcileTimeout:    DefaultGateReconcileTimeout,
 		LogLevel:                "info",
 		SessionReuse:            true,
+		AgentSignalGuard:        true,
 		QuotaRouting: QuotaRouting{
 			ExpectedRunLength: DefaultQuotaExpectedRunLength,
 			ReadTimeout:       DefaultQuotaReadTimeout,
@@ -3096,6 +3108,9 @@ func LoadGlobalFromBytes(data []byte) (*GlobalConfig, error) {
 	cfg.EvidenceDir = strings.TrimSpace(raw.EvidenceDir)
 	if raw.SessionReuse != nil {
 		cfg.SessionReuse = *raw.SessionReuse
+	}
+	if raw.AgentSignalGuard != nil {
+		cfg.AgentSignalGuard = *raw.AgentSignalGuard
 	}
 	if err := applyQuotaRoutingOverrides(&cfg.QuotaRouting, raw.QuotaRouting); err != nil {
 		return nil, err
@@ -4449,6 +4464,7 @@ func merge(global *GlobalConfig, repo *RepoConfig, override *RepositoryOverride)
 		GateReconcileTimeout:      global.GateReconcileTimeout,
 		LogLevel:                  global.LogLevel,
 		SessionReuse:              global.SessionReuse,
+		AgentSignalGuard:          global.AgentSignalGuard,
 		// Eval is global-only by design (see GlobalConfig.Eval), so it is
 		// copied straight through with no repository override step. Worktree
 		// is global-only for the same reason (see GlobalConfig.Worktree).

@@ -33,13 +33,17 @@ func LiveDescendants(pid int) (map[int]bool, error) {
 }
 
 func liveDescendants(root int, procs []processState) map[int]bool {
+	return descendantsOf(root, procs, false)
+}
+
+func descendantsOf(root int, procs []processState, zombies bool) map[int]bool {
 	byPID := make(map[int]processState, len(procs))
 	for _, p := range procs {
 		byPID[p.PID] = p
 	}
 	found := make(map[int]bool)
 	for _, p := range procs {
-		if p.PID == root || p.PID <= 1 || strings.HasPrefix(p.Stat, "Z") {
+		if p.PID == root || p.PID <= 1 || (!zombies && strings.HasPrefix(p.Stat, "Z")) {
 			continue
 		}
 		if p.PGID == root {

@@ -59,6 +59,8 @@ type Action struct {
 	// resolved files. A scenario needs to be able to produce each one.
 	Git [][]string `yaml:"git,omitempty"`
 
+	Shell []string `yaml:"shell,omitempty"`
+
 	// DelayMS pauses before responding, for e2e tests that need an observable active run.
 	DelayMS int `yaml:"delay_ms,omitempty"`
 
@@ -329,7 +331,50 @@ func applyActionInDir(wd string, action Action) error {
 	if err := stageFilesInDir(wd, action.Stage); err != nil {
 		return err
 	}
-	return runGitInDir(wd, action.Git)
+	if err := runGitInDir(wd, action.Git); err != nil {
+		return err
+	}
+	runShellInDir(wd, action.Shell)
+	return nil
+}
+
+type shellResult struct {
+	Command string `json:"command"`
+	Exit    int    `json:"exit"`
+	Output  string `json:"output"`
+}
+
+func runShellInDir(wd string, commands []string) {
+	path := os.Getenv("FAKEAGENT_SHELL_LOG")
+	for _, command := range commands {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		cmd := exec.CommandContext(ctx, "bash", "-c", command)
+		cmd.Dir = wd
+		cmd.WaitDelay = 2 * time.Second
+		out, err := cmd.CombinedOutput()
+		cancel()
+		result := shellResult{Command: command, Output: string(out)}
+		var exitErr *exec.ExitError
+		switch {
+		case errors.As(err, &exitErr):
+			result.Exit = exitErr.ExitCode()
+		case err != nil:
+			result.Exit = -1
+		}
+		if path == "" {
+			continue
+		}
+		data, merr := json.Marshal(result)
+		if merr != nil {
+			continue
+		}
+		logMu.Lock()
+		if f, ferr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); ferr == nil {
+			f.Write(append(data, '\n'))
+			f.Close()
+		}
+		logMu.Unlock()
+	}
 }
 
 // runGitInDir runs each scenario git invocation in wd. A failure is returned

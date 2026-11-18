@@ -4,6 +4,7 @@ package runenv
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -12,13 +13,17 @@ import (
 // Overlay describes environment variables to set and remove for one run.
 // Set values take precedence when a key also appears in Unset.
 type Overlay struct {
-	Set   map[string]string
-	Unset []string
+	Set         map[string]string
+	Unset       []string
+	PathPrepend []string
 }
 
 // Clone returns an independent copy suitable for freezing into a run context.
 func (o Overlay) Clone() Overlay {
-	cloned := Overlay{Unset: append([]string(nil), o.Unset...)}
+	cloned := Overlay{
+		Unset:       append([]string(nil), o.Unset...),
+		PathPrepend: append([]string(nil), o.PathPrepend...),
+	}
 	if o.Set != nil {
 		cloned.Set = make(map[string]string, len(o.Set))
 		for key, value := range o.Set {
@@ -59,7 +64,43 @@ func (o Overlay) Apply(base []string) []string {
 	for _, key := range keys {
 		result = append(result, key+"="+o.Set[key])
 	}
-	return result
+	return o.prependPath(result)
+}
+
+func (o Overlay) prependPath(env []string) []string {
+	if len(o.PathPrepend) == 0 {
+		return env
+	}
+	index := -1
+	current := ""
+	for i, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		if normalizeKey(key) == normalizeKey("PATH") {
+			index, current = i, value
+			break
+		}
+	}
+	entries := append([]string(nil), o.PathPrepend...)
+	for _, dir := range filepath.SplitList(current) {
+		if dir != "" && !contains(o.PathPrepend, dir) {
+			entries = append(entries, dir)
+		}
+	}
+	joined := "PATH=" + strings.Join(entries, string(os.PathListSeparator))
+	if index < 0 {
+		return append(env, joined)
+	}
+	env[index] = joined
+	return env
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // String prints the overlay's variable names only. A Set value can be a
@@ -71,7 +112,7 @@ func (o Overlay) String() string {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	return "runenv.Overlay{Set: [" + strings.Join(keys, " ") + "], Unset: [" + strings.Join(o.Unset, " ") + "]}"
+	return "runenv.Overlay{Set: [" + strings.Join(keys, " ") + "], Unset: [" + strings.Join(o.Unset, " ") + "], PathPrepend: [" + strings.Join(o.PathPrepend, " ") + "]}"
 }
 
 // GoString keeps %#v as redacted as %v.
@@ -81,7 +122,7 @@ func (o Overlay) GoString() string {
 
 // Empty reports whether the overlay changes no variables.
 func (o Overlay) Empty() bool {
-	return len(o.Set) == 0 && len(o.Unset) == 0
+	return len(o.Set) == 0 && len(o.Unset) == 0 && len(o.PathPrepend) == 0
 }
 
 func normalizeKey(key string) string {
