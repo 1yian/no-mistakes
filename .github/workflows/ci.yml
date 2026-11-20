@@ -145,7 +145,7 @@ jobs:
       - name: Test on Unix
         if: runner.os != 'Windows'
         env:
-          GOFLAGS: ${{ runner.os == 'macOS' && '-timeout=20m' || '' }}
+          GOFLAGS: -timeout=20m
         run: go test -race ./...
 
       # Git-heavy packages are the Windows wall floor. NM_CI_WINDOWS_GIT_EXCLUDE
