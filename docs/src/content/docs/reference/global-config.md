@@ -1129,7 +1129,7 @@ The per-repo [`ci.rerun_transient`](/no-mistakes/reference/repo-config/#cirerun_
 
 The operator-level fallback for [`ci.required_reviews`](/no-mistakes/reference/repo-config/#cirequired_reviews).
 That reference owns supported reviewer profiles, completion evidence, and the trust boundary.
-Defaults to `[]`; the trusted repository list overrides it, including an explicit empty list. `ci.required_review_app_id` may pin the GHES CodeRabbit App ID; `ci.required_review_bot_id` may pin the GitLab CodeRabbit account ID. These are identifiers, not credentials, and must match the configured forge.
+Defaults to `[]`; the trusted repository list overrides it, including an explicit empty list. `ci.required_review_app_id` may pin the GHES CodeRabbit App ID; `ci.required_review_bot_id` may pin the GitLab CodeRabbit account ID. These are identifiers, not credentials, and must match the configured forge. `copilot` needs neither: it is read only on GitHub.com, from the review GitHub's own Copilot code review submits.
 
 ### ci.revalidate_repairs
 
@@ -1146,6 +1146,22 @@ ci:
 ```
 
 A value in the trusted repository config overrides this global value in both directions: an explicit repository `true` enables revalidation when this is `false`, and an explicit repository `false` disables opt-in revalidation when this is `true`. When the trusted repository config omits the key, this global value applies.
+
+### ci.remote_only_verification
+
+The machine-local default for [remote-only CI repair verification](/no-mistakes/reference/repo-config/#ciremote_only_verification).
+
+| | |
+|---|---|
+| Type | `bool` |
+| Default | `false` |
+
+```yaml
+ci:
+  remote_only_verification: true
+```
+
+An explicit value in the trusted repository config overrides this value in either direction.
 
 ### ci.review_bot_comments
 
